@@ -1,226 +1,173 @@
-# 🌿 Cyber Guide
+# 🐭 Cyber Guide — 耗子
 
-> 温暖、专业的 AI 心理支持伙伴
+> A CS student's AI companion that's been through the maze and lived to tell the tale.
 
-Cyber Guide 是一个基于 Next.js 和 OpenAI 构建的心理支持聊天 Web 应用，为用户提供情感支持、倾听和心理疏导。
+[中文](#中文说明) | English
+
+Cyber Guide (nicknamed "耗子" / Mouse) is an AI-powered companion built with Next.js and DeepSeek, designed for CS students navigating the chaos of university life — career choices, procrastination, anxiety, and everything in between.
+
+This isn't a therapist. It's a senior student who's walked the same path, made the same mistakes, and is willing to share the scars honestly.
 
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?style=flat-square&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?style=flat-square&logo=tailwind-css)
 
-## ⚠️ 重要声明
+## ✨ Features
 
-### 免责声明
+- 🐭 **Authentic AI Persona** — Not a generic chatbot. "Mouse" has real stories: 700+ days of daily vocab memorization, failed grad school entrance exams, and ongoing battles with procrastination
+- 💬 **Guided Conversation** — Smart suggestion chips that feel like your own thoughts, not cold button labels
+- 📋 **Profile Analysis** — Two modes: understand yourself, or decode people around you (roommates, bosses, colleagues)
+- 🛡️ **Crisis Detection** — Keyword-based safety mechanism with false-positive filtering (distinguishes "I'm dying of heat" from real distress)
+- 📚 **RAG Knowledge Base** — 10 skill cards including original content: the "good student trap", persistence methodology, university survival guide
+- 🔒 **Privacy First** — Data logging off by default, automatic PII redaction (phone, email, ID, names)
+- 📱 **Mobile-First Design** — Dark theme, `100dvh` viewport, safe-area support, responsive everything
 
-**本应用不提供医学诊断、心理诊断或治疗建议。**
+## 🚀 Quick Start
 
-Cyber Guide 是一个 AI 辅助的情感支持工具，旨在：
-- 提供倾听和情感支持
-- 分享压力管理和情绪调节技巧
-- 在危机时刻提供专业资源链接
-
-**本应用不能替代：**
-- 专业心理咨询师或治疗师
-- 医生或精神科医生的诊断
-- 紧急医疗服务
-
-如果您正在经历严重的心理困扰或有自我伤害的想法，请立即联系专业帮助：
-
-| 热线名称 | 电话 |
-|---------|------|
-| 全国心理援助热线 | 400-161-9995 |
-| 北京心理危机研究与干预中心 | 010-82951332 |
-| 生命热线 | 400-821-1215 |
-| 急救电话 | 120 |
-
-### 隐私政策
-
-我们尊重您的隐私：
-
-1. **数据收集默认关闭**：只有当您主动开启"允许匿名记录用于改进"选项时，我们才会保存对话数据。
-
-2. **数据脱敏处理**：所有保存的对话都会自动脱敏，移除手机号、邮箱、姓名等个人身份信息。
-
-3. **本地存储**：在当前 MVP 版本中，所有数据存储在本地服务器，不会上传到云端。
-
-4. **数据用途**：收集的匿名数据仅用于改进 AI 回应质量，不会用于商业目的或与第三方共享。
-
-5. **您的权利**：您可以随时关闭数据收集选项。
-
-## ✨ 功能特点
-
-- 🎨 **美观的聊天界面** - 深色主题，舒适的视觉体验
-- 🛡️ **安全机制** - 内容审核 + 危机检测，保护用户安全
-- 📚 **RAG 知识库** - 基于专业心理技能卡的智能检索
-- 🔒 **隐私保护** - 数据记录默认关闭，严格脱敏处理
-- 📱 **响应式设计** - 完美适配桌面和移动设备
-
-## 🚀 快速开始
-
-### 前置要求
+### Prerequisites
 
 - Node.js 18+
-- npm 或 yarn
-- OpenAI API Key
+- A DeepSeek API key (or any OpenAI-compatible API)
 
-### 安装
+### Setup
 
 ```bash
-# 克隆项目
+git clone https://github.com/yuk1no4090/cyber-guide.git
 cd cyber-guide
-
-# 安装依赖
 npm install
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，填入你的 OPENAI_API_KEY
-
-# 导入知识库（生成向量索引）
-npm run ingest
-
-# 启动开发服务器
-npm run dev
 ```
 
-访问 http://localhost:3000 开始使用。
+Create a `.env` file:
 
-### 环境变量
-
-| 变量 | 必需 | 描述 |
-|-----|-----|------|
-| `OPENAI_API_KEY` | ✅ | OpenAI API 密钥 |
-| `OPENAI_MODEL` | ❌ | 使用的模型，默认 `gpt-4o` |
-
-## 📁 项目结构
-
-```
-cyber-guide/
-├── docs/                      # 项目文档
-│   ├── PRD.md                # 产品需求文档
-│   ├── PRODUCT_PRINCIPLES.md # 产品原则
-│   ├── SYSTEM_PROMPT.md      # 系统提示词
-│   ├── DATA.md               # 数据策略
-│   └── EVAL.md               # 评估策略
-├── knowledge_base/
-│   └── skills/               # 技能卡知识库
-│       ├── breathing.md      # 呼吸练习
-│       ├── progressive_relaxation.md
-│       ├── cognitive_reframing.md
-│       ├── mindfulness.md
-│       ├── emotion_regulation.md
-│       ├── sleep_hygiene.md
-│       └── communication.md
-├── scripts/
-│   └── ingest.ts             # 知识库导入脚本
-├── src/
-│   ├── app/
-│   │   ├── api/chat/
-│   │   │   └── route.ts      # 聊天 API
-│   │   ├── components/
-│   │   │   ├── ChatMessage.tsx
-│   │   │   ├── ChatInput.tsx
-│   │   │   ├── TypingIndicator.tsx
-│   │   │   └── PrivacyToggle.tsx
-│   │   ├── globals.css
-│   │   ├── layout.tsx
-│   │   └── page.tsx          # 主页面
-│   └── lib/
-│       ├── openai.ts         # OpenAI 客户端
-│       ├── moderation.ts     # 内容审核
-│       ├── rag.ts            # RAG 检索
-│       ├── redact.ts         # 数据脱敏
-│       ├── logger.ts         # 日志记录
-│       └── prompt.ts         # 提示词管理
-├── data/                     # 数据存储（自动创建）
-├── vector_store/             # 向量索引（自动创建）
-└── package.json
+```env
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
 ```
 
-## 🔧 开发
-
-### 常用命令
+Run:
 
 ```bash
-# 开发模式
 npm run dev
-
-# 构建生产版本
-npm run build
-
-# 启动生产服务器
-npm start
-
-# 代码检查
-npm run lint
-
-# 重新导入知识库
-npm run ingest
 ```
 
-### 添加新的技能卡
+Visit http://localhost:3000
 
-1. 在 `knowledge_base/skills/` 目录下创建新的 `.md` 文件
-2. 运行 `npm run ingest` 重新生成向量索引
-3. 新的知识将自动被 RAG 系统检索使用
+### Deploy to Vercel
 
-## 🛡️ 安全机制
+Push to GitHub, connect to [Vercel](https://vercel.com), add the environment variables, done. Auto-deploys on every push.
 
-### 内容审核流程
+## 📁 Architecture
 
 ```
-用户消息 → OpenAI Moderation API → 中文关键词检测 → 危机判定
-                                                      ↓
-                                            是 → 返回危机响应模板
-                                            否 → RAG 检索 → AI 生成回复
+POST /api/chat
+    │
+    ├─ 1. Crisis Detection (local keywords, zero cost)
+    │     └─ Hit? → Return crisis template + hotlines (skip AI)
+    │
+    ├─ 2. RAG Retrieval (keyword + bigram matching)
+    │     └─ Top 3 relevant knowledge chunks as evidence
+    │
+    ├─ 3. Smart History Truncation
+    │     └─ Keep first 2 messages (identity) + last 10
+    │
+    ├─ 4. DeepSeek Chat Completion
+    │     └─ System prompt + evidence + conversation
+    │
+    ├─ 5. Parse Suggestions
+    │     └─ Extract 【建议】tags, fallback if missing
+    │
+    └─ 6. Optional Logging
+          └─ Only if user opts in → redact PII → JSONL
 ```
 
-### 危机检测
+## 🧠 What Makes This Different
 
-系统会检测以下内容并触发危机响应：
-- 自杀/自伤相关表达
-- 伤害他人的意图
-- OpenAI Moderation API 标记的 self-harm 和 violence 类别
+This isn't another ChatGPT wrapper. The soul of this project is in the **knowledge base** — real stories, real failures, real advice from someone who's still figuring it out:
 
-## 📊 数据处理
+| File | Content |
+|------|---------|
+| `persistence_system.md` | How 700 days of daily vocab memorization actually works — the system, not willpower |
+| `university_confusion.md` | A "good student" who couldn't function without rails — and how they woke up |
+| `good_student_trap.md` | The essay: "You're not lost because you're weak. You're lost because the tracks disappeared." |
+| + 7 skill cards | Breathing, relaxation, cognitive reframing, mindfulness, emotion regulation, sleep, communication |
 
-### 脱敏规则
+## ⚠️ Disclaimer
 
-| 类型 | 示例 | 替换为 |
-|-----|------|-------|
-| 手机号 | 13812345678 | [PHONE] |
-| 邮箱 | test@example.com | [EMAIL] |
-| 身份证 | 110101199001011234 | [ID_CARD] |
-| 中文姓名 | 张小明 | [NAME] |
+**This application does not provide medical diagnosis, psychological diagnosis, or treatment advice.**
 
-### 案例卡片格式
+Cyber Guide is an AI companion tool designed to:
+- Provide a listening ear and emotional support
+- Share stress management and study planning tips
+- Provide professional resource links in crisis moments
 
-```json
-{
-  "id": "uuid",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "sessionHash": "hash",
-  "summary": {
-    "conversationTurns": 5,
-    "userMessageCount": 5,
-    "assistantMessageCount": 5
-  },
-  "redactedSnippets": [...]
-}
-```
+**It cannot replace:** professional counselors, doctors, or emergency services.
 
-## 📝 许可证
+If you or someone you know is in crisis:
+- 🇨🇳 China: 400-161-9995 / 400-821-1215
+- 🇺🇸 US: 988 Suicide & Crisis Lifeline
+- 🌍 International: [findahelpline.com](https://findahelpline.com)
 
-本项目采用 MIT 许可证。
+## 🔒 Privacy Policy
 
-## 🙏 致谢
+- Data collection is **off by default**
+- All stored conversations are automatically **redacted** (phone numbers, emails, names, IDs → replaced with tokens)
+- Local JSONL storage only — no cloud uploads in MVP
+- You can toggle data collection on/off at any time
 
-- [OpenAI](https://openai.com) - GPT 模型和 Embeddings API
-- [Vectra](https://github.com/Stevenic/vectra) - 本地向量数据库
-- [Next.js](https://nextjs.org) - React 框架
-- [Tailwind CSS](https://tailwindcss.com) - CSS 框架
+## 📝 License
+
+MIT
+
+## 🙏 Acknowledgments
+
+- [DeepSeek](https://deepseek.com) — LLM API
+- [Next.js](https://nextjs.org) — React framework
+- [Tailwind CSS](https://tailwindcss.com) — Styling
+- The friend who gave me this idea and the nickname "Mouse" 🐭
 
 ---
 
-**如果你或你认识的人正在经历心理困扰，请记住：寻求帮助是勇敢的表现。专业的支持可以让事情变得不一样。** ❤️
+# 中文说明
 
+## 🐭 耗子 · Cyber Guide
+
+> 一只在 CS 领域到处钻的小老鼠，个头不大但什么角落都待过。
+
+耗子是一个基于 Next.js 和 DeepSeek 构建的 AI 陪伴工具，面向计算机相关专业的大学生——聊迷茫、聊方向、聊拖延、聊焦虑，或者单纯找人说说话。
+
+这不是心理咨询师，是一个比你早走了一两步的学长，也会拖延、也会焦虑、也走过弯路，但愿意把踩过的坑分享出来。
+
+### 核心功能
+
+- 🐭 **真实人格** — 基于真实经历的 AI 角色：700 天背单词、考研失败、INFP 的拖延症
+- 💬 **引导式对话** — 建议标签像你心里正在想的话，不像冰冷的按钮
+- 📋 **双模式画像** — 了解自己 / 看懂身边的人（社交顾问）
+- 🛡️ **安全机制** — 危机关键词检测 + 误触发过滤（"热死了"不会触发危机模板）
+- 📚 **原创知识库** — 轨道与旷野、坚持方法论、大学迷茫指南
+- 🔒 **隐私保护** — 默认关闭记录，自动脱敏
+- 📱 **移动端适配** — 深色主题，完美竖屏体验
+
+### 快速开始
+
+```bash
+git clone https://github.com/yuk1no4090/cyber-guide.git
+cd cyber-guide
+npm install
+# 创建 .env 文件，填入 DeepSeek API Key
+npm run dev
+```
+
+### 添加知识库内容
+
+在 `knowledge_base/skills/` 下创建 `.md` 文件，末尾加上关键词行：
+
+```markdown
+**关键词**: 迷茫, 方向, 大学, 规划
+```
+
+重启服务即可生效，无需额外操作。
+
+---
+
+**反正老鼠不怕摔，大不了再爬起来 🐭**
