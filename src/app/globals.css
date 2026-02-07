@@ -1,0 +1,301 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Nunito:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============= CSS 变量 ============= */
+:root {
+  --color-primary: #0d9488;
+  --color-primary-light: #5dead0;
+  --color-primary-dark: #0f766e;
+  --color-bg: #0f1117;
+  --color-bg-light: #1a1d27;
+  --color-bg-lighter: #252a36;
+  --color-bg-card: #1e2230;
+  --color-text: #e8ecf4;
+  --color-text-muted: #8891a5;
+  --color-accent: #88c0d0;
+  --color-warning: #ebcb8b;
+  --color-danger: #e05566;
+  --color-border: rgba(136, 145, 165, 0.12);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+/* ============= 基础重置 ============= */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+  height: -webkit-fill-available;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============= 滚动条 ============= */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-lighter);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4c566a;
+}
+
+/* 移动端隐藏滚动条但保留滚动功能 */
+@media (max-width: 640px) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* ============= 消息气泡动画 ============= */
+@keyframes messageSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.message-bubble {
+  animation: messageSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ============= 打字指示器 ============= */
+@keyframes typingDot {
+  0%, 60%, 100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+}
+
+.typing-dot {
+  animation: typingDot 1.4s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* ============= 渐变背景 ============= */
+.bg-gradient-mesh {
+  background:
+    radial-gradient(ellipse at 15% 80%, rgba(45, 212, 191, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 0%, rgba(136, 192, 208, 0.04) 0%, transparent 60%),
+    var(--color-bg);
+}
+
+/* ============= 玻璃态 ============= */
+.glass {
+  background: rgba(15, 17, 23, 0.82);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+}
+
+.glass-light {
+  background: rgba(30, 34, 48, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* ============= 开关组件 ============= */
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--color-bg-lighter);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.25s ease;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+}
+
+.toggle-switch.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  top: 1px;
+  left: 1px;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(18px);
+}
+
+/* ============= 输入框 ============= */
+.input-glow:focus {
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.25);
+  border-color: var(--color-primary) !important;
+}
+
+/* ============= 发送按钮 ============= */
+.btn-send {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3);
+}
+
+.btn-send:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.45);
+}
+
+.btn-send:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.btn-send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ============= 危机消息 ============= */
+.crisis-message {
+  background: linear-gradient(135deg, rgba(224, 85, 102, 0.12) 0%, rgba(224, 85, 102, 0.04) 100%);
+  border-left: 3px solid var(--color-danger);
+}
+
+/* ============= 用户消息气泡渐变 ============= */
+.user-bubble {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 60%, #0a7c73 100%);
+  box-shadow: 0 2px 12px rgba(13, 148, 136, 0.2);
+}
+
+/* ============= AI 消息气泡 ============= */
+.ai-bubble {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* ============= 免责横幅 ============= */
+.disclaimer-bar {
+  background: rgba(235, 203, 139, 0.06);
+  border-bottom: 1px solid rgba(235, 203, 139, 0.1);
+}
+
+/* ============= 安全区域 ============= */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: calc(var(--safe-bottom) + 0px);
+  }
+  .safe-top {
+    padding-top: var(--safe-top);
+  }
+}
+
+/* ============= 移动端键盘弹出适配 ============= */
+@media (max-width: 640px) {
+  .chat-container {
+    height: 100dvh;
+  }
+}
+
+/* ============= 脉冲动画（在线状态） ============= */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.pulse-online {
+  position: relative;
+}
+
+.pulse-online::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #34d399;
+  border-radius: 50%;
+  bottom: 0;
+  right: 0;
+  border: 2px solid var(--color-bg);
+}
+
+/* ============= 淡入动画 ============= */
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ============= 建议标签 ============= */
+.suggestion-chip {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  .suggestion-chip {
+    flex-shrink: 0;
+  }
+}
