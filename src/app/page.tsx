@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
@@ -17,9 +17,11 @@ interface Message {
 
 type AppMode = 'chat' | 'profile';
 
+const STORAGE_KEY = 'cyber-guide-chat';
+
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
-  content: '你好！我是 Cyber Guide 🌿\n\n我是你的 CS 学长，和你一样也经历过迷茫和焦虑。\n\n不管是学业规划、方向选择，还是单纯想聊聊，都可以随便说。点下面的话题开始，或者直接打字也行：',
+  content: '嘿！我是耗子 🐭\n\n一只在 CS 领域到处钻的小老鼠，个头不大但什么角落都待过。也迷茫过，也焦虑过，一路跌跌撞撞走到现在。\n\n想聊什么都行，随便说：',
 };
 
 const WELCOME_SUGGESTIONS = [
@@ -31,7 +33,7 @@ const WELCOME_SUGGESTIONS = [
 
 const PROFILE_WELCOME: Message = {
   role: 'assistant',
-  content: '好的，让我来了解一下你 😊\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
+  content: '好嘞，让耗子来认识一下你 🐭\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
 };
 
 const PROFILE_WELCOME_SUGGESTIONS = [
@@ -40,6 +42,35 @@ const PROFILE_WELCOME_SUGGESTIONS = [
   '我是研究生',
   '已经工作了',
 ];
+
+// ===== localStorage 持久化 =====
+function saveToStorage(messages: Message[]) {
+  try {
+    // 只保存聊天消息（不保存 welcome message）
+    if (messages.length > 1) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    }
+  } catch {}
+}
+
+function loadFromStorage(): Message[] | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Message[];
+      if (Array.isArray(parsed) && parsed.length > 1) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function clearStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
 
 export default function Home() {
   const [mode, setMode] = useState<AppMode>('chat');
@@ -50,7 +81,25 @@ export default function Home() {
   const [optIn, setOptIn] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [reportContent, setReportContent] = useState<string | null>(null);
+  const [hasRestoredChat, setHasRestoredChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 页面加载时恢复对话
+  useEffect(() => {
+    const saved = loadFromStorage();
+    if (saved) {
+      setMessages(saved);
+      setSuggestions([]);
+      setHasRestoredChat(true);
+    }
+  }, []);
+
+  // 消息变化时自动保存
+  useEffect(() => {
+    if (mode === 'chat') {
+      saveToStorage(messages);
+    }
+  }, [messages, mode]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,6 +110,14 @@ export default function Home() {
   }, [messages, profileMessages, isLoading, suggestions, reportContent]);
 
   const currentMessages = mode === 'chat' ? messages : profileMessages;
+
+  // 新对话
+  const startNewChat = () => {
+    clearStorage();
+    setMessages([WELCOME_MESSAGE]);
+    setSuggestions(WELCOME_SUGGESTIONS);
+    setHasRestoredChat(false);
+  };
 
   // 切换到画像模式
   const startProfile = () => {
@@ -80,7 +137,6 @@ export default function Home() {
   // 生成画像报告
   const generateReport = async () => {
     if (profileMessages.length < 3) {
-      // 至少聊几轮再生成
       setSuggestions(['再多聊几句吧']);
       return;
     }
@@ -117,7 +173,6 @@ export default function Home() {
 
   // 发送消息
   const sendMessage = async (content: string) => {
-    // 如果在画像模式下点了"生成画像"相关的建议
     if (mode === 'profile' && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
       generateReport();
       return;
@@ -175,7 +230,7 @@ export default function Home() {
       console.error('Failed to send message:', error);
       const errorMsg: Message = {
         role: 'assistant',
-        content: '抱歉，我现在遇到了一些问题。请稍后再试。',
+        content: '抱歉，耗子现在遇到了一些问题 😵 请稍后再试。',
       };
       if (mode === 'chat') {
         setMessages([...updatedMessages, errorMsg]);
@@ -194,48 +249,59 @@ export default function Home() {
       <header className="glass safe-top sticky top-0 z-20 border-b border-white/[0.06]">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
-              <span className="text-base sm:text-lg">🌿</span>
+            <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+              <span className="text-base sm:text-lg">🐭</span>
             </div>
             <div>
               <h1 className="font-semibold text-[15px] sm:text-base text-white leading-tight tracking-tight">
-                Cyber Guide
+                耗子 · Cyber Guide
               </h1>
-              <p className="text-[11px] text-emerald-400/70 leading-tight">
-                {mode === 'chat' ? '在线 · 心理支持伙伴' : '📋 画像分析模式'}
+              <p className="text-[11px] text-amber-400/70 leading-tight">
+                {mode === 'chat' ? '在线 · 到处钻的 CS 小老鼠' : '📋 画像分析模式'}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* 画像按钮 / 返回按钮 */}
+          <div className="flex items-center gap-1.5">
             {mode === 'chat' ? (
-              <button
-                onClick={startProfile}
-                className="px-2.5 py-1.5 text-[12px] text-cyan-300/80 bg-cyan-400/[0.08] border border-cyan-400/15 rounded-lg hover:bg-cyan-400/[0.15] transition-colors"
-              >
-                📋 我的画像
-              </button>
+              <>
+                {/* 新对话按钮（有历史对话时才显示） */}
+                {messages.length > 1 && (
+                  <button
+                    onClick={startNewChat}
+                    className="px-2 py-1.5 text-[12px] text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] transition-colors"
+                    title="开始新对话"
+                  >
+                    ✨ 新对话
+                  </button>
+                )}
+                <button
+                  onClick={startProfile}
+                  className="px-2 py-1.5 text-[12px] text-cyan-300/80 bg-cyan-400/[0.08] border border-cyan-400/15 rounded-lg hover:bg-cyan-400/[0.15] transition-colors"
+                >
+                  📋 画像
+                </button>
+              </>
             ) : (
               <div className="flex gap-1.5">
                 {!reportContent && profileMessages.length >= 3 && (
                   <button
                     onClick={generateReport}
                     disabled={isLoading}
-                    className="px-2.5 py-1.5 text-[12px] text-emerald-300/80 bg-emerald-400/[0.08] border border-emerald-400/15 rounded-lg hover:bg-emerald-400/[0.15] disabled:opacity-40 transition-colors"
+                    className="px-2 py-1.5 text-[12px] text-emerald-300/80 bg-emerald-400/[0.08] border border-emerald-400/15 rounded-lg hover:bg-emerald-400/[0.15] disabled:opacity-40 transition-colors"
                   >
                     ✨ 生成画像
                   </button>
                 )}
                 <button
                   onClick={backToChat}
-                  className="px-2.5 py-1.5 text-[12px] text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] transition-colors"
+                  className="px-2 py-1.5 text-[12px] text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] transition-colors"
                 >
                   返回聊天
                 </button>
               </div>
             )}
             {/* 桌面端隐私开关 */}
-            <div className="hidden sm:block">
+            <div className="hidden lg:block">
               <PrivacyToggle optIn={optIn} onChange={setOptIn} />
             </div>
           </div>
@@ -243,8 +309,8 @@ export default function Home() {
         {showDisclaimer && mode === 'chat' && (
           <div className="disclaimer-bar px-4 py-1.5 flex items-center justify-between gap-2">
             <p className="text-[11px] sm:text-xs text-amber-200/60 flex-1 text-center">
-              <span className="mr-1">⚠️</span>
-              本服务仅提供情感支持，不提供医学诊断或治疗建议
+              <span className="mr-1">🐭</span>
+              耗子是 AI 陪伴工具，分享的经验仅供参考，不替代专业咨询
             </p>
             <button
               onClick={() => setShowDisclaimer(false)}
@@ -262,7 +328,7 @@ export default function Home() {
         <div className="px-3 sm:px-5 py-4 sm:py-6 space-y-1">
           {currentMessages.map((message, index) => (
             <ChatMessage
-              key={index}
+              key={`${mode}-${index}`}
               role={message.role}
               content={message.content}
               isCrisis={message.isCrisis}
@@ -292,7 +358,7 @@ export default function Home() {
       {/* ===== 输入区域 ===== */}
       <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-white/[0.06]">
         <div className="px-3 sm:px-5 pt-3 pb-3">
-          <div className="sm:hidden mb-2.5">
+          <div className="sm:hidden lg:hidden mb-2.5">
             <PrivacyToggle optIn={optIn} onChange={setOptIn} />
           </div>
           <ChatInput

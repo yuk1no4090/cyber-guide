@@ -24,11 +24,23 @@ export interface ChatResponse {
   isReport?: boolean;
 }
 
-function truncateHistory(messages: Message[], maxMessages: number): Message[] {
+/**
+ * 智能截断：始终保留前 2 条消息（用户自我介绍），再保留最近的消息
+ */
+function smartTruncate(messages: Message[], maxMessages: number): Message[] {
   if (messages.length <= maxMessages) return messages;
-  return messages.slice(-maxMessages);
+
+  // 保留前 2 条（通常是欢迎+用户第一句话，包含关键身份信息）
+  const head = messages.slice(0, 2);
+  // 保留最近的消息
+  const tail = messages.slice(-(maxMessages - 2));
+
+  return [...head, ...tail];
 }
 
+/**
+ * 从 AI 回复中解析建议标签
+ */
 function parseSuggestions(text: string): { message: string; suggestions: string[] } {
   const regex = /【建议】(.+?)$/m;
   const match = text.match(regex);
@@ -45,41 +57,62 @@ function parseSuggestions(text: string): { message: string; suggestions: string[
   return { message: text, suggestions: [] };
 }
 
+/**
+ * 根据用户最新消息生成兜底建议（AI 没返回【建议】时使用）
+ */
+function fallbackSuggestions(userMessage: string): string[] {
+  const text = userMessage.toLowerCase();
+
+  if (text.includes('考研') || text.includes('保研') || text.includes('留学')) {
+    return ['耗子你当时怎么选的', '我其实还没想好', '能具体聊聊吗'];
+  }
+  if (text.includes('拖延') || text.includes('不想动') || text.includes('不想学')) {
+    return ['有没有坚持的方法', '我也不知道为什么', '是不是我太懒了'];
+  }
+  if (text.includes('迷茫') || text.includes('方向') || text.includes('规划')) {
+    return ['我不知道自己喜欢什么', '能分享你的经验吗', '感觉什么都想学又什么都不会'];
+  }
+  if (text.includes('焦虑') || text.includes('压力') || text.includes('难受')) {
+    return ['最近压力确实大', '有什么放松的办法吗', '其实还有一件事...'];
+  }
+
+  // 通用兜底
+  return ['能展开聊聊吗', '耗子你怎么看', '其实我还想说...'];
+}
+
 const CRISIS_SUGGESTIONS = [
   '我现在需要有人陪',
   '可以告诉我更多求助方式吗',
   '我想聊点别的',
 ];
 
-// 画像模式的 system prompt
-const PROFILE_SYSTEM_PROMPT = `你是 Cyber Guide 的"画像分析师"模式。你的任务是通过轻松的对话了解用户，每次只问一个问题。
+// 画像模式 prompt
+const PROFILE_SYSTEM_PROMPT = `你是耗子🐭，现在进入"画像分析师"模式。通过轻松的对话了解用户，每次只问一个问题。
 
-## 你要了解的维度（不要一次全问，自然地展开）
+## 你要了解的维度（自然展开，不要一次全问）
 
 1. **基本情况**：在读/已毕业？什么专业？大几？
 2. **当前状态**：最近在忙什么？心情怎么样？
 3. **优势与兴趣**：觉得自己擅长什么？对什么感兴趣？
 4. **困扰与焦虑**：最近最烦的事情是什么？
-5. **目标与方向**：有没有想做的事？短期/长期的想法？
-6. **行动力**：是想到就做的类型，还是想很多但不太动？
-7. **社交风格**：喜欢独处还是和朋友一起？遇到困难会找人聊吗？
+5. **目标与方向**：有没有想做的事？
+6. **行动力**：想到就做，还是想很多但不太动？
+7. **社交风格**：喜欢独处还是和朋友一起？
 
-## 对话风格
-- 每次只问 1 个问题，不要连环追问
-- 语气轻松，像朋友闲聊不是做问卷
-- 根据用户回答自然地追问或跳到下一个维度
-- 适当给一些简短的回应（"哈哈确实"、"能理解"）再问下一个
+## 风格
+- 每次只问 1 个问题
+- 语气轻松，"哈哈确实""能理解"
+- 自称"耗子"或"我"
+- 偶尔自嘲
 
 ## 格式
 每次回复最后一行附带建议：
 【建议】建议1 | 建议2 | 结束画像，看看分析`;
 
-// 生成报告的 system prompt
-const REPORT_SYSTEM_PROMPT = `你是 Cyber Guide 的"画像分析师"。根据之前的对话内容，生成一份用户画像分析报告。
+// 报告 prompt
+const REPORT_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容生成一份用户画像报告。
 
-## 报告格式要求
-
-用以下结构输出（用 markdown 格式）：
+## 格式
 
 ### 🎯 你的画像
 
@@ -97,16 +130,16 @@ const REPORT_SYSTEM_PROMPT = `你是 Cyber Guide 的"画像分析师"。根据�
 | ⚡ 行动力 | ⭐⭐⭐☆☆（1-5星） |
 | 🤝 社交偏好 | （内向/外向/灵活型） |
 
-### 💡 学长建议
+### 💡 耗子的建议
 
-（针对这个人的具体情况，给 2-3 条实际可行的建议，每条 1-2 句话）
+（2-3 条具体可行的建议，耗子的语气，可以直接一点）
 
-### 🌟 一句鼓励
+### 🌟 一句话
 
-（根据他的特点，给一句真诚的、个性化的鼓励，不要鸡汤）
+（真诚的、个性化的鼓励，不要鸡汤。可以用耗子的风格，比如"反正老鼠不怕摔"）
 
 ---
-注意：报告要基于对话中的真实信息，没聊到的维度就写"暂未了解"，不要编造。语气温暖但不虚伪。`;
+注意：基于对话真实信息，没聊到就写"暂未了解"，不编造。`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -131,7 +164,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 安全检查（所有模式都需要）
+    // 安全检查
     const moderationResult = checkModeration(lastUserMessage.content);
 
     if (moderationResult.isCrisis) {
@@ -165,7 +198,7 @@ export async function POST(request: NextRequest) {
           })),
           { role: 'user', content: '请根据我们刚才的对话，生成我的画像分析报告。' },
         ],
-        temperature: 0.6,
+        temperature: 0.5,
         max_tokens: MAX_REPORT_TOKENS,
       });
 
@@ -180,9 +213,9 @@ export async function POST(request: NextRequest) {
       } as ChatResponse);
     }
 
-    // ===== 画像对话模式 =====
+    // ===== 画像对话模式（低温度，更稳定） =====
     if (mode === 'profile') {
-      const truncatedMessages = truncateHistory(messages, MAX_HISTORY_MESSAGES);
+      const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
       const completion = await openai.chat.completions.create({
         model: CHAT_MODEL,
@@ -193,27 +226,27 @@ export async function POST(request: NextRequest) {
             content: m.content,
           })),
         ],
-        temperature: 0.7,
+        temperature: 0.5,
         max_tokens: MAX_OUTPUT_TOKENS,
       });
 
       const rawMessage = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，我现在无法回复。';
+        || '抱歉，耗子卡壳了 😵';
 
       const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
 
       return NextResponse.json({
         message: assistantMessage,
-        suggestions,
+        suggestions: suggestions.length > 0 ? suggestions : ['继续聊聊', '结束画像，看看分析'],
         isCrisis: false,
       } as ChatResponse);
     }
 
-    // ===== 普通聊天模式 =====
+    // ===== 普通聊天模式（高温度，更有个性） =====
     const retrievalResults = retrieve(lastUserMessage.content, 3);
     const evidence = formatEvidence(retrievalResults);
     const systemPrompt = getSystemPrompt() + evidence;
-    const truncatedMessages = truncateHistory(messages, MAX_HISTORY_MESSAGES);
+    const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
     const completion = await openai.chat.completions.create({
       model: CHAT_MODEL,
@@ -224,14 +257,18 @@ export async function POST(request: NextRequest) {
           content: m.content,
         })),
       ],
-      temperature: 0.7,
+      temperature: 0.75,
       max_tokens: MAX_OUTPUT_TOKENS,
     });
 
     const rawMessage = completion.choices[0]?.message?.content?.trim()
-      || '抱歉，我现在无法回复。请稍后再试。';
+      || '抱歉，耗子现在脑子转不动了 😵 稍后再试试。';
 
+    // 解析建议，没有则用兜底建议
     const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+    const finalSuggestions = suggestions.length > 0
+      ? suggestions
+      : fallbackSuggestions(lastUserMessage.content);
 
     if (optIn) {
       await saveCaseCard([
@@ -242,7 +279,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: assistantMessage,
-      suggestions,
+      suggestions: finalSuggestions,
       isCrisis: false,
     } as ChatResponse);
 
