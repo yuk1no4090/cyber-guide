@@ -1,11 +1,18 @@
-// 纯关键词危机检测（不依赖 OpenAI Moderation API，兼容 DeepSeek 等国内平台）
+// 纯关键词危机检测（兼容 DeepSeek 等国内平台）
 
 // 中文危机关键词
 const CRISIS_KEYWORDS_ZH = [
   '想死', '不想活', '自杀', '自残', '割腕', '跳楼', '跳河',
   '结束生命', '离开这个世界', '活着没意思', '不如死了',
   '杀了', '想杀', '弄死', '打死', '伤害他',
-  '不想活了', '去死', '寻死', '轻生', '了结',
+  '不想活了', '寻死', '轻生', '了结',
+];
+
+// 误触发豁免词——日常口语中的"死"不是危机信号
+const FALSE_POSITIVE_PATTERNS = [
+  '热死', '累死', '笑死', '冷死', '饿死', '困死', '急死',
+  '气死', '烦死', '丑死', '吓死', '渴死', '忙死', '无聊死',
+  '尴尬死', '羡慕死', '开心死', '难吃死', '好看死',
 ];
 
 // 危机回复模板
@@ -33,14 +40,37 @@ export interface ModerationResult {
 }
 
 /**
- * 检查用户消息是否包含危机内容（纯关键词匹配，无需外部 API）
+ * 检查用户消息是否包含危机内容
  */
 export function checkModeration(text: string): ModerationResult {
   const lowerText = text.toLowerCase();
 
+  // 先检查是否命中误触发豁免词——如果是日常口语就跳过
+  const isFalsePositive = FALSE_POSITIVE_PATTERNS.some(fp => lowerText.includes(fp));
+
+  // 如果整条消息只是日常口语（如"热死了"），且不包含真正的危机词，直接放行
   const crisisKeywordsFound = CRISIS_KEYWORDS_ZH.filter(keyword =>
     lowerText.includes(keyword)
   );
+
+  // 如果命中了误触发词，需要更严格的判断：
+  // 只有当同时存在无法被豁免词解释的危机关键词时才触发
+  if (isFalsePositive && crisisKeywordsFound.length > 0) {
+    // 检查是否所有危机关键词都可以被误触发解释
+    const realCrisisKeywords = crisisKeywordsFound.filter(keyword => {
+      // "去死"可以被"热死""累死"等解释掉
+      if (keyword === '去死') {
+        return !FALSE_POSITIVE_PATTERNS.some(fp => lowerText.includes(fp));
+      }
+      // 其他真正的危机词（如"自杀""割腕"）不受豁免
+      return true;
+    });
+
+    return {
+      isCrisis: realCrisisKeywords.length > 0,
+      crisisKeywordsFound: realCrisisKeywords,
+    };
+  }
 
   return {
     isCrisis: crisisKeywordsFound.length > 0,
