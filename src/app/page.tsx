@@ -15,7 +15,7 @@ interface Message {
   isReport?: boolean;
 }
 
-type AppMode = 'chat' | 'profile';
+type AppMode = 'chat' | 'profile' | 'profile_other';
 
 const STORAGE_KEY = 'cyber-guide-chat';
 
@@ -25,22 +25,44 @@ const WELCOME_MESSAGE: Message = {
 };
 
 const WELCOME_SUGGESTIONS = [
-  '不知道大学该怎么规划',
-  '知道该学习但就是不想动',
-  '感觉身边的人都比我强',
-  '想聊聊方向和选择',
+  '最近有点迷茫不知道该干嘛',
+  '知道该努力但就是动不起来',
+  '总觉得别人都比我强...',
+  '有些事想找人聊聊',
 ];
 
-const PROFILE_WELCOME: Message = {
+const PROFILE_CHOOSE: Message = {
+  role: 'assistant',
+  content: '你想让耗子帮你分析谁？🐭',
+};
+
+const PROFILE_CHOOSE_SUGGESTIONS = [
+  '🙋 了解我自己',
+  '👥 看懂身边的人',
+];
+
+const PROFILE_SELF_WELCOME: Message = {
   role: 'assistant',
   content: '好嘞，让耗子来认识一下你 🐭\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
 };
 
-const PROFILE_WELCOME_SUGGESTIONS = [
-  '我是大一新生',
-  '大三了，快毕业了',
-  '我是研究生',
-  '已经工作了',
+const PROFILE_SELF_SUGGESTIONS = [
+  '刚上大学还在适应中',
+  '大三了有点慌',
+  '在读研，也不确定接下来',
+  '已经工作了但想聊聊',
+];
+
+const PROFILE_OTHER_WELCOME: Message = {
+  role: 'assistant',
+  content: '有意思，耗子最喜欢帮人"读人"了 🐭🔍\n\n你想分析谁？先告诉我：\n- ta 是你的什么人？（同学/室友/老师/同事/领导/朋友/家人）\n- 发生了什么事让你想了解 ta？',
+};
+
+const PROFILE_OTHER_SUGGESTIONS = [
+  '室友有些行为我看不懂',
+  '有个同事让我很头疼',
+  '不知道领导到底在想什么',
+  '有个朋友最近让我很困惑',
 ];
 
 // ===== localStorage 持久化 =====
@@ -77,6 +99,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>(WELCOME_SUGGESTIONS);
+  const [chatSuggestionsBak, setChatSuggestionsBak] = useState<string[]>([]); // 切换模式时暂存聊天建议
   const [isLoading, setIsLoading] = useState(false);
   const [optIn, setOptIn] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
@@ -109,6 +132,7 @@ export default function Home() {
     scrollToBottom();
   }, [messages, profileMessages, isLoading, suggestions, reportContent]);
 
+  const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
 
   // 新对话
@@ -119,18 +143,19 @@ export default function Home() {
     setHasRestoredChat(false);
   };
 
-  // 切换到画像模式
+  // 进入画像选择（暂存当前聊天建议）
   const startProfile = () => {
+    setChatSuggestionsBak(suggestions);
     setMode('profile');
-    setProfileMessages([PROFILE_WELCOME]);
-    setSuggestions(PROFILE_WELCOME_SUGGESTIONS);
+    setProfileMessages([PROFILE_CHOOSE]);
+    setSuggestions(PROFILE_CHOOSE_SUGGESTIONS);
     setReportContent(null);
   };
 
-  // 返回聊天模式
+  // 返回聊天模式（恢复之前的建议）
   const backToChat = () => {
     setMode('chat');
-    setSuggestions(messages.length <= 1 ? WELCOME_SUGGESTIONS : []);
+    setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? WELCOME_SUGGESTIONS : []));
     setReportContent(null);
   };
 
@@ -154,7 +179,7 @@ export default function Home() {
             content: m.content,
           })),
           optIn,
-          mode: 'generate_report',
+          mode: mode === 'profile_other' ? 'generate_report_other' : 'generate_report',
         }),
       });
 
@@ -173,7 +198,21 @@ export default function Home() {
 
   // 发送消息
   const sendMessage = async (content: string) => {
-    if (mode === 'profile' && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
+    // 画像模式选择分支
+    if (mode === 'profile' && profileMessages.length === 1 && content.includes('了解我自己')) {
+      setProfileMessages([PROFILE_SELF_WELCOME]);
+      setSuggestions(PROFILE_SELF_SUGGESTIONS);
+      return;
+    }
+    if (mode === 'profile' && profileMessages.length === 1 && content.includes('看懂身边的人')) {
+      setMode('profile_other');
+      setProfileMessages([PROFILE_OTHER_WELCOME]);
+      setSuggestions(PROFILE_OTHER_SUGGESTIONS);
+      return;
+    }
+
+    // 生成报告
+    if ((mode === 'profile' || mode === 'profile_other') && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
       generateReport();
       return;
     }
@@ -181,13 +220,13 @@ export default function Home() {
     setSuggestions([]);
 
     const userMessage: Message = { role: 'user', content };
-    const currentMsgs = mode === 'chat' ? messages : profileMessages;
+    const currentMsgs = isProfileMode ? profileMessages : messages;
     const updatedMessages = [...currentMsgs, userMessage];
 
-    if (mode === 'chat') {
-      setMessages(updatedMessages);
-    } else {
+    if (isProfileMode) {
       setProfileMessages(updatedMessages);
+    } else {
+      setMessages(updatedMessages);
     }
 
     setIsLoading(true);
@@ -202,7 +241,7 @@ export default function Home() {
             content: m.content,
           })),
           optIn,
-          mode,
+          mode: mode === 'profile_other' ? 'profile_other' : mode,
         }),
       });
 
@@ -215,10 +254,10 @@ export default function Home() {
         isCrisis: data.isCrisis,
       };
 
-      if (mode === 'chat') {
-        setMessages([...updatedMessages, assistantMessage]);
-      } else {
+      if (isProfileMode) {
         setProfileMessages([...updatedMessages, assistantMessage]);
+      } else {
+        setMessages([...updatedMessages, assistantMessage]);
       }
 
       if (data.suggestions && data.suggestions.length > 0) {
@@ -232,10 +271,10 @@ export default function Home() {
         role: 'assistant',
         content: '抱歉，耗子现在遇到了一些问题 😵 请稍后再试。',
       };
-      if (mode === 'chat') {
-        setMessages([...updatedMessages, errorMsg]);
-      } else {
+      if (isProfileMode) {
         setProfileMessages([...updatedMessages, errorMsg]);
+      } else {
+        setMessages([...updatedMessages, errorMsg]);
       }
       setSuggestions(['重新试试']);
     } finally {
@@ -257,14 +296,13 @@ export default function Home() {
                 耗子 · Cyber Guide
               </h1>
               <p className="text-[11px] text-amber-400/70 leading-tight">
-                {mode === 'chat' ? '在线 · 到处钻的 CS 小老鼠' : '📋 画像分析模式'}
+                {mode === 'chat' ? '在线 · 到处钻的 CS 小老鼠' : mode === 'profile_other' ? '🔍 读人模式' : '📋 画像分析模式'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {mode === 'chat' ? (
+            {!isProfileMode ? (
               <>
-                {/* 新对话按钮（有历史对话时才显示） */}
                 {messages.length > 1 && (
                   <button
                     onClick={startNewChat}
@@ -289,7 +327,7 @@ export default function Home() {
                     disabled={isLoading}
                     className="px-2 py-1.5 text-[12px] text-emerald-300/80 bg-emerald-400/[0.08] border border-emerald-400/15 rounded-lg hover:bg-emerald-400/[0.15] disabled:opacity-40 transition-colors"
                   >
-                    ✨ 生成画像
+                    ✨ 生成{mode === 'profile_other' ? '分析' : '画像'}
                   </button>
                 )}
                 <button
@@ -306,7 +344,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-        {showDisclaimer && mode === 'chat' && (
+        {showDisclaimer && !isProfileMode && (
           <div className="disclaimer-bar px-4 py-1.5 flex items-center justify-between gap-2">
             <p className="text-[11px] sm:text-xs text-amber-200/60 flex-1 text-center">
               <span className="mr-1">🐭</span>

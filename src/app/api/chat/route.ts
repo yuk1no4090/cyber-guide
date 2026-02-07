@@ -14,7 +14,7 @@ const MAX_REPORT_TOKENS = 1200;
 export interface ChatRequest {
   messages: Message[];
   optIn: boolean;
-  mode?: 'chat' | 'profile' | 'generate_report';
+  mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other';
 }
 
 export interface ChatResponse {
@@ -59,25 +59,28 @@ function parseSuggestions(text: string): { message: string; suggestions: string[
 
 /**
  * 根据用户最新消息生成兜底建议（AI 没返回【建议】时使用）
+ * 写法原则：像用户心里正在想的话，不像选项按钮
  */
 function fallbackSuggestions(userMessage: string): string[] {
   const text = userMessage.toLowerCase();
 
   if (text.includes('考研') || text.includes('保研') || text.includes('留学')) {
-    return ['耗子你当时怎么选的', '我其实还没想好', '能具体聊聊吗'];
+    return ['说实话我还没完全想清楚', '耗子你当时纠结了多久', '我怕选错了回不了头'];
   }
   if (text.includes('拖延') || text.includes('不想动') || text.includes('不想学')) {
-    return ['有没有坚持的方法', '我也不知道为什么', '是不是我太懒了'];
+    return ['一拿起手机时间就没了', '有没有那种很小的第一步', '说实话我连开始都害怕'];
   }
   if (text.includes('迷茫') || text.includes('方向') || text.includes('规划')) {
-    return ['我不知道自己喜欢什么', '能分享你的经验吗', '感觉什么都想学又什么都不会'];
+    return ['什么都试了一点但都不深入', '你是怎么确定方向的', '我怕选错了浪费时间'];
   }
   if (text.includes('焦虑') || text.includes('压力') || text.includes('难受')) {
-    return ['最近压力确实大', '有什么放松的办法吗', '其实还有一件事...'];
+    return ['最近确实绷得有点紧', '你有没有过这种感觉', '其实还有件事一直憋着没说'];
+  }
+  if (text.includes('比') || text.includes('差距') || text.includes('不如')) {
+    return ['有时候觉得是不是我太菜了', '可我也不是没努力过', '怎么才能不去比较啊'];
   }
 
-  // 通用兜底
-  return ['能展开聊聊吗', '耗子你怎么看', '其实我还想说...'];
+  return ['说到这个我突然想到...', '感觉你好像懂我', '其实我还想多聊聊这个'];
 }
 
 const CRISIS_SUGGESTIONS = [
@@ -109,7 +112,59 @@ const PROFILE_SYSTEM_PROMPT = `你是耗子🐭，现在进入"画像分析师"�
 每次回复最后一行附带建议：
 【建议】建议1 | 建议2 | 结束画像，看看分析`;
 
-// 报告 prompt
+// "读人"模式 prompt
+const PROFILE_OTHER_SYSTEM_PROMPT = `你是耗子🐭，现在进入"读人"模式。用户想了解/分析身边的一个人。你的任务是通过提问帮用户描述清楚那个人。
+
+## 你要了解的维度
+
+1. **关系**：那个人是用户的什么人？（同学/室友/同事/领导/朋友/家人/暧昧对象）
+2. **基本信息**：大概多大？做什么的？
+3. **性格特征**：平时是什么样的人？外向还是内向？
+4. **关键事件**：发生了什么事让用户想分析 ta？
+5. **相处困惑**：用户在和 ta 相处中遇到什么问题？
+6. **用户的期望**：用户希望和 ta 达成什么关系/结果？
+
+## 风格
+- 每次只问 1 个问题
+- 语气像朋友在八卦聊天，但带分析
+- 可以边问边给小观察："听起来 ta 可能是那种..."
+- 自称"耗子"
+
+## 格式
+每次回复最后一行附带建议：
+【建议】建议1 | 建议2 | 结束画像，看看分析`;
+
+// "读人"报告 prompt
+const REPORT_OTHER_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容分析用户描述的那个人，生成一份"读人报告"。
+
+## 格式
+
+### 🔍 ta 的画像
+
+**一句话概括**：（用一句话描述这个人的核心特征）
+
+### 📊 性格分析
+
+| 维度 | 分析 |
+|---|---|
+| 🎭 性格类型 | （外向/内向？理性/感性？主导型/配合型？） |
+| 💬 沟通风格 | （直接/委婉？主动/被动？） |
+| ⚡ 行为模式 | （ta 做事的典型方式） |
+| 🎯 核心需求 | （ta 最在意什么？面子/实利/掌控感/被认可？） |
+| ⚠️ 雷区 | （和 ta 相处要避开什么） |
+
+### 🤝 相处建议
+
+（针对用户和这个人的关系，给 3-4 条具体的相处策略。要实操，不要鸡汤。）
+
+### 💡 一句话
+
+（给用户一句关于这段关系的洞察。可以犀利一点。）
+
+---
+注意：基于对话推测，没聊到就写"信息不足"。说清是推测不是定论。`;
+
+// 自我报告 prompt
 const REPORT_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容生成一份用户画像报告。
 
 ## 格式
@@ -186,7 +241,34 @@ export async function POST(request: NextRequest) {
       } as ChatResponse);
     }
 
-    // ===== 生成报告模式 =====
+    // ===== 生成"读人"报告 =====
+    if (mode === 'generate_report_other') {
+      const completion = await openai.chat.completions.create({
+        model: CHAT_MODEL,
+        messages: [
+          { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT },
+          ...messages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user', content: '请根据我们刚才的对话，分析一下这个人，生成读人报告。' },
+        ],
+        temperature: 0.5,
+        max_tokens: MAX_REPORT_TOKENS,
+      });
+
+      const report = completion.choices[0]?.message?.content?.trim()
+        || '抱歉，暂时无法生成报告。';
+
+      return NextResponse.json({
+        message: report,
+        suggestions: [],
+        isCrisis: false,
+        isReport: true,
+      } as ChatResponse);
+    }
+
+    // ===== 生成自我画像报告 =====
     if (mode === 'generate_report') {
       const completion = await openai.chat.completions.create({
         model: CHAT_MODEL,
@@ -213,7 +295,36 @@ export async function POST(request: NextRequest) {
       } as ChatResponse);
     }
 
-    // ===== 画像对话模式（低温度，更稳定） =====
+    // ===== "读人"对话模式 =====
+    if (mode === 'profile_other') {
+      const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
+
+      const completion = await openai.chat.completions.create({
+        model: CHAT_MODEL,
+        messages: [
+          { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT },
+          ...truncatedMessages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+        ],
+        temperature: 0.6,
+        max_tokens: MAX_OUTPUT_TOKENS,
+      });
+
+      const rawMessage = completion.choices[0]?.message?.content?.trim()
+        || '抱歉，耗子卡壳了 😵';
+
+      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+
+      return NextResponse.json({
+        message: assistantMessage,
+        suggestions: suggestions.length > 0 ? suggestions : ['继续描述 ta', '结束画像，看看分析'],
+        isCrisis: false,
+      } as ChatResponse);
+    }
+
+    // ===== 自我画像对话模式 =====
     if (mode === 'profile') {
       const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
