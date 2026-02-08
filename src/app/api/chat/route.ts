@@ -356,7 +356,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         message: assistantMessage,
-        suggestions: suggestions.length > 0 ? suggestions : ['继续描述 ta', '结束画像，看看分析'],
+        // 读人模式兜底：不给无意义的按钮，让用户自己打字
+        suggestions: suggestions.length > 0 ? suggestions : [],
         isCrisis: false,
       } as ChatResponse);
     }
@@ -385,7 +386,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         message: assistantMessage,
-        suggestions: suggestions.length > 0 ? suggestions : ['继续聊聊', '结束画像，看看分析'],
+        // 画像模式兜底：不给无意义的按钮，让用户自己打字
+        suggestions: suggestions.length > 0 ? suggestions : [],
         isCrisis: false,
       } as ChatResponse);
     }
