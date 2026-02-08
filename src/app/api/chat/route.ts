@@ -3,7 +3,7 @@ import { openai, CHAT_MODEL } from '@/lib/openai';
 import { checkModeration, CRISIS_RESPONSE } from '@/lib/moderation';
 import { retrieve, formatEvidence } from '@/lib/rag';
 import { getSystemPrompt } from '@/lib/prompt';
-import { saveCaseCard, Message } from '@/lib/logger';
+import { Message } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +13,6 @@ const MAX_REPORT_TOKENS = 1200;
 
 export interface ChatRequest {
   messages: Message[];
-  optIn: boolean;
   mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other';
 }
 
@@ -204,7 +203,7 @@ const REPORT_SYSTEM_PROMPT = `你是小舟🛶。根据对话内容生成一份�
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ChatRequest;
-    const { messages, optIn, mode = 'chat' } = body;
+    const { messages, mode = 'chat' } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -231,13 +230,6 @@ export async function POST(request: NextRequest) {
       console.log('[CRISIS DETECTED]', {
         crisisKeywordsFound: moderationResult.crisisKeywordsFound,
       });
-
-      if (optIn) {
-        await saveCaseCard([
-          ...messages,
-          { role: 'assistant', content: CRISIS_RESPONSE }
-        ]);
-      }
 
       return NextResponse.json({
         message: CRISIS_RESPONSE,
@@ -385,13 +377,6 @@ export async function POST(request: NextRequest) {
     const finalSuggestions = suggestions.length > 0
       ? suggestions
       : fallbackSuggestions(lastUserMessage.content);
-
-    if (optIn) {
-      await saveCaseCard([
-        ...messages,
-        { role: 'assistant', content: assistantMessage }
-      ]);
-    }
 
     return NextResponse.json({
       message: assistantMessage,

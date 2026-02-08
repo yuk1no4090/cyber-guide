@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
-import PrivacyToggle from './components/PrivacyToggle';
 import SuggestionChips from './components/SuggestionChips';
 import ProfileReport from './components/ProfileReport';
 import FeedbackCard from './components/FeedbackCard';
@@ -13,7 +12,6 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   isCrisis?: boolean;
-  isReport?: boolean;
 }
 
 type AppMode = 'chat' | 'profile' | 'profile_other';
@@ -66,10 +64,9 @@ const PROFILE_OTHER_SUGGESTIONS = [
   '有个朋友最近让我很困惑',
 ];
 
-// ===== localStorage 持久化 =====
+// ===== localStorage =====
 function saveToStorage(messages: Message[]) {
   try {
-    // 只保存聊天消息（不保存 welcome message）
     if (messages.length > 1) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     }
@@ -81,18 +78,14 @@ function loadFromStorage(): Message[] | null {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Message[];
-      if (Array.isArray(parsed) && parsed.length > 1) {
-        return parsed;
-      }
+      if (Array.isArray(parsed) && parsed.length > 1) return parsed;
     }
   } catch {}
   return null;
 }
 
 function clearStorage() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {}
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
 }
 
 export default function Home() {
@@ -100,32 +93,25 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>(WELCOME_SUGGESTIONS);
-  const [chatSuggestionsBak, setChatSuggestionsBak] = useState<string[]>([]); // 切换模式时暂存聊天建议
+  const [chatSuggestionsBak, setChatSuggestionsBak] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [optIn, setOptIn] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [hadCrisis, setHadCrisis] = useState(false);
-  const [hasRestoredChat, setHasRestoredChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 页面加载时恢复对话
   useEffect(() => {
     const saved = loadFromStorage();
     if (saved) {
       setMessages(saved);
       setSuggestions([]);
-      setHasRestoredChat(true);
     }
   }, []);
 
-  // 消息变化时自动保存
   useEffect(() => {
-    if (mode === 'chat') {
-      saveToStorage(messages);
-    }
+    if (mode === 'chat') saveToStorage(messages);
   }, [messages, mode]);
 
   const scrollToBottom = () => {
@@ -139,18 +125,15 @@ export default function Home() {
   const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
 
-  // 新对话
   const startNewChat = () => {
     clearStorage();
     setMessages([WELCOME_MESSAGE]);
     setSuggestions(WELCOME_SUGGESTIONS);
-    setHasRestoredChat(false);
     setShowFeedback(false);
     setFeedbackDone(false);
     setHadCrisis(false);
   };
 
-  // 进入画像选择（暂存当前聊天建议）
   const startProfile = () => {
     setChatSuggestionsBak(suggestions);
     setMode('profile');
@@ -159,39 +142,29 @@ export default function Home() {
     setReportContent(null);
   };
 
-  // 返回聊天模式（恢复之前的建议）
   const backToChat = () => {
     setMode('chat');
     setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? WELCOME_SUGGESTIONS : []));
     setReportContent(null);
   };
 
-  // 生成画像报告
   const generateReport = async () => {
     if (profileMessages.length < 3) {
       setSuggestions(['再多聊几句吧']);
       return;
     }
-
     setIsLoading(true);
     setReportContent(null);
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: profileMessages.map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          optIn,
+          messages: profileMessages.map(m => ({ role: m.role, content: m.content })),
           mode: mode === 'profile_other' ? 'generate_report_other' : 'generate_report',
         }),
       });
-
       if (!response.ok) throw new Error('API request failed');
-
       const data = await response.json();
       setReportContent(data.message);
       setSuggestions([]);
@@ -203,9 +176,7 @@ export default function Home() {
     }
   };
 
-  // 发送消息
   const sendMessage = async (content: string) => {
-    // 画像模式选择分支
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('了解我自己')) {
       setProfileMessages([PROFILE_SELF_WELCOME]);
       setSuggestions(PROFILE_SELF_SUGGESTIONS);
@@ -217,15 +188,12 @@ export default function Home() {
       setSuggestions(PROFILE_OTHER_SUGGESTIONS);
       return;
     }
-
-    // 生成报告
     if ((mode === 'profile' || mode === 'profile_other') && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
       generateReport();
       return;
     }
 
     setSuggestions([]);
-
     const userMessage: Message = { role: 'user', content };
     const currentMsgs = isProfileMode ? profileMessages : messages;
     const updatedMessages = [...currentMsgs, userMessage];
@@ -243,11 +211,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          optIn,
+          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
           mode: mode === 'profile_other' ? 'profile_other' : mode,
         }),
       });
@@ -256,6 +220,7 @@ export default function Home() {
 
       const data = await response.json();
       if (data.isCrisis) setHadCrisis(true);
+
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.message,
@@ -268,11 +233,7 @@ export default function Home() {
         setMessages([...updatedMessages, assistantMessage]);
       }
 
-      if (data.suggestions && data.suggestions.length > 0) {
-        setSuggestions(data.suggestions);
-      } else {
-        setSuggestions([]);
-      }
+      setSuggestions(data.suggestions?.length > 0 ? data.suggestions : []);
     } catch (error) {
       console.error('Failed to send message:', error);
       const errorMsg: Message = {
@@ -290,14 +251,11 @@ export default function Home() {
     }
   };
 
-  // 提交反馈到 Supabase
   const submitFeedback = async (rating: number, feedback: string | null, saveChat: boolean) => {
     if (!saveChat) {
-      // 用户不愿意保存对话，只记录评分（不含消息）
       setFeedbackDone(true);
       return;
     }
-
     await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -305,15 +263,13 @@ export default function Home() {
         messages: currentMessages.map(m => ({ role: m.role, content: m.content })),
         rating,
         feedback,
-        hadCrisis: hadCrisis,
+        hadCrisis,
         mode,
       }),
     });
-
     setFeedbackDone(true);
   };
 
-  // 聊天超过 4 轮后可以触发反馈
   const canShowFeedback = !isProfileMode && messages.length >= 9 && !showFeedback && !feedbackDone;
 
   return (
@@ -341,7 +297,6 @@ export default function Home() {
                   <button
                     onClick={startNewChat}
                     className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
-                    title="开始新对话"
                   >
                     ✨ 新对话
                   </button>
@@ -372,10 +327,6 @@ export default function Home() {
                 </button>
               </div>
             )}
-            {/* 桌面端隐私开关 */}
-            <div className="hidden lg:block">
-              <PrivacyToggle optIn={optIn} onChange={setOptIn} />
-            </div>
           </div>
         </div>
         {showDisclaimer && !isProfileMode && (
@@ -387,7 +338,6 @@ export default function Home() {
             <button
               onClick={() => setShowDisclaimer(false)}
               className="text-amber-500/50 hover:text-amber-600 text-xs p-1 transition-colors flex-shrink-0"
-              aria-label="关闭提示"
             >
               ✕
             </button>
@@ -397,7 +347,7 @@ export default function Home() {
 
       {/* ===== 消息区域 ===== */}
       <main className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="px-3 sm:px-5 py-4 sm:py-6 space-y-1">
+        <div className="px-3 sm:px-5 lg:px-8 py-4 sm:py-6 space-y-1">
           {currentMessages.map((message, index) => (
             <ChatMessage
               key={`${mode}-${index}`}
@@ -409,12 +359,10 @@ export default function Home() {
 
           {isLoading && <TypingIndicator />}
 
-          {/* 画像报告 */}
           {reportContent && (
             <ProfileReport content={reportContent} onClose={backToChat} />
           )}
 
-          {/* 反馈卡片 */}
           {showFeedback && !feedbackDone && (
             <FeedbackCard
               onSubmit={submitFeedback}
@@ -422,7 +370,6 @@ export default function Home() {
             />
           )}
 
-          {/* 建议标签 */}
           {!isLoading && !reportContent && !showFeedback && suggestions.length > 0 && (
             <SuggestionChips
               suggestions={suggestions}
@@ -431,7 +378,6 @@ export default function Home() {
             />
           )}
 
-          {/* 聊够了？给小舟打分 —— 聊了4轮以上才出现 */}
           {canShowFeedback && !isLoading && (
             <div className="flex justify-center mt-3">
               <button
@@ -449,10 +395,7 @@ export default function Home() {
 
       {/* ===== 输入区域 ===== */}
       <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-slate-200/60">
-        <div className="px-3 sm:px-5 pt-3 pb-3">
-          <div className="sm:hidden lg:hidden mb-2.5">
-            <PrivacyToggle optIn={optIn} onChange={setOptIn} />
-          </div>
+        <div className="px-3 sm:px-5 lg:px-8 pt-3 pb-3">
           <ChatInput
             onSend={sendMessage}
             disabled={isLoading || !!reportContent}
