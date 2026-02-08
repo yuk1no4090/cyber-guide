@@ -80,7 +80,12 @@ function fallbackSuggestions(userMessage: string): string[] {
     return ['有时候觉得是不是我太菜了', '可我也不是没努力过', '怎么才能不去比较啊'];
   }
 
-  return ['说到这个我突然想到...', '感觉你好像懂我', '其实我还想多聊聊这个'];
+  // 如果是对话刚开始（AI在问开场问题），给回答式的建议
+  if (text.length < 20) {
+    return ['遇到了一些事想聊聊', '就是最近感觉有点累', '也没什么大事就是想找人说说'];
+  }
+
+  return ['嗯，我想想怎么说...', '你说的这个挺有道理', '其实我还想聊聊另一件事'];
 }
 
 const CRISIS_SUGGESTIONS = [

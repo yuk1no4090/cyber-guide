@@ -15,24 +15,24 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
     let formatted = text;
 
     // ### 小标题
-    formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-white mt-2 mb-1">$1</div>');
+    formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-slate-800 mt-2 mb-1">$1</div>');
     // ## 小标题
-    formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-white mt-3 mb-1">$1</div>');
+    formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-slate-800 mt-3 mb-1">$1</div>');
 
     // 粗体
-    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white/95">$1</strong>');
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>');
 
     // 编号列表：1. 2. 3.
-    formatted = formatted.replace(/^(\d+)\.\s+(.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-amber-400/70 font-medium min-w-[1.2em] text-right">$1.</span><span>$2</span></div>');
+    formatted = formatted.replace(/^(\d+)\.\s+(.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 font-medium min-w-[1.2em] text-right">$1.</span><span>$2</span></div>');
 
     // 无序列表：- 
-    formatted = formatted.replace(/^- (.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-amber-400/70 mt-0.5">•</span><span>$1</span></div>');
+    formatted = formatted.replace(/^- (.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 mt-0.5">•</span><span>$1</span></div>');
 
     // 电话号码高亮
     formatted = formatted.replace(/([\d-]{7,})/g, '<span class="text-cyan-400 font-medium">$1</span>');
 
     // 行内代码
-    formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-white/[0.06] rounded text-amber-300/80 text-[13px]">$1</code>');
+    formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-sky-50 rounded text-sky-700 text-[13px]">$1</code>');
 
     // 换行
     formatted = formatted.replace(/\n/g, '<br />');
@@ -67,7 +67,7 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
           <span className="w-4 h-4 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-[9px]">
             🛶
           </span>
-          <span className="text-[11px] text-sky-400/70 font-medium">小舟</span>
+          <span className="text-[11px] text-sky-500 font-medium">小舟</span>
           {isCrisis && (
             <span className="ml-1 px-1.5 py-0.5 bg-red-500/15 text-red-400 rounded text-[10px] font-medium border border-red-500/20">
               紧急
@@ -77,7 +77,7 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
 
         {/* 消息内容 */}
         <div
-          className="text-[14px] sm:text-[15px] leading-[1.7] text-gray-200/90"
+          className="text-[14px] sm:text-[15px] leading-[1.7] text-slate-700"
           dangerouslySetInnerHTML={{ __html: formatContent(content) }}
         />
       </div>

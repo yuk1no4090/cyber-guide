@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Cyber Guide - 心理支持伙伴',
-  description: '温暖、专业的 AI 心理支持伙伴，为你提供情感支持和倾听。',
-  keywords: ['心理支持', '情感倾诉', 'AI 陪伴', '压力管理'],
+  title: '小舟 · Cyber Guide',
+  description: '一叶小船，水深水浅都趟过，陪你聊聊方向、选择和那些想说又不知道跟谁说的事。',
+  keywords: ['CS学生', '方向选择', 'AI 陪伴', '大学规划', '职场顾问'],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#1e222a',
+  themeColor: '#f0f7ff',
 };
 
 export default function RootLayout({

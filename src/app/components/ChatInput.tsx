@@ -53,11 +53,11 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
           rows={1}
           className="
             w-full px-3.5 py-2.5 sm:px-4 sm:py-3
-            bg-[#1a1d27] text-gray-100
-            border border-white/[0.08]
+            bg-white text-slate-800
+            border border-slate-200
             rounded-2xl resize-none
             text-[14px] sm:text-[15px]
-            placeholder:text-gray-500
+            placeholder:text-slate-400
             focus:outline-none input-glow
             disabled:opacity-40 disabled:cursor-not-allowed
             transition-all duration-200

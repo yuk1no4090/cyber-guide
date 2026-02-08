@@ -22,11 +22,11 @@ export default function SuggestionChips({ suggestions, onSelect, disabled }: Sug
             suggestion-chip
             px-3 py-1.5 sm:px-3.5 sm:py-2
             text-[12px] sm:text-[13px]
-            text-emerald-300/90 
-            bg-emerald-500/[0.08]
-            border border-emerald-400/15
+            text-sky-600
+            bg-sky-50
+            border border-sky-200
             rounded-full
-            hover:bg-emerald-500/[0.15] hover:border-emerald-400/25 hover:text-emerald-200
+            hover:bg-sky-100 hover:border-sky-300 hover:text-sky-700
             active:scale-95
             disabled:opacity-30 disabled:cursor-not-allowed
             transition-all duration-200

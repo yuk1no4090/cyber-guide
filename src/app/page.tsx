@@ -317,19 +317,19 @@ export default function Home() {
   const canShowFeedback = !isProfileMode && messages.length >= 9 && !showFeedback && !feedbackDone;
 
   return (
-    <div className="chat-container flex flex-col h-screen h-[100dvh] max-w-2xl mx-auto relative">
+    <div className="chat-container flex flex-col h-screen h-[100dvh] max-w-3xl lg:max-w-4xl mx-auto relative">
       {/* ===== Header ===== */}
-      <header className="glass safe-top sticky top-0 z-20 border-b border-white/[0.06]">
+      <header className="glass safe-top sticky top-0 z-20 border-b border-slate-200/60">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-400 to-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
               <span className="text-base sm:text-lg">🛶</span>
             </div>
             <div>
-              <h1 className="font-semibold text-[15px] sm:text-base text-white leading-tight tracking-tight">
+              <h1 className="font-semibold text-[15px] sm:text-base text-slate-800 leading-tight tracking-tight">
                 小舟 · Cyber Guide
               </h1>
-              <p className="text-[11px] text-sky-400/70 leading-tight">
+              <p className="text-[11px] text-sky-500 leading-tight">
                 {mode === 'chat' ? '在线 · 渡你过河的 CS 小船' : mode === 'profile_other' ? '🔍 读人模式' : '📋 画像分析模式'}
               </p>
             </div>
@@ -340,7 +340,7 @@ export default function Home() {
                 {messages.length > 1 && (
                   <button
                     onClick={startNewChat}
-                    className="px-2 py-1.5 text-[12px] text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] transition-colors"
+                    className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
                     title="开始新对话"
                   >
                     ✨ 新对话
@@ -348,7 +348,7 @@ export default function Home() {
                 )}
                 <button
                   onClick={startProfile}
-                  className="px-2 py-1.5 text-[12px] text-cyan-300/80 bg-cyan-400/[0.08] border border-cyan-400/15 rounded-lg hover:bg-cyan-400/[0.15] transition-colors"
+                  className="px-2 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
                 >
                   📋 画像
                 </button>
@@ -359,14 +359,14 @@ export default function Home() {
                   <button
                     onClick={generateReport}
                     disabled={isLoading}
-                    className="px-2 py-1.5 text-[12px] text-emerald-300/80 bg-emerald-400/[0.08] border border-emerald-400/15 rounded-lg hover:bg-emerald-400/[0.15] disabled:opacity-40 transition-colors"
+                    className="px-2 py-1.5 text-[12px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40 transition-colors"
                   >
                     ✨ 生成{mode === 'profile_other' ? '分析' : '画像'}
                   </button>
                 )}
                 <button
                   onClick={backToChat}
-                  className="px-2 py-1.5 text-[12px] text-gray-400 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.08] transition-colors"
+                  className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
                 >
                   返回聊天
                 </button>
@@ -380,13 +380,13 @@ export default function Home() {
         </div>
         {showDisclaimer && !isProfileMode && (
           <div className="disclaimer-bar px-4 py-1.5 flex items-center justify-between gap-2">
-            <p className="text-[11px] sm:text-xs text-amber-200/60 flex-1 text-center">
+            <p className="text-[11px] sm:text-xs text-amber-600/70 flex-1 text-center">
               <span className="mr-1">🛶</span>
               小舟是 AI 陪伴工具，分享的经验仅供参考，不替代专业咨询
             </p>
             <button
               onClick={() => setShowDisclaimer(false)}
-              className="text-amber-200/40 hover:text-amber-200/70 text-xs p-1 transition-colors flex-shrink-0"
+              className="text-amber-500/50 hover:text-amber-600 text-xs p-1 transition-colors flex-shrink-0"
               aria-label="关闭提示"
             >
               ✕
@@ -436,7 +436,7 @@ export default function Home() {
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => setShowFeedback(true)}
-                className="px-3 py-1.5 text-[12px] text-sky-300/60 bg-sky-400/[0.06] border border-sky-300/10 rounded-full hover:bg-sky-400/[0.12] hover:text-sky-300/80 transition-colors"
+                className="px-3 py-1.5 text-[12px] text-sky-500 bg-sky-50 border border-sky-200 rounded-full hover:bg-sky-100 hover:text-sky-600 transition-colors"
               >
                 💬 聊完了？给小舟打个分
               </button>
@@ -448,7 +448,7 @@ export default function Home() {
       </main>
 
       {/* ===== 输入区域 ===== */}
-      <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-white/[0.06]">
+      <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-slate-200/60">
         <div className="px-3 sm:px-5 pt-3 pb-3">
           <div className="sm:hidden lg:hidden mb-2.5">
             <PrivacyToggle optIn={optIn} onChange={setOptIn} />

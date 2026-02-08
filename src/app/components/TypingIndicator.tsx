@@ -11,13 +11,13 @@ export default function TypingIndicator() {
           <span className="w-4 h-4 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-[9px]">
             🛶
           </span>
-          <span className="text-[11px] text-sky-400/70 font-medium">小舟</span>
+          <span className="text-[11px] text-sky-500 font-medium">小舟</span>
         </div>
         {/* 跳动的点 */}
         <div className="flex items-center gap-1 py-0.5 px-1">
-          <div className="typing-dot w-[6px] h-[6px] bg-emerald-400/60 rounded-full" />
-          <div className="typing-dot w-[6px] h-[6px] bg-emerald-400/60 rounded-full" />
-          <div className="typing-dot w-[6px] h-[6px] bg-emerald-400/60 rounded-full" />
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
         </div>
       </div>
     </div>
