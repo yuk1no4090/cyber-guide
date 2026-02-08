@@ -364,7 +364,7 @@ export default function Home() {
           {isLoading && <TypingIndicator />}
 
           {reportContent && (
-            <ProfileReport content={reportContent} onClose={backToChat} />
+            <ProfileReport content={reportContent} onClose={backToChat} isOtherMode={mode === 'profile_other'} />
           )}
 
           {showFeedback && !feedbackDone && (
