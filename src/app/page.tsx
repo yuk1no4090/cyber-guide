@@ -126,12 +126,23 @@ export default function Home() {
   const currentMessages = mode === 'chat' ? messages : profileMessages;
 
   const startNewChat = () => {
+    // 如果聊了足够多且还没评价过，先弹出评价卡
+    if (messages.length >= 5 && !feedbackDone && !showFeedback) {
+      setPendingReset(true);
+      setShowFeedback(true);
+      return;
+    }
+    doResetChat();
+  };
+
+  const doResetChat = () => {
     clearStorage();
     setMessages([WELCOME_MESSAGE]);
     setSuggestions(WELCOME_SUGGESTIONS);
     setShowFeedback(false);
     setFeedbackDone(false);
     setHadCrisis(false);
+    setPendingReset(false);
   };
 
   const startProfile = () => {
@@ -255,23 +266,36 @@ export default function Home() {
     }
   };
 
+  // 标记是否是"新对话前的评价"
+  const [pendingReset, setPendingReset] = useState(false);
+
   const submitFeedback = async (rating: number, feedback: string | null, saveChat: boolean) => {
-    if (!saveChat) {
-      setFeedbackDone(true);
-      return;
+    if (saveChat) {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: currentMessages.map(m => ({ role: m.role, content: m.content })),
+          rating,
+          feedback,
+          hadCrisis,
+          mode,
+        }),
+      });
     }
-    await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: currentMessages.map(m => ({ role: m.role, content: m.content })),
-        rating,
-        feedback,
-        hadCrisis,
-        mode,
-      }),
-    });
     setFeedbackDone(true);
+    // 如果是点了"新对话"触发的评价，提交后自动重置
+    if (pendingReset) {
+      setTimeout(() => doResetChat(), 1500); // 让用户看到"谢谢反馈"再跳
+    }
+  };
+
+  const handleFeedbackSkip = () => {
+    setShowFeedback(false);
+    setFeedbackDone(true);
+    if (pendingReset) {
+      doResetChat();
+    }
   };
 
   const canShowFeedback = !isProfileMode && messages.length >= 9 && !showFeedback && !feedbackDone;
@@ -370,7 +394,7 @@ export default function Home() {
           {showFeedback && !feedbackDone && (
             <FeedbackCard
               onSubmit={submitFeedback}
-              onSkip={() => { setShowFeedback(false); setFeedbackDone(true); }}
+              onSkip={handleFeedbackSkip}
             />
           )}
 
