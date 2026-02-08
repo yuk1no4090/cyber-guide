@@ -7,6 +7,7 @@ import TypingIndicator from './components/TypingIndicator';
 import PrivacyToggle from './components/PrivacyToggle';
 import SuggestionChips from './components/SuggestionChips';
 import ProfileReport from './components/ProfileReport';
+import FeedbackCard from './components/FeedbackCard';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -104,6 +105,9 @@ export default function Home() {
   const [optIn, setOptIn] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [reportContent, setReportContent] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackDone, setFeedbackDone] = useState(false);
+  const [hadCrisis, setHadCrisis] = useState(false);
   const [hasRestoredChat, setHasRestoredChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -141,6 +145,9 @@ export default function Home() {
     setMessages([WELCOME_MESSAGE]);
     setSuggestions(WELCOME_SUGGESTIONS);
     setHasRestoredChat(false);
+    setShowFeedback(false);
+    setFeedbackDone(false);
+    setHadCrisis(false);
   };
 
   // 进入画像选择（暂存当前聊天建议）
@@ -248,6 +255,7 @@ export default function Home() {
       if (!response.ok) throw new Error('API request failed');
 
       const data = await response.json();
+      if (data.isCrisis) setHadCrisis(true);
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.message,
@@ -281,6 +289,32 @@ export default function Home() {
       setIsLoading(false);
     }
   };
+
+  // 提交反馈到 Supabase
+  const submitFeedback = async (rating: number, feedback: string | null, saveChat: boolean) => {
+    if (!saveChat) {
+      // 用户不愿意保存对话，只记录评分（不含消息）
+      setFeedbackDone(true);
+      return;
+    }
+
+    await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: currentMessages.map(m => ({ role: m.role, content: m.content })),
+        rating,
+        feedback,
+        hadCrisis: hadCrisis,
+        mode,
+      }),
+    });
+
+    setFeedbackDone(true);
+  };
+
+  // 聊天超过 4 轮后可以触发反馈
+  const canShowFeedback = !isProfileMode && messages.length >= 9 && !showFeedback && !feedbackDone;
 
   return (
     <div className="chat-container flex flex-col h-screen h-[100dvh] max-w-2xl mx-auto relative">
@@ -380,13 +414,33 @@ export default function Home() {
             <ProfileReport content={reportContent} onClose={backToChat} />
           )}
 
+          {/* 反馈卡片 */}
+          {showFeedback && !feedbackDone && (
+            <FeedbackCard
+              onSubmit={submitFeedback}
+              onSkip={() => { setShowFeedback(false); setFeedbackDone(true); }}
+            />
+          )}
+
           {/* 建议标签 */}
-          {!isLoading && !reportContent && suggestions.length > 0 && (
+          {!isLoading && !reportContent && !showFeedback && suggestions.length > 0 && (
             <SuggestionChips
               suggestions={suggestions}
               onSelect={sendMessage}
               disabled={isLoading}
             />
+          )}
+
+          {/* 聊够了？给耗子打分 —— 聊了4轮以上才出现 */}
+          {canShowFeedback && !isLoading && (
+            <div className="flex justify-center mt-3">
+              <button
+                onClick={() => setShowFeedback(true)}
+                className="px-3 py-1.5 text-[12px] text-amber-300/60 bg-amber-400/[0.06] border border-amber-300/10 rounded-full hover:bg-amber-400/[0.12] hover:text-amber-300/80 transition-colors"
+              >
+                💬 聊完了？给耗子打个分
+              </button>
+            </div>
           )}
 
           <div ref={messagesEndRef} className="h-1" />
