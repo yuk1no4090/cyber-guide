@@ -149,8 +149,12 @@ export default function Home() {
   };
 
   const generateReport = async () => {
-    if (profileMessages.length < 3) {
-      setSuggestions(['再多聊几句吧']);
+    // 检查用户是否提供了足够的实质性内容（至少 2 条超过 5 字的用户消息）
+    const substantiveUserMsgs = profileMessages.filter(
+      m => m.role === 'user' && m.content.length > 5
+    );
+    if (substantiveUserMsgs.length < 2) {
+      setSuggestions(['再多描述一些细节吧', '信息太少了，结果不准']);
       return;
     }
     setIsLoading(true);
@@ -310,7 +314,7 @@ export default function Home() {
               </>
             ) : (
               <div className="flex gap-1.5">
-                {!reportContent && profileMessages.length >= 3 && (
+                {!reportContent && profileMessages.filter(m => m.role === 'user' && m.content.length > 5).length >= 2 && (
                   <button
                     onClick={generateReport}
                     disabled={isLoading}

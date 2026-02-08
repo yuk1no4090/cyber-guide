@@ -124,9 +124,9 @@ body {
     linear-gradient(180deg, #eef6ff 0%, #f0f7ff 50%, #f5f9ff 100%);
 }
 
-/* ============= 玻璃态（白色毛玻璃） ============= */
+/* ============= 玻璃态（与天蓝背景融合） ============= */
 .glass {
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(240, 247, 255, 0.85);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
 }
@@ -273,6 +273,12 @@ body {
 
 .fade-in-up {
   animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ============= 文字断行 ============= */
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ============= 建议标签 ============= */
