@@ -31,9 +31,9 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
     return (
       <div className="message-bubble flex justify-start mb-3">
         <div className="ai-bubble max-w-[88%] sm:max-w-[72%] rounded-2xl rounded-bl-sm px-4 py-4 text-center">
-          <div className="text-2xl mb-2">🐭 ✨</div>
-          <p className="text-[14px] text-gray-200">谢谢你的反馈！耗子会变得更好的</p>
-          <p className="text-[12px] text-gray-400 mt-1">反正老鼠不怕摔，大不了再爬起来</p>
+          <div className="text-2xl mb-2">🛶 ✨</div>
+          <p className="text-[14px] text-gray-200">谢谢你的反馈！小舟会变得更好的</p>
+          <p className="text-[12px] text-gray-400 mt-1">水再深，小舟也能飘过去</p>
         </div>
       </div>
     );
@@ -45,10 +45,10 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
     <div className="message-bubble flex justify-start mb-3">
       <div className="max-w-[92%] sm:max-w-[80%] rounded-2xl rounded-bl-sm overflow-hidden">
         {/* 标题栏 */}
-        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-400/15 rounded-t-2xl px-4 py-3">
+          <div className="bg-gradient-to-r from-sky-500/15 via-blue-500/10 to-sky-500/15 border border-sky-400/15 rounded-t-2xl px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="text-lg">🐭</span>
-            <span className="text-[14px] font-semibold text-amber-300">这次聊天对你有帮助吗？</span>
+            <span className="text-lg">🛶</span>
+            <span className="text-[14px] font-semibold text-sky-300">这次聊天对你有帮助吗？</span>
           </div>
         </div>
 
@@ -64,7 +64,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
                     w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[12px] sm:text-[13px] font-medium
                     transition-all duration-150
                     ${rating === n 
-                      ? 'bg-amber-500/30 text-amber-200 border border-amber-400/40 scale-110' 
+                      ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40 scale-110' 
                       : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-white/[0.08]'
                     }
                   `}
@@ -75,7 +75,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
             </div>
             {rating > 0 && (
               <p className="text-center text-[13px] text-gray-300 mt-2">
-                {ratingEmojis[rating - 1]} {rating <= 3 ? '耗子会努力改进的' : rating <= 6 ? '还行，继续加油' : rating <= 8 ? '谢谢认可！' : '太开心了！'}
+                {ratingEmojis[rating - 1]} {rating <= 3 ? '小舟会努力改进的' : rating <= 6 ? '还行，继续加油' : rating <= 8 ? '谢谢认可！' : '太开心了！'}
               </p>
             )}
           </div>
@@ -110,7 +110,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
             <button
               onClick={handleSubmit}
               disabled={rating === 0 || isSubmitting}
-              className="flex-1 py-2 text-[13px] font-medium text-amber-200 bg-amber-500/15 border border-amber-400/20 rounded-xl hover:bg-amber-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 py-2 text-[13px] font-medium text-sky-200 bg-sky-500/15 border border-sky-400/20 rounded-xl hover:bg-sky-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? '提交中...' : '提交'}
             </button>

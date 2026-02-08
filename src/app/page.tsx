@@ -22,7 +22,7 @@ const STORAGE_KEY = 'cyber-guide-chat';
 
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
-  content: '嘿！我是耗子 🐭\n\n一只在 CS 领域到处钻的小老鼠，个头不大但什么角落都待过。也迷茫过，也焦虑过，一路跌跌撞撞走到现在。\n\n想聊什么都行，随便说：',
+  content: '嘿！我是小舟 🛶\n\n一叶漂在 CS 领域的小船，水深水浅都趟过。也迷茫过，也焦虑过，一路飘飘荡荡走到现在。\n\n想聊什么都行，随便说：',
 };
 
 const WELCOME_SUGGESTIONS = [
@@ -34,7 +34,7 @@ const WELCOME_SUGGESTIONS = [
 
 const PROFILE_CHOOSE: Message = {
   role: 'assistant',
-  content: '你想让耗子帮你分析谁？🐭',
+  content: '你想让小舟帮你分析谁？🛶',
 };
 
 const PROFILE_CHOOSE_SUGGESTIONS = [
@@ -44,7 +44,7 @@ const PROFILE_CHOOSE_SUGGESTIONS = [
 
 const PROFILE_SELF_WELCOME: Message = {
   role: 'assistant',
-  content: '好嘞，让耗子来认识一下你 🐭\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
+  content: '好嘞，让小舟来认识一下你 🛶\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
 };
 
 const PROFILE_SELF_SUGGESTIONS = [
@@ -56,7 +56,7 @@ const PROFILE_SELF_SUGGESTIONS = [
 
 const PROFILE_OTHER_WELCOME: Message = {
   role: 'assistant',
-  content: '有意思，耗子最喜欢帮人"读人"了 🐭🔍\n\n你想分析谁？先告诉我：\n- ta 是你的什么人？（同学/室友/老师/同事/领导/朋友/家人）\n- 发生了什么事让你想了解 ta？',
+  content: '有意思，小舟最喜欢帮人"读人"了 🛶🔍\n\n你想分析谁？先告诉我：\n- ta 是你的什么人？（同学/室友/老师/同事/领导/朋友/家人）\n- 发生了什么事让你想了解 ta？',
 };
 
 const PROFILE_OTHER_SUGGESTIONS = [
@@ -277,7 +277,7 @@ export default function Home() {
       console.error('Failed to send message:', error);
       const errorMsg: Message = {
         role: 'assistant',
-        content: '抱歉，耗子现在遇到了一些问题 😵 请稍后再试。',
+        content: '抱歉，小舟现在遇到了一些问题 😵 请稍后再试。',
       };
       if (isProfileMode) {
         setProfileMessages([...updatedMessages, errorMsg]);
@@ -322,15 +322,15 @@ export default function Home() {
       <header className="glass safe-top sticky top-0 z-20 border-b border-white/[0.06]">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <span className="text-base sm:text-lg">🐭</span>
+            <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-400 to-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
+              <span className="text-base sm:text-lg">🛶</span>
             </div>
             <div>
               <h1 className="font-semibold text-[15px] sm:text-base text-white leading-tight tracking-tight">
-                耗子 · Cyber Guide
+                小舟 · Cyber Guide
               </h1>
-              <p className="text-[11px] text-amber-400/70 leading-tight">
-                {mode === 'chat' ? '在线 · 到处钻的 CS 小老鼠' : mode === 'profile_other' ? '🔍 读人模式' : '📋 画像分析模式'}
+              <p className="text-[11px] text-sky-400/70 leading-tight">
+                {mode === 'chat' ? '在线 · 渡你过河的 CS 小船' : mode === 'profile_other' ? '🔍 读人模式' : '📋 画像分析模式'}
               </p>
             </div>
           </div>
@@ -381,8 +381,8 @@ export default function Home() {
         {showDisclaimer && !isProfileMode && (
           <div className="disclaimer-bar px-4 py-1.5 flex items-center justify-between gap-2">
             <p className="text-[11px] sm:text-xs text-amber-200/60 flex-1 text-center">
-              <span className="mr-1">🐭</span>
-              耗子是 AI 陪伴工具，分享的经验仅供参考，不替代专业咨询
+              <span className="mr-1">🛶</span>
+              小舟是 AI 陪伴工具，分享的经验仅供参考，不替代专业咨询
             </p>
             <button
               onClick={() => setShowDisclaimer(false)}
@@ -431,14 +431,14 @@ export default function Home() {
             />
           )}
 
-          {/* 聊够了？给耗子打分 —— 聊了4轮以上才出现 */}
+          {/* 聊够了？给小舟打分 —— 聊了4轮以上才出现 */}
           {canShowFeedback && !isLoading && (
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => setShowFeedback(true)}
-                className="px-3 py-1.5 text-[12px] text-amber-300/60 bg-amber-400/[0.06] border border-amber-300/10 rounded-full hover:bg-amber-400/[0.12] hover:text-amber-300/80 transition-colors"
+                className="px-3 py-1.5 text-[12px] text-sky-300/60 bg-sky-400/[0.06] border border-sky-300/10 rounded-full hover:bg-sky-400/[0.12] hover:text-sky-300/80 transition-colors"
               >
-                💬 聊完了？给耗子打个分
+                💬 聊完了？给小舟打个分
               </button>
             </div>
           )}

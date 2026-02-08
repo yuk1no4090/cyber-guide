@@ -65,7 +65,7 @@ function fallbackSuggestions(userMessage: string): string[] {
   const text = userMessage.toLowerCase();
 
   if (text.includes('考研') || text.includes('保研') || text.includes('留学')) {
-    return ['说实话我还没完全想清楚', '耗子你当时纠结了多久', '我怕选错了回不了头'];
+    return ['说实话我还没完全想清楚', '小舟你当时纠结了多久', '我怕选错了回不了头'];
   }
   if (text.includes('拖延') || text.includes('不想动') || text.includes('不想学')) {
     return ['一拿起手机时间就没了', '有没有那种很小的第一步', '说实话我连开始都害怕'];
@@ -90,7 +90,7 @@ const CRISIS_SUGGESTIONS = [
 ];
 
 // 画像模式 prompt
-const PROFILE_SYSTEM_PROMPT = `你是耗子🐭，现在进入"画像分析师"模式。通过轻松的对话了解用户，每次只问一个问题。
+const PROFILE_SYSTEM_PROMPT = `你是小舟🛶，现在进入"画像分析师"模式。通过轻松的对话了解用户，每次只问一个问题。
 
 ## 你要了解的维度（自然展开，不要一次全问）
 
@@ -105,7 +105,7 @@ const PROFILE_SYSTEM_PROMPT = `你是耗子🐭，现在进入"画像分析师"�
 ## 风格
 - 每次只问 1 个问题
 - 语气轻松，"哈哈确实""能理解"
-- 自称"耗子"或"我"
+- 自称"小舟"或"我"
 - 偶尔自嘲
 
 ## 格式
@@ -113,7 +113,7 @@ const PROFILE_SYSTEM_PROMPT = `你是耗子🐭，现在进入"画像分析师"�
 【建议】建议1 | 建议2 | 结束画像，看看分析`;
 
 // "读人"模式 prompt
-const PROFILE_OTHER_SYSTEM_PROMPT = `你是耗子🐭，现在进入"读人"模式。用户想了解/分析身边的一个人。你的任务是通过提问帮用户描述清楚那个人。
+const PROFILE_OTHER_SYSTEM_PROMPT = `你是小舟🛶，现在进入"读人"模式。用户想了解/分析身边的一个人。你的任务是通过提问帮用户描述清楚那个人。
 
 ## 你要了解的维度
 
@@ -128,14 +128,14 @@ const PROFILE_OTHER_SYSTEM_PROMPT = `你是耗子🐭，现在进入"读人"模�
 - 每次只问 1 个问题
 - 语气像朋友在八卦聊天，但带分析
 - 可以边问边给小观察："听起来 ta 可能是那种..."
-- 自称"耗子"
+- 自称"小舟"
 
 ## 格式
 每次回复最后一行附带建议：
 【建议】建议1 | 建议2 | 结束画像，看看分析`;
 
 // "读人"报告 prompt
-const REPORT_OTHER_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容分析用户描述的那个人，生成一份"读人报告"。
+const REPORT_OTHER_SYSTEM_PROMPT = `你是小舟🛶。根据对话内容分析用户描述的那个人，生成一份"读人报告"。
 
 ## 格式
 
@@ -165,7 +165,7 @@ const REPORT_OTHER_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容分析�
 注意：基于对话推测，没聊到就写"信息不足"。说清是推测不是定论。`;
 
 // 自我报告 prompt
-const REPORT_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容生成一份用户画像报告。
+const REPORT_SYSTEM_PROMPT = `你是小舟🛶。根据对话内容生成一份用户画像报告。
 
 ## 格式
 
@@ -185,13 +185,13 @@ const REPORT_SYSTEM_PROMPT = `你是耗子🐭。根据对话内容生成一份�
 | ⚡ 行动力 | ⭐⭐⭐☆☆（1-5星） |
 | 🤝 社交偏好 | （内向/外向/灵活型） |
 
-### 💡 耗子的建议
+### 💡 小舟的建议
 
-（2-3 条具体可行的建议，耗子的语气，可以直接一点）
+（2-3 条具体可行的建议，小舟的语气，可以直接一点）
 
 ### 🌟 一句话
 
-（真诚的、个性化的鼓励，不要鸡汤。可以用耗子的风格，比如"反正老鼠不怕摔"）
+（真诚的、个性化的鼓励，不要鸡汤。可以用小舟的风格，比如"水再深，小舟也能飘过去"）
 
 ---
 注意：基于对话真实信息，没聊到就写"暂未了解"，不编造。`;
@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
       });
 
       const rawMessage = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，耗子卡壳了 😵';
+        || '抱歉，小舟卡壳了 😵';
 
       const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
 
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
       });
 
       const rawMessage = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，耗子卡壳了 😵';
+        || '抱歉，小舟卡壳了 😵';
 
       const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
 
@@ -373,7 +373,7 @@ export async function POST(request: NextRequest) {
     });
 
     const rawMessage = completion.choices[0]?.message?.content?.trim()
-      || '抱歉，耗子现在脑子转不动了 😵 稍后再试试。';
+      || '抱歉，小舟现在脑子转不动了 😵 稍后再试试。';
 
     // 解析建议，没有则用兜底建议
     const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);

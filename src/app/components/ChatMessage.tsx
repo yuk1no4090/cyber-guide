@@ -64,10 +64,10 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
       `}>
         {/* AI 标识 */}
         <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="w-4 h-4 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-[9px]">
-            🐭
+          <span className="w-4 h-4 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-[9px]">
+            🛶
           </span>
-          <span className="text-[11px] text-amber-400/70 font-medium">耗子</span>
+          <span className="text-[11px] text-sky-400/70 font-medium">小舟</span>
           {isCrisis && (
             <span className="ml-1 px-1.5 py-0.5 bg-red-500/15 text-red-400 rounded text-[10px] font-medium border border-red-500/20">
               紧急
