@@ -110,6 +110,19 @@ export default function Home() {
     }
   }, []);
 
+  // 关闭/刷新页面时提醒（聊了足够多且没评价过）
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const totalMsgs = messages.length + profileMessages.length;
+      if (totalMsgs >= 5 && !feedbackDone) {
+        e.preventDefault();
+        // 现代浏览器会显示默认提示语
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [messages, profileMessages, feedbackDone]);
+
   useEffect(() => {
     if (mode === 'chat') saveToStorage(messages);
   }, [messages, mode]);
@@ -154,6 +167,15 @@ export default function Home() {
   };
 
   const backToChat = () => {
+    // 画像模式聊了足够多且没评价过，先弹评价
+    if (profileMessages.length >= 5 && !feedbackDone && !showFeedback) {
+      setShowFeedback(true);
+      return;
+    }
+    doBackToChat();
+  };
+
+  const doBackToChat = () => {
     setMode('chat');
     setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? WELCOME_SUGGESTIONS : []));
     setReportContent(null);
@@ -284,18 +306,20 @@ export default function Home() {
       });
     }
     setFeedbackDone(true);
-    // 如果是点了"新对话"触发的评价，提交后自动重置
-    if (pendingReset) {
-      setTimeout(() => doResetChat(), 1500); // 让用户看到"谢谢反馈"再跳
+    // 提交后自动跳转
+    if (pendingReset || isProfileMode) {
+      setTimeout(() => {
+        if (pendingReset) doResetChat();
+        else if (isProfileMode) doBackToChat();
+      }, 1500);
     }
   };
 
   const handleFeedbackSkip = () => {
     setShowFeedback(false);
     setFeedbackDone(true);
-    if (pendingReset) {
-      doResetChat();
-    }
+    if (pendingReset) doResetChat();
+    else if (isProfileMode) doBackToChat();
   };
 
   const canShowFeedback = !isProfileMode && messages.length >= 9 && !showFeedback && !feedbackDone;
