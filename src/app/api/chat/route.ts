@@ -3,7 +3,10 @@ import { openai, CHAT_MODEL } from '@/lib/openai';
 import { checkModeration, CRISIS_RESPONSE } from '@/lib/moderation';
 import { retrieve, formatEvidence } from '@/lib/rag';
 import { getSystemPrompt } from '@/lib/prompt';
-import { Message } from '@/lib/logger';
+export interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
 
 export const runtime = 'nodejs';
 
@@ -38,22 +41,35 @@ function smartTruncate(messages: Message[], maxMessages: number): Message[] {
 }
 
 /**
+ * 清理 AI 回复中的结构化标记（GLM 等模型会加【共情】【理解】等）
+ */
+function cleanAIResponse(text: string): string {
+  return text
+    .replace(/【(共情|理解|倾听|回应|分析|总结|引导|支持|鼓励|观察|提问|反馈|过渡)】/g, '')
+    .replace(/^\s*\n/gm, '\n') // 清理多余空行
+    .trim();
+}
+
+/**
  * 从 AI 回复中解析建议标签
  */
 function parseSuggestions(text: string): { message: string; suggestions: string[] } {
+  // 先清理结构化标记
+  const cleaned = cleanAIResponse(text);
+
   const regex = /【建议】(.+?)$/m;
-  const match = text.match(regex);
+  const match = cleaned.match(regex);
 
   if (match) {
     const suggestions = match[1]
       .split('|')
       .map(s => s.trim())
       .filter(s => s.length > 0 && s.length <= 20);
-    const message = text.replace(regex, '').trimEnd();
+    const message = cleaned.replace(regex, '').trimEnd();
     return { message, suggestions };
   }
 
-  return { message: text, suggestions: [] };
+  return { message: cleaned, suggestions: [] };
 }
 
 /**
