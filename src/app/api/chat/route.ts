@@ -57,33 +57,28 @@ function parseSuggestions(text: string): { message: string; suggestions: string[
 }
 
 /**
- * 根据用户最新消息生成兜底建议（AI 没返回【建议】时使用）
- * 写法原则：像用户心里正在想的话，不像选项按钮
+ * 根据 AI 回复内容生成兜底建议（AI 没返回【建议】时使用）
+ * 核心：基于 AI 刚问了什么来生成回答选项，不是基于用户说了什么
  */
-function fallbackSuggestions(userMessage: string): string[] {
-  const text = userMessage.toLowerCase();
+function fallbackSuggestions(aiMessage: string, userMessage: string): string[] {
+  const ai = aiMessage.toLowerCase();
 
-  if (text.includes('考研') || text.includes('保研') || text.includes('留学')) {
-    return ['说实话我还没完全想清楚', '小舟你当时纠结了多久', '我怕选错了回不了头'];
+  // 根据 AI 回复的关键内容判断它在问什么
+  if (ai.includes('具体') || ai.includes('说说') || ai.includes('什么事')) {
+    return ['其实是一件小事但一直放不下', '说来话长不知道从哪开始', '就是一种说不清的烦躁'];
   }
-  if (text.includes('拖延') || text.includes('不想动') || text.includes('不想学')) {
-    return ['一拿起手机时间就没了', '有没有那种很小的第一步', '说实话我连开始都害怕'];
+  if (ai.includes('大几') || ai.includes('专业') || ai.includes('在读')) {
+    return ['大二，学的计算机', '大三了正在纠结考研', '已经工作了一年多'];
   }
-  if (text.includes('迷茫') || text.includes('方向') || text.includes('规划')) {
-    return ['什么都试了一点但都不深入', '你是怎么确定方向的', '我怕选错了浪费时间'];
+  if (ai.includes('什么感觉') || ai.includes('心情') || ai.includes('怎么样')) {
+    return ['就是很累但又停不下来', '有点焦虑说不上来为什么', '其实已经好一点了就是想聊聊'];
   }
-  if (text.includes('焦虑') || text.includes('压力') || text.includes('难受')) {
-    return ['最近确实绷得有点紧', '你有没有过这种感觉', '其实还有件事一直憋着没说'];
-  }
-  if (text.includes('比') || text.includes('差距') || text.includes('不如')) {
-    return ['有时候觉得是不是我太菜了', '可我也不是没努力过', '怎么才能不去比较啊'];
+  if (ai.includes('怎么看') || ai.includes('你觉得')) {
+    return ['我觉得你说得有道理', '但我的情况可能不太一样', '我还是有点拿不准'];
   }
 
-  if (text.length < 20) {
-    return ['最近和朋友闹了点矛盾', '就是什么都不想做很烦', '考试/工作上遇到了麻烦'];
-  }
-
-  return ['其实最让我难受的是...', '你说得对我是在逃避', '还有一件事一直没说'];
+  // 通用兜底：不重复用户说过的内容
+  return [];
 }
 
 const CRISIS_SUGGESTIONS = [
@@ -414,11 +409,11 @@ export async function POST(request: NextRequest) {
     const rawMessage = completion.choices[0]?.message?.content?.trim()
       || '抱歉，小舟现在脑子转不动了 😵 稍后再试试。';
 
-    // 解析建议，没有则用兜底建议
+    // 解析建议，没有则根据 AI 回复内容生成兜底建议
     const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
     const finalSuggestions = suggestions.length > 0
       ? suggestions
-      : fallbackSuggestions(lastUserMessage.content);
+      : fallbackSuggestions(assistantMessage, lastUserMessage.content);
 
     return NextResponse.json({
       message: assistantMessage,
