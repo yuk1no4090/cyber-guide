@@ -29,8 +29,8 @@ const REDACTION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
     replacement: '[NAME]' 
   },
   
-  // QQ号（5-11位数字，通常以非0开头）
-  { pattern: /[1-9]\d{4,10}/g, replacement: '[QQ]' },
+  // QQ号（仅在存在明确上下文时脱敏，避免误伤学号/分数等数字）
+  { pattern: /(?:qq|q号|扣扣)(?:号)?[：:\s]*[1-9]\d{4,10}/gi, replacement: '[QQ]' },
   
   // 微信号（字母开头，6-20个字符）
   { pattern: /(?<=微信[号：:]\s*)[a-zA-Z][\w-]{5,19}/gi, replacement: '[WECHAT]' },
@@ -53,6 +53,10 @@ export function redact(text: string): string {
  * 检查文本是否包含敏感信息
  */
 export function containsSensitiveInfo(text: string): boolean {
-  return REDACTION_RULES.some(rule => rule.pattern.test(text));
+  return REDACTION_RULES.some(rule => {
+    // 避免 /g 正则的 lastIndex 状态导致结果抖动
+    const stablePattern = new RegExp(rule.pattern.source, rule.pattern.flags.replace('g', ''));
+    return stablePattern.test(text);
+  });
 }
 

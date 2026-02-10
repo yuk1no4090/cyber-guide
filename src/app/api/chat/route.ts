@@ -13,6 +13,8 @@ export const runtime = 'nodejs';
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_OUTPUT_TOKENS = 600;
 const MAX_REPORT_TOKENS = 1200;
+const OPENAI_TIMEOUT_MS = 15_000;
+const OPENAI_MAX_RETRIES = 2;
 
 export interface ChatRequest {
   messages: Message[];
@@ -55,28 +57,42 @@ function cleanAIResponse(text: string): string {
  */
 function parseSuggestions(text: string): { message: string; suggestions: string[] } {
   // 先清理结构化标记
-  const cleaned = cleanAIResponse(text);
+  const cleaned = cleanAIResponse(text).replace(/\r\n/g, '\n');
+  const lines = cleaned.split('\n');
+  const suggestionLineIndex = lines.findIndex(line =>
+    /^(【?\s*建议\s*】?|建议[:：])/.test(line.trim())
+  );
 
-  const regex = /【建议】(.+?)$/m;
-  const match = cleaned.match(regex);
-
-  if (match) {
-    const suggestions = match[1]
-      .split('|')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && s.length <= 20);
-    const message = cleaned.replace(regex, '').trimEnd();
-    return { message, suggestions };
+  if (suggestionLineIndex < 0) {
+    return { message: cleaned, suggestions: [] };
   }
 
-  return { message: cleaned, suggestions: [] };
+  const message = lines.slice(0, suggestionLineIndex).join('\n').trimEnd();
+  const suggestionBlock = lines
+    .slice(suggestionLineIndex)
+    .join('\n')
+    .replace(/^(【?\s*建议\s*】?|建议[:：])\s*/, '')
+    .replace(/[｜¦]/g, '|');
+
+  const seen = new Set<string>();
+  const suggestions = suggestionBlock
+    .split(/[|\n]/)
+    .map(s => s.replace(/^[-*•\d.\s]+/, '').trim())
+    .filter(s => s.length > 0 && s.length <= 20)
+    .filter(s => {
+      if (seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    });
+
+  return { message, suggestions };
 }
 
 /**
  * 根据 AI 回复内容生成兜底建议（AI 没返回【建议】时使用）
  * 核心：基于 AI 刚问了什么来生成回答选项，不是基于用户说了什么
  */
-function fallbackSuggestions(aiMessage: string, userMessage: string): string[] {
+function fallbackSuggestions(aiMessage: string): string[] {
   const ai = aiMessage.toLowerCase();
 
   // 根据 AI 回复的关键内容判断它在问什么
@@ -95,6 +111,52 @@ function fallbackSuggestions(aiMessage: string, userMessage: string): string[] {
 
   // 通用兜底：不重复用户说过的内容
   return [];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableOpenAIError(error: unknown): boolean {
+  const e = error as { status?: number; code?: string; name?: string };
+  if (e?.name === 'AbortError') return true;
+  if (typeof e?.status === 'number') return e.status === 429 || e.status >= 500;
+  if (typeof e?.code !== 'string') return false;
+  return ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN'].includes(e.code);
+}
+
+type CompletionPayload = Parameters<typeof openai.chat.completions.create>[0];
+
+async function createCompletionWithRetry(payload: CompletionPayload) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= OPENAI_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort('timeout'), OPENAI_TIMEOUT_MS);
+
+    try {
+      return await openai.chat.completions.create(
+        { ...payload, stream: false },
+        { signal: controller.signal }
+      );
+    } catch (error) {
+      lastError = error;
+      const shouldRetry = attempt < OPENAI_MAX_RETRIES && isRetryableOpenAIError(error);
+      if (!shouldRetry) break;
+      await sleep(250 * (attempt + 1));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const maybeError = lastError as { name?: string };
+  if (maybeError?.name === 'AbortError') {
+    const timeoutError = new Error('AI request timed out') as Error & { code?: string };
+    timeoutError.code = 'AI_TIMEOUT';
+    throw timeoutError;
+  }
+
+  throw lastError;
 }
 
 const CRISIS_SUGGESTIONS = [
@@ -291,7 +353,7 @@ export async function POST(request: NextRequest) {
 
     // ===== 生成"读人"报告 =====
     if (mode === 'generate_report_other') {
-      const completion = await openai.chat.completions.create({
+      const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT },
@@ -318,7 +380,7 @@ export async function POST(request: NextRequest) {
 
     // ===== 生成自我画像报告 =====
     if (mode === 'generate_report') {
-      const completion = await openai.chat.completions.create({
+      const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: REPORT_SYSTEM_PROMPT },
@@ -347,7 +409,7 @@ export async function POST(request: NextRequest) {
     if (mode === 'profile_other') {
       const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
-      const completion = await openai.chat.completions.create({
+      const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT },
@@ -377,7 +439,7 @@ export async function POST(request: NextRequest) {
     if (mode === 'profile') {
       const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
-      const completion = await openai.chat.completions.create({
+      const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: PROFILE_SYSTEM_PROMPT },
@@ -409,7 +471,7 @@ export async function POST(request: NextRequest) {
     const systemPrompt = getSystemPrompt() + evidence;
     const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createCompletionWithRetry({
       model: CHAT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -429,7 +491,7 @@ export async function POST(request: NextRequest) {
     const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
     const finalSuggestions = suggestions.length > 0
       ? suggestions
-      : fallbackSuggestions(assistantMessage, lastUserMessage.content);
+      : fallbackSuggestions(assistantMessage);
 
     return NextResponse.json({
       message: assistantMessage,
@@ -439,6 +501,29 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[CHAT API ERROR]', error);
+    const e = error as { code?: string; status?: number };
+
+    if (e?.code === 'AI_TIMEOUT') {
+      return NextResponse.json(
+        { error: '小舟暂时有点忙，响应超时了，请稍后重试' },
+        { status: 504 }
+      );
+    }
+
+    if (e?.status === 429) {
+      return NextResponse.json(
+        { error: '请求有点多，稍等几秒再试试' },
+        { status: 429 }
+      );
+    }
+
+    if (typeof e?.status === 'number' && e.status >= 500) {
+      return NextResponse.json(
+        { error: 'AI 服务暂时不可用，请稍后再试' },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json(
       { error: '服务器错误，请稍后再试' },
       { status: 500 }
