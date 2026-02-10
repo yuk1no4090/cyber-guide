@@ -100,6 +100,7 @@ export default function Home() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [hadCrisis, setHadCrisis] = useState(false);
+  const [pendingReset, setPendingReset] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -287,9 +288,6 @@ export default function Home() {
       setIsLoading(false);
     }
   };
-
-  // 标记是否是"新对话前的评价"
-  const [pendingReset, setPendingReset] = useState(false);
 
   const submitFeedback = async (rating: number, feedback: string | null, saveChat: boolean) => {
     if (saveChat) {

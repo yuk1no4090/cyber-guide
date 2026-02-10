@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai, CHAT_MODEL } from '@/lib/openai';
 import { checkModeration, CRISIS_RESPONSE } from '@/lib/moderation';
 import { retrieve, formatEvidence } from '@/lib/rag';
-import { getSystemPrompt } from '@/lib/prompt';
+import { getSystemPrompt, getPromptVersion } from '@/lib/prompt';
+import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -315,6 +317,16 @@ const REPORT_SYSTEM_PROMPT = `你是小舟🛶。根据对话内容生成一份�
 
 export async function POST(request: NextRequest) {
   try {
+    // 限流检查：每分钟 15 次
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(`chat:${clientIP}`, { windowMs: 60_000, maxRequests: 15 });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: '请求太频繁了，休息一下再来 🛶' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json() as ChatRequest;
     const { messages, mode = 'chat' } = body;
 
@@ -497,7 +509,8 @@ export async function POST(request: NextRequest) {
       message: assistantMessage,
       suggestions: finalSuggestions,
       isCrisis: false,
-    } as ChatResponse);
+      promptVersion: getPromptVersion(),
+    });
 
   } catch (error) {
     console.error('[CHAT API ERROR]', error);

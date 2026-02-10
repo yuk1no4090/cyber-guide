@@ -5,20 +5,22 @@
 
 // 脱敏规则
 const REDACTION_RULES: Array<{ pattern: RegExp; replacement: string }> = [
+  // 顺序很重要：长数字模式必须在短模式之前，否则会被截断匹配
+  
+  // 身份证号（18位）— 必须在手机号之前
+  { pattern: /\d{17}[\dXx]/g, replacement: '[ID_CARD]' },
+  
+  // 银行卡号（16-19位数字）— 必须在手机号之前
+  { pattern: /\d{16,19}/g, replacement: '[BANK_CARD]' },
+  
+  // 身份证号（15位老版）
+  { pattern: /(?<!\d)\d{15}(?!\d)/g, replacement: '[ID_CARD]' },
+  
   // 中国大陆手机号
   { pattern: /1[3-9]\d{9}/g, replacement: '[PHONE]' },
   
   // 电子邮箱
   { pattern: /[\w.-]+@[\w.-]+\.\w+/gi, replacement: '[EMAIL]' },
-  
-  // 身份证号（18位）
-  { pattern: /\d{17}[\dXx]/g, replacement: '[ID_CARD]' },
-  
-  // 身份证号（15位老版）
-  { pattern: /\d{15}/g, replacement: '[ID_CARD]' },
-  
-  // 银行卡号（16-19位数字）
-  { pattern: /\d{16,19}/g, replacement: '[BANK_CARD]' },
   
   // IP 地址
   { pattern: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, replacement: '[IP]' },
