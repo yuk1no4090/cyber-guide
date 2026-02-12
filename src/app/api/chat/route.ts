@@ -73,7 +73,7 @@ function parseSuggestions(text: string): { message: string; suggestions: string[
   const suggestionBlock = lines
     .slice(suggestionLineIndex)
     .join('\n')
-    .replace(/^(【?\s*建议\s*】?|建议[:：])\s*/, '')
+    .replace(/^(建议\s*[:：]\s*|【?\s*建议\s*】?\s*)/, '')
     .replace(/[｜¦]/g, '|');
 
   const seen = new Set<string>();
