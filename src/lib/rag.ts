@@ -1,10 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import { getScenarioBoostKeywords, getScenarioKnowledgeSource, normalizeScenario } from '@/lib/scenario';
 
 const KNOWLEDGE_BASE_PATH = path.join(process.cwd(), 'knowledge_base', 'skills');
 
 // 每个 evidence chunk 的最大字符数
 const MAX_EVIDENCE_CHUNK_LENGTH = 800;
+const SCENARIO_SOURCE_BOOST = 120;
+const SCENARIO_RELATIONSHIP_SOURCE_BOOST = 8;
+const SCENARIO_KEYWORD_PRESENCE_BOOST = 3;
+const SCENARIO_KEYWORD_MATCH_BOOST = 10;
 
 export interface KnowledgeChunk {
   content: string;
@@ -100,14 +105,25 @@ export interface RetrievalResult {
   score: number;
 }
 
+export interface RetrieveOptions {
+  scenario?: string | null;
+  mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other' | string;
+}
+
 /**
  * 基于关键词匹配的检索（不需要 Embedding API）
  */
-export function retrieve(query: string, topK: number = 3): RetrievalResult[] {
+export function retrieve(query: string, topK: number = 3, options: RetrieveOptions = {}): RetrievalResult[] {
   const chunks = loadKnowledgeBase();
   if (chunks.length === 0) return [];
 
   const queryLower = query.toLowerCase();
+  const scenario = normalizeScenario(options.scenario);
+  const shouldApplyScenarioBoost =
+    scenario !== null
+    && (options.mode === undefined || options.mode === 'profile_other' || options.mode === 'generate_report_other');
+  const scenarioSource = shouldApplyScenarioBoost && scenario ? getScenarioKnowledgeSource(scenario) : null;
+  const scenarioBoostKeywords = shouldApplyScenarioBoost && scenario ? getScenarioBoostKeywords(scenario) : [];
 
   // 为每个 chunk 打分
   const scored = chunks.map(chunk => {
@@ -149,6 +165,24 @@ export function retrieve(query: string, topK: number = 3): RetrievalResult[] {
     for (const word of boostWords) {
       if (queryLower.includes(word) && contentLower.includes(word)) {
         score += 5;
+      }
+    }
+
+    // 4. 场景专属 boost（仅在读人相关 mode 且传入 scenario 时启用）
+    if (scenarioSource) {
+      if (chunk.source === scenarioSource) {
+        score += SCENARIO_SOURCE_BOOST;
+      } else if (chunk.source.startsWith('relationship_')) {
+        score += SCENARIO_RELATIONSHIP_SOURCE_BOOST;
+      }
+
+      for (const keyword of scenarioBoostKeywords) {
+        if (contentLower.includes(keyword)) {
+          score += SCENARIO_KEYWORD_PRESENCE_BOOST;
+        }
+        if (queryLower.includes(keyword) && contentLower.includes(keyword)) {
+          score += SCENARIO_KEYWORD_MATCH_BOOST;
+        }
       }
     }
 
