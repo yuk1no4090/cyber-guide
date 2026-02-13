@@ -18,6 +18,18 @@ export interface CaseCardRow {
   mode: string;
 }
 
+export type ActionPlanStatus = 'todo' | 'done' | 'skipped';
+
+export interface ActionPlanRow {
+  id?: string;
+  session_id: string;
+  day_index: number;
+  task_text: string;
+  status: ActionPlanStatus;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /**
  * 计算质量分级
  */
