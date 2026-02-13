@@ -4,6 +4,18 @@ import { checkModeration, CRISIS_RESPONSE } from '@/lib/moderation';
 import { retrieve, formatEvidence } from '@/lib/rag';
 import { getSystemPrompt, getPromptVersion } from '@/lib/prompt';
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import {
+  buildRecapFailureResponse,
+  buildRecapSuccessResponse,
+  generateRecapFromMessages,
+} from '@/lib/recap';
+import {
+  buildScenarioSystemPrompt,
+  formatScenarioScript,
+  normalizeScenario,
+  parseScenarioModelOutput,
+  trackScenarioResponseGenerated,
+} from '@/lib/scenario';
 
 export interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -20,7 +32,8 @@ const OPENAI_MAX_RETRIES = 2;
 
 export interface ChatRequest {
   messages: Message[];
-  mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other';
+  mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other' | 'generate_recap';
+  scenario?: string | null;
 }
 
 export interface ChatResponse {
@@ -28,6 +41,7 @@ export interface ChatResponse {
   suggestions: string[];
   isCrisis?: boolean;
   isReport?: boolean;
+  scenario?: string | null;
 }
 
 /**
@@ -328,7 +342,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as ChatRequest;
-    const { messages, mode = 'chat' } = body;
+    const { messages, mode = 'chat', scenario: rawScenario = null } = body;
+    const scenario = normalizeScenario(rawScenario);
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -345,6 +360,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: '没有找到用户消息' },
         { status: 400 }
+      );
+    }
+
+    // ===== 对话复盘卡 =====
+    if (mode === 'generate_recap') {
+      if (messages.length < 4) {
+        return NextResponse.json(
+          buildRecapFailureResponse('INSUFFICIENT_CONTEXT', '对话轮次太少，先多聊几句再生成复盘卡吧')
+        );
+      }
+
+      const result = await generateRecapFromMessages(messages, {
+        invokeAI: async ({ systemPrompt, conversation }) => {
+          const completion = await createCompletionWithRetry({
+            model: CHAT_MODEL,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: conversation },
+            ],
+            temperature: 0.3,
+            max_tokens: 400,
+          });
+
+          return completion.choices[0]?.message?.content?.trim() ?? '';
+        },
+      });
+
+      return NextResponse.json(
+        buildRecapSuccessResponse(result.recap, result.message)
       );
     }
 
@@ -365,10 +409,18 @@ export async function POST(request: NextRequest) {
 
     // ===== 生成"读人"报告 =====
     if (mode === 'generate_report_other') {
+      const scenarioStartedAt = Date.now();
+      const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
+      const scenarioEvidence = scenario
+        ? formatEvidence(retrieve(lastUserMessage.content, 3, {
+            mode: 'generate_report_other',
+            scenario,
+          }))
+        : '';
       const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
-          { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT },
+          { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT + scenarioPrompt + scenarioEvidence },
           ...messages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
@@ -381,6 +433,24 @@ export async function POST(request: NextRequest) {
 
       const report = completion.choices[0]?.message?.content?.trim()
         || '抱歉，暂时无法生成报告。';
+
+      if (scenario) {
+        const parsed = parseScenarioModelOutput(report, scenario);
+        const scenarioMessage = formatScenarioScript(parsed.script);
+        trackScenarioResponseGenerated(scenario, {
+          success: true,
+          latency_ms: Date.now() - scenarioStartedAt,
+          error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
+        });
+
+        return NextResponse.json({
+          message: scenarioMessage,
+          suggestions: [],
+          isCrisis: false,
+          isReport: true,
+          scenario,
+        } as ChatResponse);
+      }
 
       return NextResponse.json({
         message: report,
@@ -419,12 +489,20 @@ export async function POST(request: NextRequest) {
 
     // ===== "读人"对话模式 =====
     if (mode === 'profile_other') {
+      const scenarioStartedAt = Date.now();
+      const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
+      const scenarioEvidence = scenario
+        ? formatEvidence(retrieve(lastUserMessage.content, 3, {
+            mode: 'profile_other',
+            scenario,
+          }))
+        : '';
       const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
       const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
-          { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT },
+          { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT + scenarioPrompt + scenarioEvidence },
           ...truncatedMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
@@ -436,6 +514,24 @@ export async function POST(request: NextRequest) {
 
       const rawMessage = completion.choices[0]?.message?.content?.trim()
         || '抱歉，小舟卡壳了 😵';
+
+      if (scenario) {
+        const parsed = parseScenarioModelOutput(rawMessage, scenario);
+        const scenarioMessage = formatScenarioScript(parsed.script);
+
+        trackScenarioResponseGenerated(scenario, {
+          success: true,
+          latency_ms: Date.now() - scenarioStartedAt,
+          error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
+        });
+
+        return NextResponse.json({
+          message: scenarioMessage,
+          suggestions: [],
+          isCrisis: false,
+          scenario,
+        } as ChatResponse);
+      }
 
       const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
 
