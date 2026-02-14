@@ -14,8 +14,10 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('action_plans')
-      .select('*')
-      .eq('session_id', sessionId);
+      .select('id,session_id,day_index,task_text,status,created_at,updated_at')
+      .eq('session_id', sessionId)
+      .order('day_index', { ascending: true })
+      .limit(7);
 
     if (error) {
       return failure('DB_ERROR', '读取计划失败，请稍后再试', 500);

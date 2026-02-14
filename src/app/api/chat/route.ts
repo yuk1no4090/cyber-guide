@@ -16,6 +16,7 @@ import {
   parseScenarioModelOutput,
   trackScenarioResponseGenerated,
 } from '@/lib/scenario';
+import type { ActionPlanRow, ActionPlanStatus } from '@/lib/supabase';
 
 export interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -34,6 +35,7 @@ export interface ChatRequest {
   messages: Message[];
   mode?: 'chat' | 'profile' | 'profile_other' | 'generate_report' | 'generate_report_other' | 'generate_recap';
   scenario?: string | null;
+  session_id?: string | null;
 }
 
 export interface ChatResponse {
@@ -102,6 +104,178 @@ function parseSuggestions(text: string): { message: string; suggestions: string[
     });
 
   return { message, suggestions };
+}
+
+const PLAN_DAYS = 7;
+
+type PlanQuery =
+  | { kind: 'all' }
+  | { kind: 'day'; day_index: number }
+  | { kind: 'relative'; offset: 0 | 1 | 2 };
+
+function parseSessionId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const sessionId = value.trim();
+  if (!sessionId || sessionId.length > 128) return null;
+  return sessionId;
+}
+
+function hasRecentPlanContext(messages: Message[]): boolean {
+  return messages
+    .slice(-6)
+    .some((message) => /(7天|七天|计划|任务|Day\s*[1-7]\/7)/i.test(message.content));
+}
+
+function parsePlanQuery(text: string, hasContext: boolean): PlanQuery | null {
+  const input = text.trim();
+  if (!input) return null;
+
+  if (
+    /(全部|所有|完整).*(计划|任务)/.test(input)
+    || /(7天|七天).*(计划|任务)/.test(input)
+    || /(all).*(plan|task)/i.test(input)
+  ) {
+    return { kind: 'all' };
+  }
+
+  const englishDayMatch = input.match(/day\s*([1-9]\d*)/i);
+  if (englishDayMatch) {
+    const day = Number(englishDayMatch[1]);
+    if (Number.isInteger(day)) return { kind: 'day', day_index: day };
+  }
+
+  const digitDayMatch = input.match(/第\s*(\d+)\s*天/);
+  if (digitDayMatch) {
+    const day = Number(digitDayMatch[1]);
+    if (Number.isInteger(day)) return { kind: 'day', day_index: day };
+  }
+
+  const chineseDayMatch = input.match(/第\s*([一二三四五六七])\s*天/);
+  if (chineseDayMatch) {
+    const map: Record<string, number> = {
+      一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7,
+    };
+    const day = map[chineseDayMatch[1]];
+    if (day) return { kind: 'day', day_index: day };
+  }
+
+  const hasPlanWords = /(计划|任务|安排)/.test(input);
+  if ((hasPlanWords || hasContext) && /今天/.test(input)) return { kind: 'relative', offset: 0 };
+  if ((hasPlanWords || hasContext) && /明天/.test(input)) return { kind: 'relative', offset: 1 };
+  if ((hasPlanWords || hasContext) && /后天/.test(input)) return { kind: 'relative', offset: 2 };
+
+  return null;
+}
+
+function computeTodayIndexFromPlans(plans: Array<Pick<ActionPlanRow, 'created_at' | 'day_index'>>): number {
+  if (plans.length === 0) return 1;
+  const sorted = [...plans].sort((a, b) => a.day_index - b.day_index);
+  const dayOne = sorted.find((item) => item.day_index === 1) || sorted[0];
+  if (!dayOne.created_at) return 1;
+  const startAt = Date.parse(dayOne.created_at);
+  if (Number.isNaN(startAt)) return 1;
+  const elapsedDays = Math.floor((Date.now() - startAt) / 86_400_000);
+  return Math.max(1, Math.min(PLAN_DAYS, elapsedDays + 1));
+}
+
+function resolveDayIndex(query: PlanQuery, todayIndex: number): number | null {
+  if (query.kind === 'day') return query.day_index;
+  if (query.kind === 'relative') return Math.max(1, Math.min(PLAN_DAYS, todayIndex + query.offset));
+  return null;
+}
+
+function getPlanStatusLabel(status: ActionPlanStatus): string {
+  if (status === 'done') return '✅ 已完成';
+  if (status === 'skipped') return '⏭ 已跳过';
+  return '🕒 待完成';
+}
+
+async function buildPlanQueryAnswer(input: {
+  messages: Message[];
+  content: string;
+  sessionId: string | null;
+}): Promise<ChatResponse | null> {
+  const query = parsePlanQuery(input.content, hasRecentPlanContext(input.messages));
+  if (!query) return null;
+
+  if (!input.sessionId) {
+    return {
+      message: '我想读取你的 7 天计划，但当前会话还没同步好。你可以先刷新页面，再问我一次「第二天计划呢？」',
+      suggestions: ['今天任务是什么？', '把7天计划全部发我'],
+      isCrisis: false,
+    };
+  }
+
+  try {
+    const { supabase } = await import('@/lib/supabase');
+    const { data, error } = await supabase
+      .from('action_plans')
+      .select('session_id,day_index,task_text,status,created_at')
+      .eq('session_id', input.sessionId)
+      .order('day_index', { ascending: true })
+      .limit(PLAN_DAYS);
+
+    if (error) {
+      return {
+        message: '我读取计划时遇到一点网络波动，你可以稍后再问一次，或者先看上面的今日任务卡片。',
+        suggestions: ['再试一次', '今天任务是什么？'],
+        isCrisis: false,
+      };
+    }
+
+    const plans = ((data ?? []) as ActionPlanRow[])
+      .sort((a, b) => a.day_index - b.day_index);
+
+    if (plans.length === 0) {
+      return {
+        message: '你还没有生成 7 天计划。先点上面的「✨ 生成7天计划」，我就能按天回答你。',
+        suggestions: ['✨ 生成7天计划', '今天任务是什么？'],
+        isCrisis: false,
+      };
+    }
+
+    const todayIndex = computeTodayIndexFromPlans(plans);
+    if (query.kind === 'all') {
+      const lines = plans.map((plan) => (
+        `Day ${plan.day_index}/7：${plan.task_text}（${getPlanStatusLabel(plan.status)}）`
+      ));
+      return {
+        message: `这是你当前的 7 天微行动计划（今天是 Day ${todayIndex}/7）：\n${lines.join('\n')}`,
+        suggestions: ['第二天计划呢？', '明天任务是什么？'],
+        isCrisis: false,
+      };
+    }
+
+    const dayIndex = resolveDayIndex(query, todayIndex);
+    if (!dayIndex || dayIndex < 1 || dayIndex > PLAN_DAYS) {
+      return {
+        message: '我这套计划只有 1-7 天。你可以问我「第2天计划」或「全部计划」。',
+        suggestions: ['第2天计划是什么？', '把7天计划全部发我'],
+        isCrisis: false,
+      };
+    }
+
+    const plan = plans.find((item) => item.day_index === dayIndex);
+    if (!plan) {
+      return {
+        message: `我没找到 Day ${dayIndex}/7 的任务。你可以先点「♻️ 重新生成7天」再问我。`,
+        suggestions: ['把7天计划全部发我', '今天任务是什么？'],
+        isCrisis: false,
+      };
+    }
+
+    return {
+      message: `Day ${plan.day_index}/7：${plan.task_text}\n状态：${getPlanStatusLabel(plan.status)}\n如果你愿意，我可以把这个任务再拆成 2-3 步给你。`,
+      suggestions: ['把这个任务拆成3步', '明天任务是什么？'],
+      isCrisis: false,
+    };
+  } catch {
+    return {
+      message: '我刚刚没连上计划服务，稍后再问我一次就好。',
+      suggestions: ['再试一次', '今天任务是什么？'],
+      isCrisis: false,
+    };
+  }
 }
 
 /**
@@ -342,8 +516,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as ChatRequest;
-    const { messages, mode = 'chat', scenario: rawScenario = null } = body;
+    const { messages, mode = 'chat', scenario: rawScenario = null, session_id: rawSessionId = null } = body;
     const scenario = normalizeScenario(rawScenario);
+    const sessionId = parseSessionId(rawSessionId);
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -405,6 +580,18 @@ export async function POST(request: NextRequest) {
         suggestions: CRISIS_SUGGESTIONS,
         isCrisis: true,
       } as ChatResponse);
+    }
+
+    // ===== 计划问答（强联动：直接查 session 对应 action_plans） =====
+    if (mode === 'chat' || mode === 'profile' || mode === 'profile_other') {
+      const planAnswer = await buildPlanQueryAnswer({
+        messages,
+        content: lastUserMessage.content,
+        sessionId,
+      });
+      if (planAnswer) {
+        return NextResponse.json(planAnswer);
+      }
     }
 
     // ===== 生成"读人"报告 =====

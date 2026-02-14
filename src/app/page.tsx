@@ -48,6 +48,10 @@ type AppMode = 'chat' | 'profile' | 'profile_other';
 
 const STORAGE_KEY = 'cyber-guide-chat';
 const SESSION_KEY = 'cyber-guide-session-id';
+const PLAN_CACHE_KEY_PREFIX = 'cyber-guide-plan-cache:';
+const PLAN_CONTEXT_MAX_CHARS = 500;
+const PLAN_FETCH_TIMEOUT_MS = 6_000;
+const PLAN_GENERATE_TIMEOUT_MS = 12_000;
 
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
@@ -133,6 +137,98 @@ function getOrCreateSessionId(): string {
   }
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 10_000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildPlanContextFromChat(messages: Message[]): string {
+  const userMessages = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+
+  const joined = userMessages.slice(-4).join('\n');
+  if (!joined) return '';
+  return joined.length > PLAN_CONTEXT_MAX_CHARS ? joined.slice(-PLAN_CONTEXT_MAX_CHARS) : joined;
+}
+
+function loadPlanCache(sessionId: string): { plans: PlanItem[]; today_index: number; today_plan: PlanItem | null } | null {
+  try {
+    const raw = localStorage.getItem(`${PLAN_CACHE_KEY_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const plans = (parsed as { plans?: unknown }).plans;
+    const todayIndex = (parsed as { today_index?: unknown }).today_index;
+    const todayPlan = (parsed as { today_plan?: unknown }).today_plan;
+    if (!Array.isArray(plans) || typeof todayIndex !== 'number') return null;
+    return {
+      plans: plans as PlanItem[],
+      today_index: todayIndex,
+      today_plan: (todayPlan as PlanItem | null) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePlanCache(
+  sessionId: string,
+  payload: { plans: PlanItem[]; today_index: number; today_plan: PlanItem | null }
+) {
+  try {
+    localStorage.setItem(
+      `${PLAN_CACHE_KEY_PREFIX}${sessionId}`,
+      JSON.stringify({ ...payload, cached_at: Date.now() })
+    );
+  } catch {}
+}
+
+function parsePlanQuery(text: string, todayIndex: number): { kind: 'all' } | { kind: 'day'; day_index: number } | null {
+  const input = text.trim();
+  if (!input) return null;
+
+  // Avoid false positives: only handle messages that clearly ask about plan/task.
+  if (!/(计划|任务)/.test(input)) return null;
+
+  if (/(全部|所有|完整).*(计划|任务)/.test(input) || /(7天|七天).*(计划|任务)/.test(input)) {
+    return { kind: 'all' };
+  }
+
+  const digitMatch = input.match(/第\s*(\d+)\s*天/);
+  if (digitMatch) {
+    const day = Number(digitMatch[1]);
+    if (Number.isInteger(day)) return { kind: 'day', day_index: day };
+  }
+
+  const chineseMatch = input.match(/第\s*([一二三四五六七])\s*天/);
+  if (chineseMatch) {
+    const map: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7 };
+    const day = map[chineseMatch[1]];
+    if (day) return { kind: 'day', day_index: day };
+  }
+
+  if (/今天/.test(input)) return { kind: 'day', day_index: todayIndex };
+  if (/明天/.test(input)) return { kind: 'day', day_index: Math.min(7, todayIndex + 1) };
+  if (/后天/.test(input)) return { kind: 'day', day_index: Math.min(7, todayIndex + 2) };
+
+  return null;
+}
+
 function unwrapEnvelope<T extends Record<string, unknown>>(raw: unknown): T {
   if (
     raw
@@ -187,6 +283,12 @@ export default function Home() {
 
   useEffect(() => {
     if (!sessionId) return;
+    const cached = loadPlanCache(sessionId);
+    if (cached?.plans?.length) {
+      applyPlanData(cached);
+      fetchPlanData({ silent: true });
+      return;
+    }
     fetchPlanData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -276,12 +378,19 @@ export default function Home() {
     setTodayPlan(nextTodayPlan);
   };
 
-  const fetchPlanData = async () => {
+  const fetchPlanData = async (options?: { silent?: boolean }) => {
     if (!sessionId) return;
-    setIsPlanLoading(true);
-    setPlanError(null);
+    const silent = options?.silent === true;
+    if (!silent) {
+      setIsPlanLoading(true);
+      setPlanError(null);
+    }
     try {
-      const response = await fetch(`/api/plan/fetch?session_id=${encodeURIComponent(sessionId)}`);
+      const response = await fetchWithTimeout(
+        `/api/plan/fetch?session_id=${encodeURIComponent(sessionId)}`,
+        { method: 'GET' },
+        PLAN_FETCH_TIMEOUT_MS
+      );
       const raw = await response.json();
       const payload = unwrapEnvelope<{
         plans: PlanItem[];
@@ -294,11 +403,14 @@ export default function Home() {
       }
 
       applyPlanData(payload);
+      savePlanCache(sessionId, payload);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '读取计划失败';
+      const message = isAbortError(error)
+        ? '读取计划有点慢，先用当前数据，稍后会自动刷新。'
+        : (error instanceof Error ? error.message : '读取计划失败');
       setPlanError(message);
     } finally {
-      setIsPlanLoading(false);
+      if (!silent) setIsPlanLoading(false);
     }
   };
 
@@ -307,15 +419,19 @@ export default function Home() {
     setIsPlanActing(true);
     setPlanError(null);
     try {
-      const latestUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content;
-      const response = await fetch('/api/plan/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          context: latestUserMsg || '',
-        }),
-      });
+      const context = buildPlanContextFromChat(messages);
+      const response = await fetchWithTimeout(
+        '/api/plan/generate',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            context,
+          }),
+        },
+        PLAN_GENERATE_TIMEOUT_MS
+      );
       const raw = await response.json();
       const payload = unwrapEnvelope<{
         plans: PlanItem[];
@@ -327,8 +443,15 @@ export default function Home() {
       }
 
       applyPlanData(payload);
+      savePlanCache(sessionId, {
+        plans: payload.plans,
+        today_index: payload.today_index,
+        today_plan: payload.plans.find((plan) => plan.day_index === payload.today_index) ?? null,
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '生成计划失败';
+      const message = isAbortError(error)
+        ? '生成有点慢，已自动走快速策略。你可以稍后再点一次确认。'
+        : (error instanceof Error ? error.message : '生成计划失败');
       setPlanError(message);
     } finally {
       setIsPlanActing(false);
@@ -357,9 +480,17 @@ export default function Home() {
       }
 
       const nextPlan = payload.plan;
-      setPlans(prev => prev.map(plan => (
-        plan.day_index === nextPlan.day_index ? nextPlan : plan
-      )));
+      setPlans((prev) => {
+        const nextPlans = prev.map((plan) => (
+          plan.day_index === nextPlan.day_index ? nextPlan : plan
+        ));
+        savePlanCache(sessionId, {
+          plans: nextPlans,
+          today_index: todayIndex,
+          today_plan: nextPlan,
+        });
+        return nextPlans;
+      });
       setTodayPlan(nextPlan);
     } catch (error) {
       const message = error instanceof Error ? error.message : '更新任务状态失败';
@@ -374,14 +505,14 @@ export default function Home() {
     setIsPlanActing(true);
     setPlanError(null);
     try {
-      const latestUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content;
+      const context = buildPlanContextFromChat(messages);
       const response = await fetch('/api/plan/regenerate-day', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
           day_index: todayPlan.day_index,
-          context: latestUserMsg || '',
+          context,
         }),
       });
       const raw = await response.json();
@@ -392,9 +523,17 @@ export default function Home() {
       }
 
       const nextPlan = payload.plan;
-      setPlans(prev => prev.map(plan => (
-        plan.day_index === nextPlan.day_index ? nextPlan : plan
-      )));
+      setPlans((prev) => {
+        const nextPlans = prev.map((plan) => (
+          plan.day_index === nextPlan.day_index ? nextPlan : plan
+        ));
+        savePlanCache(sessionId, {
+          plans: nextPlans,
+          today_index: todayIndex,
+          today_plan: nextPlan,
+        });
+        return nextPlans;
+      });
       setTodayPlan(nextPlan);
     } catch (error) {
       const message = error instanceof Error ? error.message : '重生成任务失败';
@@ -402,6 +541,32 @@ export default function Home() {
     } finally {
       setIsPlanActing(false);
     }
+  };
+
+  const maybeAnswerPlanQuestion = (content: string): string | null => {
+    const query = parsePlanQuery(content, todayIndex);
+    if (!query) return null;
+
+    // 若本地计划尚未就绪，交给后端按 session_id 兜底查询，避免前端误判。
+    if (isPlanLoading || plans.length === 0) return null;
+
+    if (query.kind === 'all') {
+      const lines = plans.map((plan) => `Day ${plan.day_index}/7：${plan.task_text}`);
+      return `你的 7 天微行动计划是：\n${lines.join('\n')}`;
+    }
+
+    const dayIndex = query.day_index;
+    if (dayIndex < 1 || dayIndex > 7) {
+      return '我这套计划只有 1-7 天。你想问第几天？';
+    }
+
+    const plan = plans.find((item) => item.day_index === dayIndex);
+    if (!plan) {
+      return null;
+    }
+
+    const statusText = plan.status === 'done' ? '✅ 已完成' : plan.status === 'skipped' ? '⏭ 已跳过' : '🕒 待完成';
+    return `Day ${plan.day_index}/7：${plan.task_text}\n状态：${statusText}\n如果你愿意，我也可以帮你把这个任务拆成更小的 2-3 步。`;
   };
 
   const generateRecap = async () => {
@@ -499,6 +664,7 @@ export default function Home() {
           messages: profileMessages.map(m => ({ role: m.role, content: m.content })),
           mode: mode === 'profile_other' ? 'generate_report_other' : 'generate_report',
           scenario: mode === 'profile_other' ? selectedScenario : null,
+          session_id: sessionId || null,
         }),
       });
       const raw = await response.json();
@@ -551,6 +717,19 @@ export default function Home() {
       return;
     }
 
+    if (!isProfileMode) {
+      const planAnswer = maybeAnswerPlanQuestion(content);
+      if (planAnswer) {
+        const userMessage: Message = { role: 'user', content };
+        const updatedMessages = [...messages, userMessage];
+        setRecap(null);
+        setRecapMeta(undefined);
+        setMessages([...updatedMessages, { role: 'assistant', content: planAnswer }]);
+        setSuggestions([]);
+        return;
+      }
+    }
+
     setSuggestions([]);
     const userMessage: Message = { role: 'user', content };
     const currentMsgs = isProfileMode ? profileMessages : messages;
@@ -578,6 +757,7 @@ export default function Home() {
           messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
           mode: mode === 'profile_other' ? 'profile_other' : mode,
           scenario: mode === 'profile_other' ? selectedScenario : null,
+          session_id: sessionId || null,
         }),
       });
 
@@ -807,17 +987,58 @@ export default function Home() {
                         >
                           🔄 重生成今天
                         </button>
+                        {messages.some((m) => m.role === 'user' && m.content.trim().length > 0) && (
+                          <button
+                            onClick={() => {
+                              if (confirm('会覆盖现有 7 天任务并重置状态，继续吗？')) generatePlan();
+                            }}
+                            disabled={isPlanActing}
+                            className="px-2.5 py-1.5 text-[12px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
+                          >
+                            ♻️ 重新生成7天
+                          </button>
+                        )}
                       </div>
+                      {todayIndex < 7 && (
+                        <div className="pt-2 border-t border-slate-200/60">
+                          <p className="text-[12px] text-slate-500 mb-0.5">
+                            明天（Day {todayIndex + 1}/7）
+                          </p>
+                          <p className="text-[13px] text-slate-700 leading-relaxed break-words">
+                            {plans.find((plan) => plan.day_index === todayIndex + 1)?.task_text || '（还没生成/还在读取）'}
+                          </p>
+                        </div>
+                      )}
+                      {plans.length > 0 && (
+                        <details className="pt-1">
+                          <summary className="cursor-pointer select-none text-[12px] text-slate-500 hover:text-slate-700">
+                            查看全部 7 天
+                          </summary>
+                          <div className="mt-2 space-y-1">
+                            {plans.map((plan) => (
+                              <div key={plan.day_index} className="text-[12px] text-slate-600 break-words">
+                                <span className="font-semibold text-slate-700">Day {plan.day_index}/7</span>
+                                <span className="ml-2">{plan.task_text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <p className="text-[13px] text-slate-500">还没有你的 7 天计划，先生成一份吧。</p>
+                      {messages.filter((m) => m.role === 'user').length === 0 && (
+                        <p className="text-[12px] text-slate-400">
+                          小提示：先聊两句再生成，任务会更贴合你现在的情况。
+                        </p>
+                      )}
                       <button
                         onClick={generatePlan}
                         disabled={isPlanActing || !sessionId}
                         className="px-3 py-1.5 text-[12px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
                       >
-                        ✨ 生成7天计划
+                        {isPlanActing ? '生成中...' : '✨ 生成7天计划'}
                       </button>
                     </div>
                   )}

@@ -132,16 +132,29 @@ async function requestTasksFromAI(
     throw noKeyError;
   }
 
+  const timeoutFromEnv = Number(process.env.PLAN_AI_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(timeoutFromEnv) && timeoutFromEnv > 0
+    ? Math.round(timeoutFromEnv)
+    : (expectedCount === 1 ? 5_000 : 7_000);
+
   const { openai, CHAT_MODEL } = await import('@/lib/openai');
-  const completion = await openai.chat.completions.create({
-    model: CHAT_MODEL,
-    messages: [
-      { role: 'system', content: buildSystemPrompt(expectedCount) },
-      { role: 'user', content: buildUserPrompt(sessionId, dayIndex, context) },
-    ],
-    temperature: 0.6,
-    max_tokens: expectedCount === 1 ? 120 : 500,
-  });
+  const model = process.env.OPENAI_PLAN_MODEL || CHAT_MODEL;
+  const completion = await openai.chat.completions.create(
+    {
+      model,
+      messages: [
+        { role: 'system', content: buildSystemPrompt(expectedCount) },
+        { role: 'user', content: buildUserPrompt(sessionId, dayIndex, context) },
+      ],
+      temperature: 0.6,
+      max_tokens: expectedCount === 1 ? 100 : 360,
+    },
+    {
+      timeout: timeoutMs,
+      // Plan routes are UX-sensitive; fail fast and fallback instead of retrying.
+      maxRetries: 0,
+    }
+  );
 
   const content = completion.choices[0]?.message?.content?.trim() || '';
   const candidates = extractTaskCandidates(content);
