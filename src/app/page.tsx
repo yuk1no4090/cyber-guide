@@ -378,9 +378,10 @@ export default function Home() {
     setTodayPlan(nextTodayPlan);
   };
 
-  const fetchPlanData = async (options?: { silent?: boolean }) => {
+  const fetchPlanData = async (options?: { silent?: boolean; retryOnTimeout?: boolean }) => {
     if (!sessionId) return;
     const silent = options?.silent === true;
+    const retryOnTimeout = options?.retryOnTimeout !== false;
     if (!silent) {
       setIsPlanLoading(true);
       setPlanError(null);
@@ -404,11 +405,20 @@ export default function Home() {
 
       applyPlanData(payload);
       savePlanCache(sessionId, payload);
+      setPlanError(null);
     } catch (error) {
-      const message = isAbortError(error)
+      const aborted = isAbortError(error);
+      const message = aborted
         ? '读取计划有点慢，先用当前数据，稍后会自动刷新。'
         : (error instanceof Error ? error.message : '读取计划失败');
-      setPlanError(message);
+      if (!silent) {
+        setPlanError(message);
+      }
+      if (aborted && retryOnTimeout) {
+        setTimeout(() => {
+          fetchPlanData({ silent: true, retryOnTimeout: false });
+        }, 1200);
+      }
     } finally {
       if (!silent) setIsPlanLoading(false);
     }

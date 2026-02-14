@@ -229,7 +229,7 @@ async function buildPlanQueryAnswer(input: {
     if (plans.length === 0) {
       return {
         message: '你还没有生成 7 天计划。先点上面的「✨ 生成7天计划」，我就能按天回答你。',
-        suggestions: ['✨ 生成7天计划', '今天任务是什么？'],
+        suggestions: ['我先说下最近卡点', '给我一个3步小行动'],
         isCrisis: false,
       };
     }
