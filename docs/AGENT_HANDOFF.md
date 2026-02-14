@@ -25,7 +25,7 @@
 | 层 | 技术 |
 |---|---|
 | 前端 | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
-| AI | 智谱 GLM-4-Flash（OpenAI 兼容接口），可切换 DeepSeek/OpenAI |
+| AI | 智谱 GLM-4.6（OpenAI 兼容接口），可切换 DeepSeek/OpenAI |
 | 数据库 | Supabase PostgreSQL（评价反馈 + 质量分级） |
 | 部署 | Vercel（海外）+ 待迁国内平台 |
 | RAG | 本地关键词 + bigram 匹配（无 Embedding 依赖） |
@@ -108,7 +108,7 @@ POST /api/chat { messages, mode }
 │
 ├─ 4. 智能历史截断：保留前2条（身份信息）+ 最近10条
 │
-├─ 5. 调用 GLM/DeepSeek Chat Completions API
+├─ 5. 调用 GLM-4.6/DeepSeek Chat Completions API
 │
 ├─ 6. 后处理
 │     ├─ cleanAIResponse()：剥离【共情】【理解】等 GLM 结构标记
@@ -188,7 +188,7 @@ mode            TEXT        -- chat/profile/profile_other
 # AI API（当前用智谱 GLM）
 OPENAI_API_KEY=xxx
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-OPENAI_MODEL=glm-4-flash
+OPENAI_MODEL=glm-4.6
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=xxx
@@ -199,7 +199,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 
 | 平台 | OPENAI_BASE_URL | OPENAI_MODEL |
 |---|---|---|
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.6` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 

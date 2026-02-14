@@ -4,7 +4,7 @@
 
 [中文](#中文说明) | English
 
-Cyber Guide (nicknamed "小舟" / Xiaozhou, meaning "small boat") is an AI-powered companion built with Next.js and DeepSeek, designed for CS students and professionals navigating life's uncertainties — career choices, procrastination, anxiety, workplace dynamics, and everything in between.
+Cyber Guide (nicknamed "小舟" / Xiaozhou, meaning "small boat") is an AI-powered companion built with Next.js and OpenAI-compatible APIs (currently GLM-4.6), designed for CS students and professionals navigating life's uncertainties — career choices, procrastination, anxiety, workplace dynamics, and everything in between.
 
 This isn't a therapist. It's someone who's been through the same waters and is willing to share the journey honestly.
 
@@ -28,7 +28,7 @@ This isn't a therapist. It's someone who's been through the same waters and is w
 ### Prerequisites
 
 - Node.js 18+
-- A DeepSeek API key (or any OpenAI-compatible API)
+- A Zhipu GLM API key (or any OpenAI-compatible API)
 - A Supabase account (free tier, for feedback storage)
 
 ### Setup
@@ -43,8 +43,8 @@ Create a `.env` file:
 
 ```env
 OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.deepseek.com/v1
-OPENAI_MODEL=deepseek-chat
+OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+OPENAI_MODEL=glm-4.6
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
@@ -64,7 +64,7 @@ POST /api/chat
     ├─ 1. Crisis Detection (local keywords, zero cost)
     ├─ 2. RAG Retrieval (keyword + bigram matching)
     ├─ 3. Smart History Truncation (keep identity + recent)
-    ├─ 4. DeepSeek Chat Completion
+    ├─ 4. OpenAI-compatible Chat Completion (GLM-4.6 by default)
     ├─ 5. Parse Suggestions (fallback if missing)
     └─ 6. Optional Logging
 
@@ -102,7 +102,7 @@ MIT
 
 > 一叶小船，水深水浅都趟过，带你渡河。
 
-小舟是一个基于 Next.js 和 DeepSeek 构建的 AI 陪伴工具，面向 CS 学生和职场人——聊迷茫、聊方向、聊拖延、聊人际关系，或者单纯找人说说话。
+小舟是一个基于 Next.js 和 OpenAI 兼容接口（当前为 GLM-4.6）构建的 AI 陪伴工具，面向 CS 学生和职场人——聊迷茫、聊方向、聊拖延、聊人际关系，或者单纯找人说说话。
 
 这不是心理咨询师，是一个水深水浅都趟过的同路人，愿意把真实经历分享出来。
 
@@ -122,7 +122,7 @@ MIT
 git clone https://github.com/yuk1no4090/cyber-guide.git
 cd cyber-guide
 npm install
-# 创建 .env 文件，填入 DeepSeek API Key 和 Supabase 配置
+# 创建 .env 文件，填入 GLM API Key 和 Supabase 配置
 npm run dev
 ```
 
