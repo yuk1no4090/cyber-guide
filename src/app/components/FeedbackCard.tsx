@@ -92,7 +92,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
               className="w-4 h-4 rounded accent-sky-500"
             />
             <span className="text-[12px] text-slate-500">
-              愿意匿名保存对话用于改进（会自动脱敏）
+              愿意匿名保存完整对话用于改进（会自动脱敏）
             </span>
           </label>
 

@@ -10,6 +10,7 @@ import FeedbackCard from './components/FeedbackCard';
 import RecapCard from './components/RecapCard';
 import ScenarioPicker from './components/ScenarioPicker';
 import { analytics } from '@/lib/analytics';
+import { pickGroup, pickOne, pickN } from '@/lib/random';
 import type { Recap } from '@/lib/recap';
 import {
   type RelationshipScenario,
@@ -48,6 +49,7 @@ type AppMode = 'chat' | 'profile' | 'profile_other';
 
 const STORAGE_KEY = 'cyber-guide-chat';
 const SESSION_KEY = 'cyber-guide-session-id';
+const DATA_OPT_IN_KEY = 'cyber-guide-data-opt-in';
 const PLAN_CACHE_KEY_PREFIX = 'cyber-guide-plan-cache:';
 const PLAN_CONTEXT_MAX_CHARS = 500;
 const PLAN_FETCH_TIMEOUT_MS = 6_000;
@@ -55,19 +57,31 @@ const PLAN_GENERATE_TIMEOUT_MS = 12_000;
 
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
-  content: '嘿！我是小舟 🛶\n\n一叶漂在 CS 领域的小船，水深水浅都趟过。也迷茫过，也焦虑过，一路飘飘荡荡走到现在。\n\n想聊什么都行，随便说：',
+  content: '嘿 🛶\n\n我是小舟，CS 出身，水深水浅都趟过一些。迷茫过，焦虑过，到现在也没完全想明白，但一直在往前走。\n\n想聊点什么？随便说就行：',
 };
 
-const WELCOME_SUGGESTIONS = [
+const WELCOME_SUGGESTION_POOL = [
   '最近有点迷茫不知道该干嘛',
   '知道该努力但就是动不起来',
   '总觉得别人都比我强...',
   '有些事想找人聊聊',
+  '每天都在焦虑但说不清为什么',
+  '感觉自己一直在原地踏步',
+  '不知道自己到底想要什么',
+  '最近做什么都提不起劲',
+  '有个选择一直在纠结',
+  '想找个人吐槽一下',
+  '觉得自己哪里都不够好',
+  '对未来有点害怕',
 ];
+
+function getWelcomeSuggestions(): string[] {
+  return pickN(WELCOME_SUGGESTION_POOL, 4);
+}
 
 const PROFILE_CHOOSE: Message = {
   role: 'assistant',
-  content: '你想让小舟帮你分析谁？🛶',
+  content: '想分析谁？我来帮你看看 🛶',
 };
 
 const PROFILE_CHOOSE_SUGGESTIONS = [
@@ -77,27 +91,47 @@ const PROFILE_CHOOSE_SUGGESTIONS = [
 
 const PROFILE_SELF_WELCOME: Message = {
   role: 'assistant',
-  content: '好嘞，让小舟来认识一下你 🛶\n\n别紧张，就像朋友闲聊一样。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
+  content: '好嘞，让我来认识一下你 🛶\n\n别紧张，就当朋友闲聊。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
 };
 
-const PROFILE_SELF_SUGGESTIONS = [
+const PROFILE_SELF_SUGGESTION_POOL = [
   '刚上大学还在适应中',
   '大三了有点慌',
   '在读研，也不确定接下来',
   '已经工作了但想聊聊',
+  '大二，专业不太喜欢',
+  '快毕业了还没想好出路',
+  '刚转专业到计算机',
+  '工作两年了想换方向',
+  '大一，什么都不懂',
+  '研二了还在迷茫',
 ];
+
+function getProfileSelfSuggestions(): string[] {
+  return pickN(PROFILE_SELF_SUGGESTION_POOL, 4);
+}
 
 const PROFILE_OTHER_WELCOME: Message = {
   role: 'assistant',
-  content: '有意思，小舟最喜欢帮人"读人"了 🛶🔍\n\n你想分析谁？先告诉我：\n- ta 是你的什么人？（同学/室友/老师/同事/领导/朋友/家人）\n- 发生了什么事让你想了解 ta？',
+  content: '有意思，我最喜欢帮人"读人"了 🔍\n\n你想分析谁？先告诉我：\n- ta 是你的什么人？（同学/室友/老师/同事/领导/朋友/家人）\n- 发生了什么事让你想了解 ta？',
 };
 
-const PROFILE_OTHER_SUGGESTIONS = [
+const PROFILE_OTHER_SUGGESTION_POOL = [
   '室友有些行为我看不懂',
   '有个同事让我很头疼',
   '不知道领导到底在想什么',
   '有个朋友最近让我很困惑',
+  '和一个人关系变得很微妙',
+  '有人总是让我不舒服但说不清',
+  '团队里有个人特别难搞',
+  '家人的一些做法我不理解',
+  '有个暧昧对象让我很纠结',
+  '导师最近的态度让我摸不透',
 ];
+
+function getProfileOtherSuggestions(): string[] {
+  return pickN(PROFILE_OTHER_SUGGESTION_POOL, 4);
+}
 
 // ===== localStorage =====
 function saveToStorage(messages: Message[]) {
@@ -121,6 +155,20 @@ function loadFromStorage(): Message[] | null {
 
 function clearStorage() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
+function loadDataOptIn(): boolean {
+  try {
+    return localStorage.getItem(DATA_OPT_IN_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveDataOptIn(value: boolean) {
+  try {
+    localStorage.setItem(DATA_OPT_IN_KEY, value ? 'true' : 'false');
+  } catch {}
 }
 
 function getOrCreateSessionId(): string {
@@ -246,7 +294,7 @@ export default function Home() {
   const [mode, setMode] = useState<AppMode>('chat');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
-  const [suggestions, setSuggestions] = useState<string[]>(WELCOME_SUGGESTIONS);
+  const [suggestions, setSuggestions] = useState<string[]>(() => getWelcomeSuggestions());
   const [chatSuggestionsBak, setChatSuggestionsBak] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
@@ -267,6 +315,7 @@ export default function Home() {
   const [isPlanActing, setIsPlanActing] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [scenarioCopied, setScenarioCopied] = useState(false);
+  const [dataOptIn, setDataOptIn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -279,6 +328,7 @@ export default function Home() {
 
   useEffect(() => {
     setSessionId(getOrCreateSessionId());
+    setDataOptIn(loadDataOptIn());
   }, []);
 
   useEffect(() => {
@@ -321,6 +371,36 @@ export default function Home() {
   const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
 
+  const toggleDataOptIn = () => {
+    const next = !dataOptIn;
+    setDataOptIn(next);
+    saveDataOptIn(next);
+  };
+
+  const sendSessionMetrics = async (msgs: Message[], currentMode: AppMode) => {
+    if (!dataOptIn || !sessionId) return;
+    const userMsgs = msgs.filter(m => m.role === 'user');
+    if (userMsgs.length === 0) return;
+    const avgLen = userMsgs.reduce((sum, m) => sum + m.content.length, 0) / userMsgs.length;
+    const lastUserMsg = userMsgs[userMsgs.length - 1]?.content || '';
+    const summary = lastUserMsg.length > 60 ? lastUserMsg.slice(0, 60) : lastUserMsg;
+    try {
+      await fetch('/api/metrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          mode: currentMode,
+          conversation_turns: Math.floor(msgs.length / 2),
+          user_msg_count: userMsgs.length,
+          avg_user_msg_length: Math.round(avgLen * 10) / 10,
+          had_crisis: hadCrisis,
+          summary,
+        }),
+      });
+    } catch {}
+  };
+
   const startNewChat = () => {
     // 如果聊了足够多且还没评价过，先弹出评价卡
     if (messages.length >= 5 && !feedbackDone && !showFeedback) {
@@ -332,9 +412,10 @@ export default function Home() {
   };
 
   const doResetChat = () => {
+    sendSessionMetrics(messages, mode);
     clearStorage();
     setMessages([WELCOME_MESSAGE]);
-    setSuggestions(WELCOME_SUGGESTIONS);
+    setSuggestions(getWelcomeSuggestions());
     setShowFeedback(false);
     setFeedbackDone(false);
     setHadCrisis(false);
@@ -363,8 +444,9 @@ export default function Home() {
   };
 
   const doBackToChat = () => {
+    sendSessionMetrics(profileMessages, mode);
     setMode('chat');
-    setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? WELCOME_SUGGESTIONS : []));
+    setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? getWelcomeSuggestions() : []));
     setReportContent(null);
     setSelectedScenario(null);
   };
@@ -660,7 +742,14 @@ export default function Home() {
       m => m.role === 'user' && m.content.length > 5
     );
     if (substantiveUserMsgs.length < 2) {
-      setSuggestions(['再多描述一些细节吧', '信息太少了，结果不准']);
+      setSuggestions(pickN([
+        '我再多说几句吧',
+        '好吧让我想想还有什么细节',
+        '那我补充一下具体的事情',
+        '我再描述具体一点',
+        '让我想想 ta 最近做了什么',
+        '我再说说 ta 平时的表现',
+      ], 2));
       return;
     }
     setIsLoading(true);
@@ -712,14 +801,14 @@ export default function Home() {
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('了解我自己')) {
       setSelectedScenario(null);
       setProfileMessages([PROFILE_SELF_WELCOME]);
-      setSuggestions(PROFILE_SELF_SUGGESTIONS);
+      setSuggestions(getProfileSelfSuggestions());
       return;
     }
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('看懂身边的人')) {
       setMode('profile_other');
       setSelectedScenario(null);
       setProfileMessages([PROFILE_OTHER_WELCOME]);
-      setSuggestions(PROFILE_OTHER_SUGGESTIONS);
+      setSuggestions(getProfileOtherSuggestions());
       return;
     }
     if ((mode === 'profile' || mode === 'profile_other') && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
@@ -817,14 +906,21 @@ export default function Home() {
       }
       const errorMsg: Message = {
         role: 'assistant',
-        content: '抱歉，小舟现在遇到了一些问题 😵 请稍后再试。',
+        content: '抱歉，我这边出了点问题 😵 稍后再试试。',
       };
       if (isProfileMode) {
         setProfileMessages([...updatedMessages, errorMsg]);
       } else {
         setMessages([...updatedMessages, errorMsg]);
       }
-      setSuggestions(['重新试试']);
+      setSuggestions(pickN([
+        '重新试试',
+        '换个话题聊聊',
+        '没事，我再发一次',
+        '要不先聊别的',
+        '稍等一下再试',
+        '我换个说法试试',
+      ], 2));
     } finally {
       setIsLoading(false);
     }
@@ -911,6 +1007,17 @@ export default function Home() {
                   className="px-2 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
                 >
                   📋 画像
+                </button>
+                <button
+                  onClick={toggleDataOptIn}
+                  title={dataOptIn ? '已开启匿名指标记录（点击关闭）' : '已关闭匿名指标记录（点击开启）'}
+                  className={`px-2 py-1.5 text-[12px] rounded-lg border transition-colors ${
+                    dataOptIn
+                      ? 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                      : 'text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {dataOptIn ? '🔓 记录' : '🔒 记录'}
                 </button>
               </>
             ) : (
@@ -1124,7 +1231,7 @@ export default function Home() {
                 onClick={() => setShowFeedback(true)}
                 className="px-3 py-1.5 text-[12px] text-sky-500 bg-sky-50 border border-sky-200 rounded-full hover:bg-sky-100 hover:text-sky-600 transition-colors"
               >
-                💬 聊完了？给小舟打个分
+                💬 聊完了？给我打个分吧
               </button>
             </div>
           )}

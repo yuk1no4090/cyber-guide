@@ -30,6 +30,19 @@ export interface ActionPlanRow {
   updated_at?: string;
 }
 
+export interface SessionMetricsRow {
+  id?: string;
+  created_at?: string;
+  session_id: string;
+  mode: string;
+  conversation_turns: number;
+  user_msg_count: number;
+  avg_user_msg_length: number;
+  had_crisis: boolean;
+  summary: string | null;
+  prompt_version: string | null;
+}
+
 /**
  * 计算质量分级
  */

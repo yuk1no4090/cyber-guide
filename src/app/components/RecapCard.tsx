@@ -118,7 +118,7 @@ export default function RecapCard({ recap, onClose, generationMeta }: RecapCardP
           </section>
 
           <section className="rounded-xl bg-sky-50/70 border border-sky-100 px-3 py-2">
-            <p className="text-[12px] text-sky-500 mb-1">小舟鼓励</p>
+            <p className="text-[12px] text-sky-500 mb-1">一句鼓励</p>
             <p className="text-[13px] sm:text-[14px] text-sky-700 leading-relaxed break-words">
               {recap.encouragement}
             </p>

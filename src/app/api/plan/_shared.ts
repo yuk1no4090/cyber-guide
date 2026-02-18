@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redact } from '@/lib/redact';
+import { pickOne } from '@/lib/random';
 import type { ActionPlanRow, ActionPlanStatus } from '@/lib/supabase';
 
 export const PLAN_DAYS = 7;
@@ -39,14 +40,56 @@ interface PlanEventPayload {
   error_type: string;
 }
 
-const FALLBACK_TASKS: Record<number, string> = {
-  1: '写下今天最重要的一件事并先做10分钟',
-  2: '整理一个最小任务清单并完成第一项',
-  3: '给关键同学发一条确认信息推进事项',
-  4: '复盘昨天卡点并写出一个改进动作',
-  5: '安排30分钟无打扰时段专注完成任务',
-  6: '检查进度并删掉一项不必要的任务',
-  7: '总结本周收获并规划下周第一步',
+const FALLBACK_TASK_POOLS: Record<number, string[]> = {
+  1: [
+    '写下今天最重要的一件事并先做10分钟',
+    '列出3件今天能做的小事并完成1件',
+    '打开你一直拖着没做的那个任务看5分钟',
+    '花10分钟把脑子里的事全写到纸上',
+    '找出一件你今天能搞定的最小任务去做',
+  ],
+  2: [
+    '整理一个最小任务清单并完成第一项',
+    '把昨天没做完的事拆成3个更小的步骤',
+    '删掉待办清单里3件不重要的事',
+    '选一件拖了最久的事先做15分钟',
+    '把明天要做的事提前列出来',
+  ],
+  3: [
+    '给关键同学发一条确认信息推进事项',
+    '找一个人聊聊你最近在做的事',
+    '给你在意的那个项目/任务推进一步',
+    '回复你一直没回的那条消息',
+    '约一个你信任的人聊15分钟',
+  ],
+  4: [
+    '复盘昨天卡点并写出一个改进动作',
+    '写下这周最大的收获和最大的坑',
+    '想想哪件事做了之后会让你轻松很多',
+    '把让你焦虑的事写出来然后标出能控制的',
+    '回顾前3天完成的任务给自己打个分',
+  ],
+  5: [
+    '安排30分钟无打扰时段专注完成任务',
+    '关掉手机通知做30分钟深度工作',
+    '找一个安静的地方把手头的事做完',
+    '给自己设个25分钟倒计时只做一件事',
+    '选一件重要但不紧急的事投入半小时',
+  ],
+  6: [
+    '检查进度并删掉一项不必要的任务',
+    '看看这周的计划完成了多少做个标记',
+    '砍掉一件其实不重要但一直占着位置的事',
+    '给没完成的任务排个新的截止时间',
+    '把做到一半的事情收个尾',
+  ],
+  7: [
+    '总结本周收获并规划下周第一步',
+    '写3句话总结这一周然后定下周第一件事',
+    '回顾7天计划给自己一个真实评价',
+    '把这周学到的一件事讲给自己听',
+    '想好下周一早上要做的第一件事',
+  ],
 };
 
 function clampDayIndex(dayIndex: number): number {
@@ -172,7 +215,7 @@ export function isValidStatus(value: string): value is ActionPlanStatus {
 
 export function getFallbackTask(dayIndex: number): string {
   const safeDayIndex = clampDayIndex(dayIndex);
-  return FALLBACK_TASKS[safeDayIndex];
+  return pickOne(FALLBACK_TASK_POOLS[safeDayIndex]);
 }
 
 export function getFallbackTasks(): string[] {

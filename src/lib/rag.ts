@@ -146,13 +146,15 @@ export function retrieve(query: string, topK: number = 3, options: RetrieveOptio
       }
     }
 
-    // 3. 高权重关键词（心理 + CS 学生场景）
+    // 3. 高权重关键词（心理 + CS 学生场景 + 口语/网络用语）
     const boostWords = [
       // 情绪相关
       '焦虑', '紧张', '失眠', '睡不着', '压力', '呼吸',
       '放松', '冥想', '正念', '沟通', '情绪', '愤怒',
       '悲伤', '难过', '崩溃', '烦躁', '担心', '害怕',
       '人际', '关系', '冲突',
+      // 焦虑口语
+      'emo', '破防', '绷不住', '心态崩了', '受不了', '顶不住',
       // CS 学生场景
       '迷茫', '拖延', '摆烂', '躺平', '内卷', '卷',
       '考研', '保研', '留学', '实习', '秋招', '面试',
@@ -161,6 +163,15 @@ export function retrieve(query: string, topK: number = 3, options: RetrieveOptio
       '背单词', '英语', '学习', '习惯', '时间管理',
       '好学生', '轨道', '旷野', '意义', '价值',
       '代码', '编程', '算法', '项目', '转型', '产品经理',
+      // 拖延同义词
+      '磨洋工', '摸鱼', '不想动', '动不了', '启动困难', '不想干',
+      '执行力', '行动力', '番茄钟', '完美主义',
+      // 比较/自卑
+      '不够好', '自卑', '差距', '比不过', '菜', '太菜了', '太差了', '比较',
+      // 方向/转型口语
+      '转行', '转码', '跨专业', '不喜欢本专业', '换方向',
+      // 职业场景
+      'offer', '投简历', '笔试', '实习生', '打工', '上岸', '跨考', '读研',
     ];
     for (const word of boostWords) {
       if (queryLower.includes(word) && contentLower.includes(word)) {
@@ -190,7 +201,7 @@ export function retrieve(query: string, topK: number = 3, options: RetrieveOptio
   });
 
   // 排序取 topK，过滤掉 0 分
-  return scored
+  const results = scored
     .filter(r => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK)
@@ -199,6 +210,15 @@ export function retrieve(query: string, topK: number = 3, options: RetrieveOptio
       source: r.source,
       score: r.score,
     }));
+
+  console.info('[RAG]', {
+    query: query.slice(0, 40),
+    totalChunks: chunks.length,
+    hits: scored.filter(r => r.score > 0).length,
+    top: results.map(r => ({ source: r.source, score: r.score })),
+  });
+
+  return results;
 }
 
 /**
