@@ -26,11 +26,24 @@ export interface Message {
 
 export const runtime = 'nodejs';
 
-const MAX_HISTORY_MESSAGES = 12;
-const MAX_OUTPUT_TOKENS = 600;
-const MAX_REPORT_TOKENS = 1200;
-const OPENAI_TIMEOUT_MS = 15_000;
-const OPENAI_MAX_RETRIES = 2;
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_OUTPUT_TOKENS = 400;
+const MAX_REPORT_TOKENS = 800;
+const DEFAULT_OPENAI_TIMEOUT_MS = 25_000;
+const DEFAULT_OPENAI_MAX_RETRIES = 0;
+
+function readIntEnv(name: string, fallback: number, minValue: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  const value = Math.round(parsed);
+  return value >= minValue ? value : fallback;
+}
+
+// 可通过环境变量热调，避免每次改代码重发版
+const OPENAI_TIMEOUT_MS = readIntEnv('CHAT_AI_TIMEOUT_MS', DEFAULT_OPENAI_TIMEOUT_MS, 1_000);
+const OPENAI_MAX_RETRIES = readIntEnv('CHAT_AI_MAX_RETRIES', DEFAULT_OPENAI_MAX_RETRIES, 0);
 
 export interface ChatRequest {
   messages: Message[];
@@ -696,7 +709,7 @@ export async function POST(request: NextRequest) {
       const scenarioStartedAt = Date.now();
       const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
       const scenarioEvidence = scenario
-        ? formatEvidence(retrieve(lastUserMessage.content, 3, {
+        ? formatEvidence(retrieve(lastUserMessage.content, 2, {
             mode: 'generate_report_other',
             scenario,
           }))
@@ -746,7 +759,7 @@ export async function POST(request: NextRequest) {
 
     // ===== 生成自我画像报告 =====
     if (mode === 'generate_report') {
-      const reportEvidence = formatEvidence(retrieve(lastUserMessage.content, 3, { mode: 'generate_report' }));
+      const reportEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, { mode: 'generate_report' }));
       const completion = await createCompletionWithRetry({
         model: CHAT_MODEL,
         messages: [
@@ -776,7 +789,7 @@ export async function POST(request: NextRequest) {
     if (mode === 'profile_other') {
       const scenarioStartedAt = Date.now();
       const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
-      const scenarioEvidence = formatEvidence(retrieve(lastUserMessage.content, 3, {
+      const scenarioEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, {
         mode: 'profile_other',
         scenario: scenario ?? undefined,
       }));
@@ -828,7 +841,7 @@ export async function POST(request: NextRequest) {
 
     // ===== 自我画像对话模式 =====
     if (mode === 'profile') {
-      const profileEvidence = formatEvidence(retrieve(lastUserMessage.content, 3, { mode: 'profile' }));
+      const profileEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, { mode: 'profile' }));
       const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
       const completion = await createCompletionWithRetry({
@@ -858,7 +871,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ===== 普通聊天模式（高温度，更有个性） =====
-    const retrievalResults = retrieve(lastUserMessage.content, 3);
+    const retrievalResults = retrieve(lastUserMessage.content, 2);
     const evidence = formatEvidence(retrievalResults);
     const systemPrompt = getSystemPrompt() + evidence;
     const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);

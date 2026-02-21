@@ -45,9 +45,15 @@ Create a `.env` file:
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_MODEL=glm-4.6
+# Optional: chat route timeout / retry tuning
+CHAT_AI_TIMEOUT_MS=25000
+CHAT_AI_MAX_RETRIES=0
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
+
+`CHAT_AI_TIMEOUT_MS` and `CHAT_AI_MAX_RETRIES` are optional.  
+If your deployment platform has a ~30s upstream timeout, keep `CHAT_AI_TIMEOUT_MS` around `25000~27000` and `CHAT_AI_MAX_RETRIES=0` to avoid second-attempt tail latency.
 
 Run:
 

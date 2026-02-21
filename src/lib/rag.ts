@@ -4,8 +4,8 @@ import { getScenarioBoostKeywords, getScenarioKnowledgeSource, normalizeScenario
 
 const KNOWLEDGE_BASE_PATH = path.join(process.cwd(), 'knowledge_base', 'skills');
 
-// 每个 evidence chunk 的最大字符数
-const MAX_EVIDENCE_CHUNK_LENGTH = 800;
+// 每个 evidence chunk 的最大字符数（适当收紧，降低提示词体积和首包延迟）
+const MAX_EVIDENCE_CHUNK_LENGTH = 480;
 const SCENARIO_SOURCE_BOOST = 120;
 const SCENARIO_RELATIONSHIP_SOURCE_BOOST = 8;
 const SCENARIO_KEYWORD_PRESENCE_BOOST = 3;
