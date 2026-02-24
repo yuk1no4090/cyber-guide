@@ -45,15 +45,12 @@ Create a `.env` file:
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_MODEL=glm-4.6
-# Optional: chat route timeout / retry tuning
-CHAT_AI_TIMEOUT_MS=25000
-CHAT_AI_MAX_RETRIES=0
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+# Optional: API latency/timeout tuning (recommended for self-hosted deployments)
+OPENAI_TIMEOUT_MS=25000
+OPENAI_MAX_RETRIES=0
 ```
-
-`CHAT_AI_TIMEOUT_MS` and `CHAT_AI_MAX_RETRIES` are optional.  
-If your deployment platform has a ~30s upstream timeout, keep `CHAT_AI_TIMEOUT_MS` around `25000~27000` and `CHAT_AI_MAX_RETRIES=0` to avoid second-attempt tail latency.
 
 Run:
 
@@ -129,6 +126,9 @@ git clone https://github.com/yuk1no4090/cyber-guide.git
 cd cyber-guide
 npm install
 # 创建 .env 文件，填入 GLM API Key 和 Supabase 配置
+# 可选性能参数（自建服务器建议配置）
+# OPENAI_TIMEOUT_MS=25000
+# OPENAI_MAX_RETRIES=0
 npm run dev
 ```
 

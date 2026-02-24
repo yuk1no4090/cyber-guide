@@ -189,9 +189,9 @@ mode            TEXT        -- chat/profile/profile_other
 OPENAI_API_KEY=xxx
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_MODEL=glm-4.6
-# 可选：聊天接口超时/重试调优
-CHAT_AI_TIMEOUT_MS=25000
-CHAT_AI_MAX_RETRIES=0
+# 可选：聊天接口超时/重试调优（自建服务器建议）
+OPENAI_TIMEOUT_MS=25000
+OPENAI_MAX_RETRIES=0
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=xxx

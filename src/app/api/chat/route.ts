@@ -26,24 +26,24 @@ export interface Message {
 
 export const runtime = 'nodejs';
 
+function getIntEnv(name: string, fallback: number, opts?: { min?: number; max?: number }): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+
+  if (typeof opts?.min === 'number' && parsed < opts.min) return opts.min;
+  if (typeof opts?.max === 'number' && parsed > opts.max) return opts.max;
+
+  return parsed;
+}
+
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_OUTPUT_TOKENS = 400;
 const MAX_REPORT_TOKENS = 800;
-const DEFAULT_OPENAI_TIMEOUT_MS = 25_000;
-const DEFAULT_OPENAI_MAX_RETRIES = 0;
-
-function readIntEnv(name: string, fallback: number, minValue: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  const value = Math.round(parsed);
-  return value >= minValue ? value : fallback;
-}
-
-// 可通过环境变量热调，避免每次改代码重发版
-const OPENAI_TIMEOUT_MS = readIntEnv('CHAT_AI_TIMEOUT_MS', DEFAULT_OPENAI_TIMEOUT_MS, 1_000);
-const OPENAI_MAX_RETRIES = readIntEnv('CHAT_AI_MAX_RETRIES', DEFAULT_OPENAI_MAX_RETRIES, 0);
+const OPENAI_TIMEOUT_MS = getIntEnv('OPENAI_TIMEOUT_MS', 25_000, { min: 5_000, max: 120_000 });
+const OPENAI_MAX_RETRIES = getIntEnv('OPENAI_MAX_RETRIES', 0, { min: 0, max: 2 });
 
 export interface ChatRequest {
   messages: Message[];
