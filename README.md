@@ -45,11 +45,16 @@ Create a `.env` file:
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_MODEL=glm-4.6
+OPENAI_FALLBACK_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 # Optional: API latency/timeout tuning (recommended for self-hosted deployments)
 OPENAI_TIMEOUT_MS=25000
 OPENAI_MAX_RETRIES=0
+CHAT_CONTEXT_MAX_CHARS=2800
+REPORT_CONTEXT_MAX_CHARS=4000
+CONTEXT_MAX_SINGLE_MESSAGE_CHARS=900
+RAG_REDUCE_CONTEXT_THRESHOLD_CHARS=2400
 ```
 
 Run:
@@ -59,6 +64,53 @@ npm run dev
 ```
 
 Visit http://localhost:3000
+
+## Self-hosted Tuning
+
+For self-hosted deployments behind reverse proxies, set longer upstream timeouts and disable proxy buffering for streaming:
+
+```nginx
+location /api/chat {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+    proxy_buffering off;
+}
+```
+
+Recommended runtime settings:
+
+- `OPENAI_TIMEOUT_MS=25000` (or `25000~30000` based on your gateway timeout)
+- `OPENAI_MAX_RETRIES=0` or `1`
+- `OPENAI_FALLBACK_MODEL=<a cheaper/faster model>`
+- `CHAT_CONTEXT_MAX_CHARS=2800`
+- `REPORT_CONTEXT_MAX_CHARS=4000`
+- `CONTEXT_MAX_SINGLE_MESSAGE_CHARS=900`
+- `RAG_REDUCE_CONTEXT_THRESHOLD_CHARS=2400`
+- PM2: set `--max-memory-restart` (example: `600M`) to avoid long-term memory drift
+
+### PM2 Deployment (One-command)
+
+This repo now includes:
+
+- `ecosystem.config.js` (PM2 process config)
+- `scripts/deploy.sh` (pull/install/build/reload/smoke pipeline)
+- `scripts/smoke-test.sh` (supports both NDJSON streaming and JSON chat responses)
+
+Usage:
+
+```bash
+# in project root
+npm run deploy
+
+# optional:
+# DEPLOY_BRANCH=main HEALTH_URL=http://127.0.0.1:3000 npm run deploy
+# SKIP_GIT_PULL=1 npm run deploy
+```
+
+Ops worklog: `docs/ops_stability_worklog.md`
 
 ## 📁 Architecture
 
@@ -129,8 +181,50 @@ npm install
 # 可选性能参数（自建服务器建议配置）
 # OPENAI_TIMEOUT_MS=25000
 # OPENAI_MAX_RETRIES=0
+# OPENAI_FALLBACK_MODEL=gpt-4o-mini
 npm run dev
 ```
+
+### 自建部署建议（反向代理）
+
+如果你是 Nginx/宝塔/容器网关这类前置代理，务必：
+
+- `proxy_read_timeout 120s`
+- `proxy_send_timeout 120s`
+- `proxy_buffering off`（让流式响应及时透传）
+
+同时建议环境变量：
+
+- `OPENAI_TIMEOUT_MS=25000`（或按网关上限设置在 `25000~30000`）
+- `OPENAI_MAX_RETRIES=0` 或 `1`
+- `OPENAI_FALLBACK_MODEL=...`（配置一个更快更便宜的降级模型）
+- `CHAT_CONTEXT_MAX_CHARS=2800`
+- `REPORT_CONTEXT_MAX_CHARS=4000`
+- `CONTEXT_MAX_SINGLE_MESSAGE_CHARS=900`
+- `RAG_REDUCE_CONTEXT_THRESHOLD_CHARS=2400`
+
+PM2 建议设置 `--max-memory-restart`（例如 `600M`）减少长期运行后的内存漂移风险。
+
+### PM2 一键发布（已内置）
+
+仓库已内置：
+
+- `ecosystem.config.js`：PM2 进程配置
+- `scripts/deploy.sh`：拉取代码/安装依赖/构建/重载/冒烟检查
+- `scripts/smoke-test.sh`：兼容 NDJSON 流式与 JSON 两种 chat 返回
+
+使用方式：
+
+```bash
+# 在项目根目录
+npm run deploy
+
+# 可选参数示例：
+# DEPLOY_BRANCH=main HEALTH_URL=http://127.0.0.1:3000 npm run deploy
+# SKIP_GIT_PULL=1 npm run deploy
+```
+
+稳定性留存文档：`docs/ops_stability_worklog.md`
 
 ### 添加知识库内容
 

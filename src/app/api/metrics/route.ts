@@ -76,29 +76,53 @@ function validateMetricsBody(body: unknown): SessionMetricsRow {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
   try {
+    console.info(`[${requestId}] metrics.post start`);
     const clientIP = getClientIP(request);
     const rateLimit = checkRateLimit(`metrics:${clientIP}`, { windowMs: 60_000, maxRequests: 10 });
     if (!rateLimit.allowed) {
+      console.warn(`[${requestId}] metrics.post rate_limited`);
       return NextResponse.json({ error: '请求太频繁' }, { status: 429 });
     }
 
+    const parseStartedAt = Date.now();
     const body = await request.json() as unknown;
     const row = validateMetricsBody(body);
+    console.info(`[${requestId}] metrics.post validated`, {
+      ms: Date.now() - parseStartedAt,
+      mode: row.mode,
+      turns: row.conversation_turns,
+      has_summary: Boolean(row.summary),
+    });
 
+    const dbStartedAt = Date.now();
     const { error } = await supabase.from('session_metrics').insert(row);
+    console.info(`[${requestId}] metrics.post db_done`, {
+      ms: Date.now() - dbStartedAt,
+      has_error: Boolean(error),
+    });
 
     if (error) {
-      console.error('[METRICS] Supabase error:', error);
+      console.error(`[${requestId}] [METRICS] Supabase error:`, error);
       return NextResponse.json({ error: '保存失败' }, { status: 500 });
     }
 
+    console.info(`[${requestId}] metrics.post done`, { ms: Date.now() - startedAt });
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof ValidationError) {
+      console.warn(`[${requestId}] metrics.post validation_error`, {
+        ms: Date.now() - startedAt,
+        message: error.message,
+      });
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.error('[METRICS ERROR]', error);
+    console.error(`[${requestId}] [METRICS ERROR]`, {
+      ms: Date.now() - startedAt,
+      error,
+    });
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }

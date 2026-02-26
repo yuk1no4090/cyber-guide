@@ -8,6 +8,8 @@ interface PlanRow {
   created_at: string;
 }
 
+const createCompletionMock = vi.hoisted(() => vi.fn());
+
 const mockPlanState = vi.hoisted(() => ({
   rows: [] as PlanRow[],
   error: null as { message: string } | null,
@@ -15,10 +17,11 @@ const mockPlanState = vi.hoisted(() => ({
 
 vi.mock('@/lib/openai', () => ({
   CHAT_MODEL: 'test-model',
+  FALLBACK_MODEL: null,
   openai: {
     chat: {
       completions: {
-        create: vi.fn(),
+        create: createCompletionMock,
       },
     },
   },
@@ -129,10 +132,30 @@ async function postChat(body: unknown): Promise<{ status: number; payload: ChatP
   return { status: response.status, payload };
 }
 
+async function parseNDJSONMetaPayload(response: Response): Promise<ChatPayload> {
+  const raw = await response.text();
+  const lines = raw.split('\n').map(line => line.trim()).filter(Boolean);
+  let payload: ChatPayload | null = null;
+  for (const line of lines) {
+    const parsed = JSON.parse(line) as { t?: string; message?: string; suggestions?: string[] };
+    if (parsed.t === 'meta') {
+      payload = {
+        message: parsed.message ?? '',
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      };
+    }
+  }
+  if (!payload) {
+    throw new Error('missing NDJSON meta payload');
+  }
+  return payload;
+}
+
 describe('chat route plan linkage', () => {
   beforeEach(() => {
     mockPlanState.rows = [];
     mockPlanState.error = null;
+    createCompletionMock.mockReset();
   });
 
   it('chat 模式可直接回答指定天计划（第2天）', async () => {
@@ -186,6 +209,33 @@ describe('chat route plan linkage', () => {
     expect(status).toBe(200);
     expect(payload.message).toMatch(/计划|生成/);
     expect(payload.suggestions).not.toContain('✨ 生成7天计划');
+    expect(payload.suggestions.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('普通 chat 路径返回 NDJSON 流式响应', async () => {
+    createCompletionMock.mockResolvedValue({
+      controller: new AbortController(),
+      async *[Symbol.asyncIterator]() {
+        yield { choices: [{ delta: { content: '我懂你现在有点乱。' } }] };
+        yield { choices: [{ delta: { content: '\n【建议】先说最卡哪一步 | 我需要一个最小行动' } }] };
+      },
+    });
+
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'chat',
+        session_id: 'sess-stream',
+        messages: [{ role: 'user', content: '我最近有点迷茫，想找个方向' }],
+      }),
+    });
+    const response = await chatPost(request as never);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/x-ndjson');
+    const payload = await parseNDJSONMetaPayload(response);
+    expect(payload.message.length).toBeGreaterThan(0);
     expect(payload.suggestions.length).toBeGreaterThanOrEqual(1);
   });
 });

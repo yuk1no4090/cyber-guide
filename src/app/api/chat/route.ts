@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai, CHAT_MODEL } from '@/lib/openai';
+import type OpenAI from 'openai';
+import { openai, CHAT_MODEL, FALLBACK_MODEL } from '@/lib/openai';
 import { checkModeration, CRISIS_RESPONSE } from '@/lib/moderation';
 import { retrieve, formatEvidence } from '@/lib/rag';
 import { getSystemPrompt, getPromptVersion } from '@/lib/prompt';
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import { ndjsonResponse, openaiStreamToNDJSON } from '@/lib/stream';
 import {
   buildRecapFailureResponse,
   buildRecapSuccessResponse,
@@ -44,6 +46,15 @@ const MAX_OUTPUT_TOKENS = 400;
 const MAX_REPORT_TOKENS = 800;
 const OPENAI_TIMEOUT_MS = getIntEnv('OPENAI_TIMEOUT_MS', 25_000, { min: 5_000, max: 120_000 });
 const OPENAI_MAX_RETRIES = getIntEnv('OPENAI_MAX_RETRIES', 0, { min: 0, max: 2 });
+const CHAT_CONTEXT_MAX_CHARS = getIntEnv('CHAT_CONTEXT_MAX_CHARS', 2_800, { min: 800, max: 12_000 });
+const REPORT_CONTEXT_MAX_CHARS = getIntEnv('REPORT_CONTEXT_MAX_CHARS', 4_000, { min: 1_500, max: 16_000 });
+const CONTEXT_MAX_SINGLE_MESSAGE_CHARS = getIntEnv('CONTEXT_MAX_SINGLE_MESSAGE_CHARS', 900, { min: 200, max: 4_000 });
+const RAG_DEFAULT_TOP_K = 2;
+const RAG_REDUCED_TOP_K = 1;
+const RAG_REDUCE_CONTEXT_THRESHOLD_CHARS = getIntEnv('RAG_REDUCE_CONTEXT_THRESHOLD_CHARS', 2_400, {
+  min: 800,
+  max: 10_000,
+});
 
 export interface ChatRequest {
   messages: Message[];
@@ -58,6 +69,7 @@ export interface ChatResponse {
   isCrisis?: boolean;
   isReport?: boolean;
   scenario?: string | null;
+  promptVersion?: string;
 }
 
 /**
@@ -72,6 +84,52 @@ function smartTruncate(messages: Message[], maxMessages: number): Message[] {
   const tail = messages.slice(-(maxMessages - 2));
 
   return [...head, ...tail];
+}
+
+function clipContent(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 60) return text.slice(0, maxChars);
+
+  // 同时保留开头和结尾，减少关键信息被截断的概率
+  const headLen = Math.max(30, Math.floor(maxChars * 0.65));
+  const tailLen = Math.max(20, maxChars - headLen - 11);
+  return `${text.slice(0, headLen)}\n...[省略]...\n${text.slice(-tailLen)}`;
+}
+
+function getMessagesCharCount(messages: Message[]): number {
+  return messages.reduce((sum, message) => sum + message.content.length, 0);
+}
+
+function buildContextMessages(messages: Message[], opts?: { maxChars?: number }): Message[] {
+  const maxChars = opts?.maxChars ?? CHAT_CONTEXT_MAX_CHARS;
+  const byCount = smartTruncate(messages, MAX_HISTORY_MESSAGES);
+  const normalized = byCount.map((message) => ({
+    ...message,
+    content: clipContent(message.content, CONTEXT_MAX_SINGLE_MESSAGE_CHARS),
+  }));
+
+  if (getMessagesCharCount(normalized) <= maxChars) return normalized;
+
+  const head = normalized.slice(0, Math.min(2, normalized.length));
+  const tail = normalized.slice(head.length);
+  const headChars = getMessagesCharCount(head);
+  const budgetForTail = Math.max(0, maxChars - headChars);
+
+  const keptTail: Message[] = [];
+  let used = 0;
+  for (let i = tail.length - 1; i >= 0; i -= 1) {
+    const msg = tail[i];
+    const msgLen = msg.content.length;
+    if (used + msgLen > budgetForTail) continue;
+    keptTail.unshift(msg);
+    used += msgLen;
+  }
+
+  return [...head, ...keptTail];
+}
+
+function getRagTopK(contextChars: number): number {
+  return contextChars >= RAG_REDUCE_CONTEXT_THRESHOLD_CHARS ? RAG_REDUCED_TOP_K : RAG_DEFAULT_TOP_K;
 }
 
 /**
@@ -426,37 +484,144 @@ function isRetryableOpenAIError(error: unknown): boolean {
 }
 
 type CompletionPayload = Parameters<typeof openai.chat.completions.create>[0];
+type NonStreamCompletion = OpenAI.Chat.Completions.ChatCompletion;
 
-async function createCompletionWithRetry(payload: CompletionPayload) {
-  let lastError: unknown = null;
+interface StreamingCompletionResult {
+  stream: Parameters<typeof openaiStreamToNDJSON>[0];
+  model: string;
+}
 
-  for (let attempt = 0; attempt <= OPENAI_MAX_RETRIES; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('timeout'), OPENAI_TIMEOUT_MS);
-
-    try {
-      return await openai.chat.completions.create(
-        { ...payload, stream: false },
-        { signal: controller.signal }
-      );
-    } catch (error) {
-      lastError = error;
-      const shouldRetry = attempt < OPENAI_MAX_RETRIES && isRetryableOpenAIError(error);
-      if (!shouldRetry) break;
-      await sleep(250 * (attempt + 1));
-    } finally {
-      clearTimeout(timeout);
-    }
+function buildModelCandidates(primaryModel: string): string[] {
+  const candidates = [primaryModel];
+  if (FALLBACK_MODEL && FALLBACK_MODEL !== primaryModel) {
+    candidates.push(FALLBACK_MODEL);
   }
+  return candidates;
+}
 
-  const maybeError = lastError as { name?: string };
-  if (maybeError?.name === 'AbortError') {
+function normalizeOpenAIError(error: unknown): Error & { code?: string; status?: number } {
+  const e = error as { name?: string; code?: string; status?: number; message?: string };
+  if (e?.name === 'AbortError') {
     const timeoutError = new Error('AI request timed out') as Error & { code?: string };
     timeoutError.code = 'AI_TIMEOUT';
-    throw timeoutError;
+    return timeoutError;
+  }
+  if (error instanceof Error) {
+    return error as Error & { code?: string; status?: number };
+  }
+  const unknownError = new Error(e?.message || 'Unknown OpenAI error') as Error & {
+    code?: string;
+    status?: number;
+  };
+  unknownError.code = e?.code;
+  unknownError.status = e?.status;
+  return unknownError;
+}
+
+async function createNonStreamCompletion(
+  payload: CompletionPayload,
+  requestId: string
+): Promise<NonStreamCompletion> {
+  const model = typeof payload.model === 'string' && payload.model.trim() ? payload.model : CHAT_MODEL;
+  const modelCandidates = buildModelCandidates(model);
+  let lastError: unknown = null;
+
+  for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex++) {
+    const candidate = modelCandidates[modelIndex];
+    for (let attempt = 0; attempt <= OPENAI_MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort('timeout'), OPENAI_TIMEOUT_MS);
+
+      try {
+        console.info(`[${requestId}] LLM request start`, { model: candidate, attempt, stream: false });
+        const completion = await openai.chat.completions.create(
+          { ...payload, model: candidate, stream: false } as CompletionPayload,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeout);
+        console.info(`[${requestId}] LLM request done`, { model: candidate, attempt, stream: false });
+        return completion as NonStreamCompletion;
+      } catch (error) {
+        clearTimeout(timeout);
+        lastError = error;
+        const shouldRetry = attempt < OPENAI_MAX_RETRIES && isRetryableOpenAIError(error);
+        if (!shouldRetry) break;
+        await sleep(250 * (attempt + 1));
+      }
+    }
+
+    const canUseFallback = modelIndex < modelCandidates.length - 1 && isRetryableOpenAIError(lastError);
+    if (canUseFallback) {
+      console.warn(`[${requestId}] switching fallback model`, {
+        from: candidate,
+        to: modelCandidates[modelIndex + 1],
+      });
+      continue;
+    }
+    break;
   }
 
-  throw lastError;
+  throw normalizeOpenAIError(lastError ?? new Error('Unknown OpenAI error'));
+}
+
+async function createStreamingCompletion(
+  payload: CompletionPayload,
+  requestId: string
+): Promise<StreamingCompletionResult> {
+  const model = typeof payload.model === 'string' && payload.model.trim() ? payload.model : CHAT_MODEL;
+  const modelCandidates = buildModelCandidates(model);
+  let lastError: unknown = null;
+
+  for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex++) {
+    const candidate = modelCandidates[modelIndex];
+    for (let attempt = 0; attempt <= OPENAI_MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort('timeout'), OPENAI_TIMEOUT_MS);
+
+      try {
+        console.info(`[${requestId}] LLM stream start`, { model: candidate, attempt });
+        const stream = await openai.chat.completions.create(
+          { ...payload, model: candidate, stream: true } as CompletionPayload,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeout);
+        console.info(`[${requestId}] LLM stream connected`, { model: candidate, attempt });
+        return {
+          stream: stream as Parameters<typeof openaiStreamToNDJSON>[0],
+          model: candidate,
+        };
+      } catch (error) {
+        clearTimeout(timeout);
+        lastError = error;
+        const shouldRetry = attempt < OPENAI_MAX_RETRIES && isRetryableOpenAIError(error);
+        if (!shouldRetry) break;
+        await sleep(250 * (attempt + 1));
+      }
+    }
+
+    const canUseFallback = modelIndex < modelCandidates.length - 1 && isRetryableOpenAIError(lastError);
+    if (canUseFallback) {
+      console.warn(`[${requestId}] switching fallback model`, {
+        from: candidate,
+        to: modelCandidates[modelIndex + 1],
+      });
+      continue;
+    }
+    break;
+  }
+
+  throw normalizeOpenAIError(lastError ?? new Error('Unknown OpenAI error'));
+}
+
+async function collectStreamingText(
+  stream: StreamingCompletionResult['stream']
+): Promise<string> {
+  let accumulated = '';
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) accumulated += delta;
+  }
+  return accumulated.trim();
 }
 
 const CRISIS_SUGGESTIONS = [
@@ -614,6 +779,8 @@ const REPORT_SYSTEM_PROMPT = `根据对话内容生成一份用户画像报告�
 核心原则：**有几分信息说几分话**，没聊到的就写"暂未了解"，绝不编造。`;
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const requestStartedAt = Date.now();
   try {
     // 限流检查：每分钟 15 次
     const clientIP = getClientIP(request);
@@ -629,6 +796,11 @@ export async function POST(request: NextRequest) {
     const { messages, mode = 'chat', scenario: rawScenario = null, session_id: rawSessionId = null } = body;
     const scenario = normalizeScenario(rawScenario);
     const sessionId = parseSessionId(rawSessionId);
+    console.info(`[${requestId}] POST /api/chat`, {
+      mode,
+      scenario,
+      msgCount: Array.isArray(messages) ? messages.length : 0,
+    });
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -658,7 +830,8 @@ export async function POST(request: NextRequest) {
 
       const result = await generateRecapFromMessages(messages, {
         invokeAI: async ({ systemPrompt, conversation }) => {
-          const completion = await createCompletionWithRetry({
+          const llmStartedAt = Date.now();
+          const { stream, model } = await createStreamingCompletion({
             model: CHAT_MODEL,
             messages: [
               { role: 'system', content: systemPrompt },
@@ -666,9 +839,16 @@ export async function POST(request: NextRequest) {
             ],
             temperature: 0.3,
             max_tokens: 400,
+          }, requestId);
+          const text = await collectStreamingText(stream);
+          console.info(`[${requestId}] LLM stream done`, {
+            mode: 'generate_recap',
+            model,
+            ms: Date.now() - llmStartedAt,
+            chars: text.length,
           });
 
-          return completion.choices[0]?.message?.content?.trim() ?? '';
+          return text;
         },
       });
 
@@ -689,7 +869,7 @@ export async function POST(request: NextRequest) {
         message: CRISIS_RESPONSE,
         suggestions: CRISIS_SUGGESTIONS,
         isCrisis: true,
-      } as ChatResponse);
+      });
     }
 
     // ===== 计划问答（强联动：直接查 session 对应 action_plans） =====
@@ -708,17 +888,29 @@ export async function POST(request: NextRequest) {
     if (mode === 'generate_report_other') {
       const scenarioStartedAt = Date.now();
       const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
-      const scenarioEvidence = scenario
-        ? formatEvidence(retrieve(lastUserMessage.content, 2, {
+      const contextMessages = buildContextMessages(messages, { maxChars: REPORT_CONTEXT_MAX_CHARS });
+      const contextChars = getMessagesCharCount(contextMessages);
+      const ragTopK = getRagTopK(contextChars);
+      const ragStartedAt = Date.now();
+      const reportOtherResults = scenario
+        ? retrieve(lastUserMessage.content, ragTopK, {
             mode: 'generate_report_other',
             scenario,
-          }))
-        : '';
-      const completion = await createCompletionWithRetry({
+          })
+        : [];
+      console.info(`[${requestId}] RAG done`, {
+        mode: 'generate_report_other',
+        ms: Date.now() - ragStartedAt,
+        hits: reportOtherResults.length,
+        ragTopK,
+        contextChars,
+      });
+      const scenarioEvidence = scenario ? formatEvidence(reportOtherResults) : '';
+      const payload: CompletionPayload = {
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT + scenarioPrompt + scenarioEvidence },
-          ...messages.map(m => ({
+          ...contextMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })),
@@ -726,45 +918,68 @@ export async function POST(request: NextRequest) {
         ],
         temperature: 0.5,
         max_tokens: MAX_REPORT_TOKENS,
-      });
+      };
+      const llmStartedAt = Date.now();
+      const { stream, model } = await createStreamingCompletion(payload, requestId);
+      const streamResponse = openaiStreamToNDJSON(
+        stream,
+        (fullText) => {
+          const report = fullText.trim() || '抱歉，暂时无法生成报告。';
+          console.info(`[${requestId}] LLM stream done`, {
+            mode: 'generate_report_other',
+            model,
+            ms: Date.now() - llmStartedAt,
+            chars: report.length,
+          });
+          if (scenario) {
+            const parsed = parseScenarioModelOutput(report, scenario);
+            const scenarioMessage = formatScenarioScript(parsed.script);
+            trackScenarioResponseGenerated(scenario, {
+              success: true,
+              latency_ms: Date.now() - scenarioStartedAt,
+              error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
+            });
+            return {
+              message: scenarioMessage,
+              suggestions: [],
+              isCrisis: false,
+              isReport: true,
+              scenario,
+            };
+          }
+          return {
+            message: report,
+            suggestions: [],
+            isCrisis: false,
+            isReport: true,
+          };
+        },
+        requestId
+      );
 
-      const report = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，暂时无法生成报告。';
-
-      if (scenario) {
-        const parsed = parseScenarioModelOutput(report, scenario);
-        const scenarioMessage = formatScenarioScript(parsed.script);
-        trackScenarioResponseGenerated(scenario, {
-          success: true,
-          latency_ms: Date.now() - scenarioStartedAt,
-          error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
-        });
-
-        return NextResponse.json({
-          message: scenarioMessage,
-          suggestions: [],
-          isCrisis: false,
-          isReport: true,
-          scenario,
-        } as ChatResponse);
-      }
-
-      return NextResponse.json({
-        message: report,
-        suggestions: [],
-        isCrisis: false,
-        isReport: true,
-      } as ChatResponse);
+      return ndjsonResponse(streamResponse);
     }
 
     // ===== 生成自我画像报告 =====
     if (mode === 'generate_report') {
-      const reportEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, { mode: 'generate_report' }));
-      const completion = await createCompletionWithRetry({
+      const contextMessages = buildContextMessages(messages, { maxChars: REPORT_CONTEXT_MAX_CHARS });
+      const contextChars = getMessagesCharCount(contextMessages);
+      const ragTopK = getRagTopK(contextChars);
+      const ragStartedAt = Date.now();
+      const reportResults = retrieve(lastUserMessage.content, ragTopK, { mode: 'generate_report' });
+      console.info(`[${requestId}] RAG done`, {
+        mode: 'generate_report',
+        ms: Date.now() - ragStartedAt,
+        hits: reportResults.length,
+        ragTopK,
+        contextChars,
+      });
+      const reportEvidence = formatEvidence(reportResults);
+      const payload: CompletionPayload = {
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: REPORT_SYSTEM_PROMPT + reportEvidence },
-          ...messages.map(m => ({
+          ...contextMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })),
@@ -772,141 +987,221 @@ export async function POST(request: NextRequest) {
         ],
         temperature: 0.5,
         max_tokens: MAX_REPORT_TOKENS,
-      });
+      };
+      const llmStartedAt = Date.now();
+      const { stream, model } = await createStreamingCompletion(payload, requestId);
+      const streamResponse = openaiStreamToNDJSON(
+        stream,
+        (fullText) => {
+          const report = fullText.trim() || '抱歉，暂时无法生成报告。';
+          console.info(`[${requestId}] LLM stream done`, {
+            mode: 'generate_report',
+            model,
+            ms: Date.now() - llmStartedAt,
+            chars: report.length,
+          });
+          return {
+            message: report,
+            suggestions: [],
+            isCrisis: false,
+            isReport: true,
+          };
+        },
+        requestId
+      );
 
-      const report = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，暂时无法生成报告。';
-
-      return NextResponse.json({
-        message: report,
-        suggestions: [],
-        isCrisis: false,
-        isReport: true,
-      } as ChatResponse);
+      return ndjsonResponse(streamResponse);
     }
 
     // ===== "读人"对话模式 =====
     if (mode === 'profile_other') {
       const scenarioStartedAt = Date.now();
       const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
-      const scenarioEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, {
+      const contextMessages = buildContextMessages(messages);
+      const contextChars = getMessagesCharCount(contextMessages);
+      const ragTopK = getRagTopK(contextChars);
+      const ragStartedAt = Date.now();
+      const profileOtherResults = retrieve(lastUserMessage.content, ragTopK, {
         mode: 'profile_other',
         scenario: scenario ?? undefined,
-      }));
-      const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
+      });
+      console.info(`[${requestId}] RAG done`, {
+        mode: 'profile_other',
+        ms: Date.now() - ragStartedAt,
+        hits: profileOtherResults.length,
+        ragTopK,
+        contextChars,
+      });
+      const scenarioEvidence = formatEvidence(profileOtherResults);
 
-      const completion = await createCompletionWithRetry({
+      const payload: CompletionPayload = {
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT + scenarioPrompt + scenarioEvidence },
-          ...truncatedMessages.map(m => ({
+          ...contextMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })),
         ],
         temperature: 0.6,
         max_tokens: MAX_OUTPUT_TOKENS,
-      });
+      };
+      const llmStartedAt = Date.now();
+      const { stream, model } = await createStreamingCompletion(payload, requestId);
+      const streamResponse = openaiStreamToNDJSON(
+        stream,
+        (fullText) => {
+          const rawMessage = fullText.trim() || '抱歉，我这边卡了一下 😵';
+          console.info(`[${requestId}] LLM stream done`, {
+            mode: 'profile_other',
+            model,
+            ms: Date.now() - llmStartedAt,
+            chars: rawMessage.length,
+          });
+          if (scenario) {
+            const parsed = parseScenarioModelOutput(rawMessage, scenario);
+            const scenarioMessage = formatScenarioScript(parsed.script);
+            trackScenarioResponseGenerated(scenario, {
+              success: true,
+              latency_ms: Date.now() - scenarioStartedAt,
+              error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
+            });
+            return {
+              message: scenarioMessage,
+              suggestions: [],
+              isCrisis: false,
+              scenario,
+            };
+          }
+          const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+          return {
+            message: assistantMessage,
+            // 读人模式兜底：不给无意义的按钮，让用户自己打字
+            suggestions: suggestions.length > 0 ? suggestions : [],
+            isCrisis: false,
+          };
+        },
+        requestId
+      );
 
-      const rawMessage = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，我这边卡了一下 😵';
-
-      if (scenario) {
-        const parsed = parseScenarioModelOutput(rawMessage, scenario);
-        const scenarioMessage = formatScenarioScript(parsed.script);
-
-        trackScenarioResponseGenerated(scenario, {
-          success: true,
-          latency_ms: Date.now() - scenarioStartedAt,
-          error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
-        });
-
-        return NextResponse.json({
-          message: scenarioMessage,
-          suggestions: [],
-          isCrisis: false,
-          scenario,
-        } as ChatResponse);
-      }
-
-      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
-
-      return NextResponse.json({
-        message: assistantMessage,
-        // 读人模式兜底：不给无意义的按钮，让用户自己打字
-        suggestions: suggestions.length > 0 ? suggestions : [],
-        isCrisis: false,
-      } as ChatResponse);
+      return ndjsonResponse(streamResponse);
     }
 
     // ===== 自我画像对话模式 =====
     if (mode === 'profile') {
-      const profileEvidence = formatEvidence(retrieve(lastUserMessage.content, 2, { mode: 'profile' }));
-      const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
+      const contextMessages = buildContextMessages(messages);
+      const contextChars = getMessagesCharCount(contextMessages);
+      const ragTopK = getRagTopK(contextChars);
+      const ragStartedAt = Date.now();
+      const profileResults = retrieve(lastUserMessage.content, ragTopK, { mode: 'profile' });
+      console.info(`[${requestId}] RAG done`, {
+        mode: 'profile',
+        ms: Date.now() - ragStartedAt,
+        hits: profileResults.length,
+        ragTopK,
+        contextChars,
+      });
+      const profileEvidence = formatEvidence(profileResults);
 
-      const completion = await createCompletionWithRetry({
+      const payload: CompletionPayload = {
         model: CHAT_MODEL,
         messages: [
           { role: 'system', content: PROFILE_SYSTEM_PROMPT + profileEvidence },
-          ...truncatedMessages.map(m => ({
+          ...contextMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })),
         ],
         temperature: 0.5,
         max_tokens: MAX_OUTPUT_TOKENS,
-      });
+      };
+      const llmStartedAt = Date.now();
+      const { stream, model } = await createStreamingCompletion(payload, requestId);
+      const streamResponse = openaiStreamToNDJSON(
+        stream,
+        (fullText) => {
+          const rawMessage = fullText.trim() || '抱歉，我这边卡了一下 😵';
+          console.info(`[${requestId}] LLM stream done`, {
+            mode: 'profile',
+            model,
+            ms: Date.now() - llmStartedAt,
+            chars: rawMessage.length,
+          });
+          const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+          return {
+            message: assistantMessage,
+            // 画像模式兜底：不给无意义的按钮，让用户自己打字
+            suggestions: suggestions.length > 0 ? suggestions : [],
+            isCrisis: false,
+          };
+        },
+        requestId
+      );
 
-      const rawMessage = completion.choices[0]?.message?.content?.trim()
-        || '抱歉，我这边卡了一下 😵';
-
-      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
-
-      return NextResponse.json({
-        message: assistantMessage,
-        // 画像模式兜底：不给无意义的按钮，让用户自己打字
-        suggestions: suggestions.length > 0 ? suggestions : [],
-        isCrisis: false,
-      } as ChatResponse);
+      return ndjsonResponse(streamResponse);
     }
 
     // ===== 普通聊天模式（高温度，更有个性） =====
-    const retrievalResults = retrieve(lastUserMessage.content, 2);
+    const contextMessages = buildContextMessages(messages);
+    const contextChars = getMessagesCharCount(contextMessages);
+    const ragTopK = getRagTopK(contextChars);
+    const ragStartedAt = Date.now();
+    const retrievalResults = retrieve(lastUserMessage.content, ragTopK);
+    console.info(`[${requestId}] RAG done`, {
+      mode: 'chat',
+      ms: Date.now() - ragStartedAt,
+      hits: retrievalResults.length,
+      ragTopK,
+      contextChars,
+    });
     const evidence = formatEvidence(retrievalResults);
     const systemPrompt = getSystemPrompt() + evidence;
-    const truncatedMessages = smartTruncate(messages, MAX_HISTORY_MESSAGES);
 
-    const completion = await createCompletionWithRetry({
+    const payload: CompletionPayload = {
       model: CHAT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...truncatedMessages.map(m => ({
+        ...contextMessages.map(m => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
         })),
       ],
       temperature: 0.75,
       max_tokens: MAX_OUTPUT_TOKENS,
-    });
+    };
+    const llmStartedAt = Date.now();
+    const { stream, model } = await createStreamingCompletion(payload, requestId);
+    const streamResponse = openaiStreamToNDJSON(
+      stream,
+      (fullText) => {
+        const rawMessage = fullText.trim() || '抱歉，我现在脑子转不动了 😵 稍后再试试。';
+        console.info(`[${requestId}] LLM stream done`, {
+          mode: 'chat',
+          model,
+          ms: Date.now() - llmStartedAt,
+          chars: rawMessage.length,
+        });
+        const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+        const finalSuggestions = suggestions.length > 0
+          ? suggestions
+          : fallbackSuggestions(assistantMessage);
+        return {
+          message: assistantMessage,
+          suggestions: finalSuggestions,
+          isCrisis: false,
+          promptVersion: getPromptVersion(),
+        };
+      },
+      requestId
+    );
 
-    const rawMessage = completion.choices[0]?.message?.content?.trim()
-      || '抱歉，我现在脑子转不动了 😵 稍后再试试。';
-
-    // 解析建议，没有则根据 AI 回复内容生成兜底建议
-    const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
-    const finalSuggestions = suggestions.length > 0
-      ? suggestions
-      : fallbackSuggestions(assistantMessage);
-
-    return NextResponse.json({
-      message: assistantMessage,
-      suggestions: finalSuggestions,
-      isCrisis: false,
-      promptVersion: getPromptVersion(),
-    });
+    return ndjsonResponse(streamResponse);
 
   } catch (error) {
-    console.error('[CHAT API ERROR]', error);
+    console.error(`[${requestId}] [CHAT API ERROR]`, {
+      elapsed_ms: Date.now() - requestStartedAt,
+      error,
+    });
     const e = error as { code?: string; status?: number };
 
     if (e?.code === 'AI_TIMEOUT') {

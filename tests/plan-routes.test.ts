@@ -20,6 +20,7 @@ const mockPlanState = vi.hoisted(() => ({
 
 vi.mock('@/lib/openai', () => ({
   CHAT_MODEL: 'test-model',
+  FALLBACK_MODEL: null,
   openai: {
     chat: {
       completions: {

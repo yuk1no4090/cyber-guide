@@ -16,3 +16,5 @@ export const openai = new OpenAI({
 export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
 const isGLMEndpoint = configuredBaseURL.includes('bigmodel.cn');
 export const CHAT_MODEL = process.env.OPENAI_MODEL || (isGLMEndpoint ? 'glm-4.6' : 'gpt-4o');
+
+export const FALLBACK_MODEL: string | null = process.env.OPENAI_FALLBACK_MODEL || null;

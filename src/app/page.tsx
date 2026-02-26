@@ -47,6 +47,29 @@ interface ApiEnvelope<T> {
 
 type AppMode = 'chat' | 'profile' | 'profile_other';
 
+interface NDJSONDeltaLine {
+  t: 'delta';
+  c: string;
+}
+
+interface NDJSONMetaLine {
+  t: 'meta';
+  message?: string;
+  suggestions?: string[];
+  isCrisis?: boolean;
+  isReport?: boolean;
+  scenario?: string | null;
+  promptVersion?: string;
+  [key: string]: unknown;
+}
+
+interface NDJSONErrorLine {
+  t: 'error';
+  message: string;
+}
+
+type NDJSONLine = NDJSONDeltaLine | NDJSONMetaLine | NDJSONErrorLine;
+
 const STORAGE_KEY = 'cyber-guide-chat';
 const SESSION_KEY = 'cyber-guide-session-id';
 const DATA_OPT_IN_KEY = 'cyber-guide-data-opt-in';
@@ -288,6 +311,77 @@ function unwrapEnvelope<T extends Record<string, unknown>>(raw: unknown): T {
   }
 
   return raw as T;
+}
+
+function isNDJSONResponse(response: Response): boolean {
+  const contentType = response.headers.get('content-type') || '';
+  return contentType.includes('application/x-ndjson');
+}
+
+async function readNDJSONStream<T extends { message?: string }>(
+  response: Response,
+  onDelta: (text: string) => void,
+): Promise<T> {
+  if (!response.body) {
+    throw new Error('流式响应不可读');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let fullText = '';
+  const streamState: { meta: NDJSONMetaLine | null } = { meta: null };
+
+  const processLine = (rawLine: string) => {
+    const line = rawLine.trim();
+    if (!line) return;
+    let parsed: NDJSONLine;
+    try {
+      parsed = JSON.parse(line) as NDJSONLine;
+    } catch {
+      return;
+    }
+
+    if (parsed.t === 'delta') {
+      fullText += parsed.c;
+      onDelta(parsed.c);
+      return;
+    }
+
+    if (parsed.t === 'error') {
+      throw new Error(parsed.message || '流式请求失败');
+    }
+
+    streamState.meta = parsed;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let newlineIndex = buffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      processLine(line);
+      buffer = buffer.slice(newlineIndex + 1);
+      newlineIndex = buffer.indexOf('\n');
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    processLine(buffer);
+  }
+
+  if (streamState.meta) {
+    if (typeof streamState.meta.message !== 'string') {
+      streamState.meta.message = fullText;
+    }
+    return streamState.meta as unknown as T;
+  }
+
+  return { message: fullText } as unknown as T;
 }
 
 export default function Home() {
@@ -766,10 +860,30 @@ export default function Home() {
           session_id: sessionId || null,
         }),
       });
-      const raw = await response.json();
-      const data = unwrapEnvelope<{ message: string }>(raw);
-      if (!response.ok || !data?.message) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || 'API request failed');
+      let finalMessage = '';
+      let nextSuggestions: string[] = [];
+
+      if (isNDJSONResponse(response)) {
+        setReportContent('');
+        const data = await readNDJSONStream<{ message?: string; suggestions?: string[] }>(
+          response,
+          (delta) => {
+            setReportContent((prev) => (prev ?? '') + delta);
+          }
+        );
+        finalMessage = typeof data.message === 'string' ? data.message : '';
+        nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        if (!response.ok || !finalMessage) {
+          throw new Error('API request failed');
+        }
+      } else {
+        const raw = await response.json();
+        const data = unwrapEnvelope<{ message: string; suggestions?: string[] }>(raw);
+        if (!response.ok || !data?.message) {
+          throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || 'API request failed');
+        }
+        finalMessage = data.message;
+        nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
       }
 
       if (mode === 'profile_other' && selectedScenario) {
@@ -780,8 +894,8 @@ export default function Home() {
         });
       }
 
-      setReportContent(data.message);
-      setSuggestions([]);
+      setReportContent(finalMessage);
+      setSuggestions(nextSuggestions);
     } catch (error) {
       console.error('Failed to generate report:', error);
       if (mode === 'profile_other' && selectedScenario) {
@@ -859,19 +973,66 @@ export default function Home() {
           session_id: sessionId || null,
         }),
       });
+      const upsertAssistantMessage = (nextContent: string, isCrisis?: boolean) => {
+        const updater = (prev: Message[]) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (!last || last.role !== 'assistant') {
+            next.push({ role: 'assistant', content: nextContent, isCrisis });
+            return next;
+          }
+          next[next.length - 1] = {
+            ...last,
+            content: nextContent,
+            ...(typeof isCrisis === 'boolean' ? { isCrisis } : {}),
+          };
+          return next;
+        };
+        if (isProfileMode) setProfileMessages(updater);
+        else setMessages(updater);
+      };
 
-      const raw = await response.json();
-      const data = unwrapEnvelope<{
-        message: string;
-        suggestions?: string[];
-        isCrisis?: boolean;
-      }>(raw);
+      const isStream = isNDJSONResponse(response);
+      let finalMessage = '';
+      let nextSuggestions: string[] = [];
+      let isCrisis = false;
 
-      if (!response.ok || !data?.message) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || 'API request failed');
+      if (isStream) {
+        let streamed = '';
+        upsertAssistantMessage('');
+        const data = await readNDJSONStream<{
+          message?: string;
+          suggestions?: string[];
+          isCrisis?: boolean;
+        }>(
+          response,
+          (delta) => {
+            streamed += delta;
+            upsertAssistantMessage(streamed);
+          }
+        );
+        finalMessage = typeof data.message === 'string' && data.message.length > 0 ? data.message : streamed;
+        nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        isCrisis = Boolean(data.isCrisis);
+        if (!response.ok || !finalMessage) {
+          throw new Error('API request failed');
+        }
+      } else {
+        const raw = await response.json();
+        const data = unwrapEnvelope<{
+          message: string;
+          suggestions?: string[];
+          isCrisis?: boolean;
+        }>(raw);
+        if (!response.ok || !data?.message) {
+          throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || 'API request failed');
+        }
+        finalMessage = data.message;
+        nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        isCrisis = Boolean(data.isCrisis);
       }
 
-      if (data.isCrisis) setHadCrisis(true);
+      if (isCrisis) setHadCrisis(true);
 
       if (mode === 'profile_other' && selectedScenario) {
         trackScenarioResponseGenerated(selectedScenario, {
@@ -881,19 +1042,7 @@ export default function Home() {
         });
       }
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: data.message,
-        isCrisis: data.isCrisis,
-      };
-
-      if (isProfileMode) {
-        setProfileMessages([...updatedMessages, assistantMessage]);
-      } else {
-        setMessages([...updatedMessages, assistantMessage]);
-      }
-
-      const nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      upsertAssistantMessage(finalMessage, isCrisis);
       setSuggestions(nextSuggestions.length > 0 ? nextSuggestions : []);
     } catch (error) {
       console.error('Failed to send message:', error);

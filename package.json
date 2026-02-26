@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "bash scripts/smoke-test.sh http://localhost:3000",
-    "ingest": "npx tsx scripts/ingest.ts"
+    "ingest": "npx tsx scripts/ingest.ts",
+    "deploy": "bash scripts/deploy.sh",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:reload": "pm2 startOrReload ecosystem.config.js --env production"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
