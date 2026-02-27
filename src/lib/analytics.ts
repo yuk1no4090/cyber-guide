@@ -39,7 +39,7 @@ export function track(event: AnalyticsEventName, payload: AnalyticsPayload = {})
     timestamp: new Date().toISOString(),
   };
 
-  console.info('[analytics]', envelope);
+  console.info('[analytics]', JSON.stringify(envelope));
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(

@@ -293,3 +293,10 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* ============= 触屏设备复制按钮始终可见 ============= */
+@media (hover: none) {
+  .copy-btn {
+    opacity: 0.6 !important;
+  }
+}

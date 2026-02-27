@@ -73,8 +73,9 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
           {/* 复制按钮 */}
           <button
             onClick={handleCopy}
-            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+            className="copy-btn opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
             title="复制内容"
+            aria-label="复制消息内容"
           >
             {copied ? (
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-emerald-500">

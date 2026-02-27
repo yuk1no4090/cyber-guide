@@ -27,7 +27,7 @@
 | 前端 | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
 | AI | 智谱 GLM-4.6（OpenAI 兼容接口），可切换 DeepSeek/OpenAI |
 | 数据库 | Supabase PostgreSQL（评价反馈 + 质量分级） |
-| 部署 | Vercel（海外）+ 待迁国内平台 |
+| 部署 | Bohrium Linux + PM2（Cursor SSH 直连开发） |
 | RAG | 本地关键词 + bigram 匹配（无 Embedding 依赖） |
 
 ## 四、文件结构与代码地图
@@ -41,6 +41,11 @@ cyber-guide/
 │   ├── DATA.md                     # 数据策略
 │   ├── EVAL.md                     # 评估策略
 │   └── AGENT_HANDOFF.md            # 本文档
+│
+├── docs/                           # 运维文档
+│   ├── server_startup_and_sync_runbook.md  # ⭐ 服务器启动/同步/Cursor SSH 工作流
+│   ├── ops_deploy_runbook.md       # 部署/回滚/排障手册
+│   └── ops_stability_worklog.md    # 阶段工作留存与后续计划
 │
 ├── knowledge_base/skills/          # ⭐ RAG 知识库（10 篇）
 │   ├── persistence_system.md       # 🌟 原创：700天背单词方法论
@@ -60,8 +65,10 @@ cyber-guide/
 │   │   ├── layout.tsx              # 根布局
 │   │   ├── globals.css             # 全局样式（天蓝阳光主题）
 │   │   ├── api/
-│   │   │   ├── chat/route.ts       # ⭐ 核心 API（聊天 + 画像 + 报告生成）
-│   │   │   └── feedback/route.ts   # 评价反馈 API（写入 Supabase）
+│   │   ├── chat/route.ts       # ⭐ 核心 API（流式 NDJSON + 模型降级 + request_id 日志）
+│   │   │   ├── feedback/route.ts   # 评价反馈 API（写入 Supabase）
+│   │   │   ├── metrics/route.ts    # 会话指标 API
+│   │   │   └── plan/              # 7 天微行动计划 CRUD
 │   │   └── components/
 │   │       ├── ChatMessage.tsx      # 消息气泡（Markdown 渲染 + 复制按钮）
 │   │       ├── ChatInput.tsx        # 输入框
@@ -70,7 +77,8 @@ cyber-guide/
 │   │       ├── ProfileReport.tsx    # 画像报告卡片
 │   │       └── TypingIndicator.tsx  # 打字动画
 │   └── lib/
-│       ├── openai.ts               # AI 客户端（支持 baseURL 切换）
+│       ├── openai.ts               # AI 客户端（支持 baseURL 切换 + FALLBACK_MODEL）
+│       ├── stream.ts               # NDJSON 流式工具函数
 │       ├── moderation.ts           # 危机检测（纯关键词 + 误触发过滤）
 │       ├── rag.ts                  # RAG 检索（关键词 + bigram）
 │       ├── prompt.ts               # System Prompt 读取（开发模式 30s 热更新）
@@ -259,11 +267,35 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 
 ### 部署更新
 
+当前使用 Cursor SSH 直连服务器开发：
+
 ```bash
+# 在服务器上（/opt/cyber-guide-repo）
+npm run build
+pm2 restart cyber-guide
+sleep 3
+curl -I --max-time 5 http://127.0.0.1:50001
+
+# 验证通过后同步到 GitHub
 git add .
 git commit -m "描述改了什么"
-git push  # Vercel 自动部署
+git push
 ```
+
+详细流程见 `docs/server_startup_and_sync_runbook.md`。
+
+---
+
+## 十二、文档索引（给新 Agent 的入口）
+
+新 Agent 接手时，按以下顺序阅读：
+
+1. `docs/AGENT_HANDOFF.md` — 项目全貌（本文档）
+2. `docs/server_startup_and_sync_runbook.md` — 开发工作流与服务器操作
+3. `docs/ops_deploy_runbook.md` — 部署/回滚/排障
+4. `docs/ops_stability_worklog.md` — 历史改动与后续计划
+5. `docs/SYSTEM_PROMPT.md` — AI 人格定义
+6. `docs/PRD.md` — 产品需求
 
 ---
 

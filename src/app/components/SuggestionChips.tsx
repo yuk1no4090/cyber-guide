@@ -12,12 +12,13 @@ export default function SuggestionChips({ suggestions, onSelect, disabled }: Sug
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 mb-1 message-bubble">
+    <div role="group" aria-label="建议回复" className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 mb-1 message-bubble">
       {suggestions.map((text, index) => (
         <button
           key={index}
           onClick={() => onSelect(text)}
           disabled={disabled}
+          aria-label={`发送：${text}`}
           className="
             suggestion-chip
             px-3 py-1.5 sm:px-3.5 sm:py-2

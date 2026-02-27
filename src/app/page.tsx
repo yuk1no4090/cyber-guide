@@ -102,6 +102,8 @@ function getWelcomeSuggestions(): string[] {
   return pickN(WELCOME_SUGGESTION_POOL, 4);
 }
 
+const DEFAULT_WELCOME_SUGGESTIONS = WELCOME_SUGGESTION_POOL.slice(0, 4);
+
 const PROFILE_CHOOSE: Message = {
   role: 'assistant',
   content: '想分析谁？我来帮你看看 🛶',
@@ -388,7 +390,7 @@ export default function Home() {
   const [mode, setMode] = useState<AppMode>('chat');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
-  const [suggestions, setSuggestions] = useState<string[]>(() => getWelcomeSuggestions());
+  const [suggestions, setSuggestions] = useState<string[]>(DEFAULT_WELCOME_SUGGESTIONS);
   const [chatSuggestionsBak, setChatSuggestionsBak] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
@@ -417,7 +419,10 @@ export default function Home() {
     if (saved) {
       setMessages(saved);
       setSuggestions([]);
+      return;
     }
+    // 避免 SSR/CSR 首屏随机值不一致导致 hydration 报错，随机化放到挂载后执行
+    setSuggestions(getWelcomeSuggestions());
   }, []);
 
   useEffect(() => {

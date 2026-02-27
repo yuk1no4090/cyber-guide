@@ -110,3 +110,20 @@ SKIP_GIT_PULL=1 npm run deploy
 - 先从告警拿到 `request_id`
 - 再在服务日志检索对应请求的分阶段耗时
 - 最后按阶段定位瓶颈（RAG / 模型 / DB / 网络）
+
+## 8) 运维文档入口
+
+- 部署/回滚/排障手册：`docs/ops_deploy_runbook.md`
+- 服务器启动与同步：`docs/server_startup_and_sync_runbook.md`
+- Agent 交接文档（项目全貌）：`docs/AGENT_HANDOFF.md`
+- 本阶段工作留存：`docs/ops_stability_worklog.md`
+
+## 9) 开发工作流变更记录
+
+### 2.27 — 切换为 Cursor SSH 直连模式
+
+- 之前：本地开发 -> push GitHub -> 服务器 pull -> build -> restart
+- 现在：Cursor SSH 直连服务器 -> 代码直接改 -> build -> restart -> push GitHub 留存
+- 原因：减少中间环节，agent 可直接操作生产环境文件，改完即可验证
+- 影响：`deploy.sh` 仍可用（方式 B），但日常推荐直改模式（方式 A）
+- 详见：`docs/server_startup_and_sync_runbook.md` 第 0 节
