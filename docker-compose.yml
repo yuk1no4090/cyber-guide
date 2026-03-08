@@ -16,11 +16,27 @@ services:
       timeout: 3s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build: ./backend
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
@@ -28,6 +44,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-cyber_guide}
       POSTGRES_USER: ${POSTGRES_USER:-cyber_guide}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
       OPENAI_MODEL: ${OPENAI_MODEL:-glm-4.6}
@@ -67,3 +85,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

@@ -1,8 +1,16 @@
 package com.cyberguide.controller;
 
+import com.cyberguide.exception.BizException;
+import com.cyberguide.exception.ErrorCode;
+import com.cyberguide.exception.RateLimitException;
+import com.cyberguide.infrastructure.cache.RedisRateLimiter;
 import com.cyberguide.service.ChatService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +27,18 @@ import java.util.Map;
 @Tag(name = "Chat", description = "AI chat endpoints")
 public class ChatController {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private final ChatService chatService;
+    private final ObjectMapper objectMapper;
+    private final RedisRateLimiter rateLimiter;
 
-    public ChatController(ChatService chatService) {
+    @Value("${rate-limit.chat-per-minute:15}")
+    private int chatLimitPerMinute;
+
+    public ChatController(ChatService chatService, ObjectMapper objectMapper, RedisRateLimiter rateLimiter) {
         this.chatService = chatService;
+        this.objectMapper = objectMapper;
+        this.rateLimiter = rateLimiter;
     }
 
     public record ChatRequestBody(
@@ -33,74 +49,79 @@ public class ChatController {
     ) {}
 
     @PostMapping("/chat")
-    @Operation(summary = "Chat with AI (JSON response)")
+    @Operation(summary = "Send a chat message and get AI response")
     public ResponseEntity<?> chat(@RequestBody ChatRequestBody body) {
+        long start = System.currentTimeMillis();
+
         if (body.messages() == null || body.messages().isEmpty()) {
-            return ResponseEntity.badRequest()
-                .body(ApiResponse.fail("INVALID_REQUEST", "messages is required"));
+            throw new BizException(ErrorCode.INVALID_REQUEST, "messages 不能为空");
+        }
+        if (body.session_id() == null || body.session_id().isBlank()) {
+            throw new BizException(ErrorCode.INVALID_SESSION_ID);
         }
 
-        var request = new ChatService.ChatRequest(
-            body.messages(), body.mode(), body.scenario(), body.session_id()
-        );
+        // Distributed rate limiting via Redis
+        if (!rateLimiter.allowChat(body.session_id(), chatLimitPerMinute)) {
+            throw new RateLimitException();
+        }
 
+        log.info("chat request: sessionId={}, mode={}, msgCount={}", body.session_id(), body.mode(), body.messages().size());
+
+        var request = new ChatService.ChatRequest(body.messages(), body.mode(), body.scenario(), body.session_id());
         var result = chatService.chat(request);
-        return ResponseEntity.ok(Map.of(
-            "message", result.message(),
-            "suggestions", result.suggestions(),
-            "isCrisis", result.isCrisis()
-        ));
+
+        log.info("chat response: sessionId={}, elapsed={}ms", body.session_id(), System.currentTimeMillis() - start);
+        return ResponseEntity.ok(result);
     }
 
-    @PostMapping(value = "/chat/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
-    @Operation(summary = "Chat with AI (NDJSON streaming)")
+    @PostMapping("/chat/stream")
+    @Operation(summary = "Stream a chat response (NDJSON)")
     public ResponseEntity<StreamingResponseBody> chatStream(@RequestBody ChatRequestBody body) {
         if (body.messages() == null || body.messages().isEmpty()) {
-            StreamingResponseBody errorBody = out -> {
-                Writer w = new OutputStreamWriter(out, StandardCharsets.UTF_8);
-                w.write("{\"t\":\"error\",\"message\":\"messages is required\"}\n");
-                w.flush();
-            };
-            return ResponseEntity.badRequest()
-                .contentType(MediaType.APPLICATION_NDJSON)
-                .body(errorBody);
+            throw new BizException(ErrorCode.INVALID_REQUEST, "messages 不能为空");
+        }
+        if (body.session_id() == null || body.session_id().isBlank()) {
+            throw new BizException(ErrorCode.INVALID_SESSION_ID);
         }
 
-        var request = new ChatService.ChatRequest(
-            body.messages(), body.mode(), body.scenario(), body.session_id()
-        );
+        // Distributed rate limiting via Redis
+        if (!rateLimiter.allowChat(body.session_id(), chatLimitPerMinute)) {
+            throw new RateLimitException();
+        }
+
+        log.info("stream request: sessionId={}, mode={}", body.session_id(), body.mode());
+
+        var request = new ChatService.ChatRequest(body.messages(), body.mode(), body.scenario(), body.session_id());
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
-            StringBuilder accumulated = new StringBuilder();
-
-            chatService.chatStream(request)
-                .doOnNext(delta -> {
-                    try {
-                        accumulated.append(delta);
-                        String escaped = delta.replace("\\", "\\\\").replace("\"", "\\\"")
-                                              .replace("\n", "\\n");
-                        writer.write("{\"t\":\"delta\",\"c\":\"" + escaped + "\"}\n");
-                        writer.flush();
-                    } catch (Exception ignored) {}
-                })
-                .doOnComplete(() -> {
-                    try {
-                        String msg = accumulated.toString().replace("\\", "\\\\")
-                                                .replace("\"", "\\\"").replace("\n", "\\n");
-                        writer.write("{\"t\":\"meta\",\"message\":\"" + msg +
-                                     "\",\"suggestions\":[\"继续聊聊\",\"换个话题\"]}\n");
-                        writer.flush();
-                    } catch (Exception ignored) {}
-                })
-                .doOnError(err -> {
-                    try {
-                        writer.write("{\"t\":\"error\",\"message\":\"" +
-                                     err.getMessage().replace("\"", "'") + "\"}\n");
-                        writer.flush();
-                    } catch (Exception ignored) {}
-                })
-                .blockLast();
+            try {
+                chatService.chatStream(request)
+                    .doOnNext(token -> {
+                        try {
+                            String json = objectMapper.writeValueAsString(Map.of("token", token));
+                            writer.write(json + "\n");
+                            writer.flush();
+                        } catch (Exception e) {
+                            log.error("stream write error: sessionId={}", body.session_id(), e);
+                        }
+                    })
+                    .doOnError(err -> {
+                        try {
+                            String errJson = objectMapper.writeValueAsString(
+                                Map.of("error", true, "message", "AI 服务异常: " + err.getMessage()));
+                            writer.write(errJson + "\n");
+                            writer.flush();
+                        } catch (Exception e) {
+                            log.error("stream error-write failed: sessionId={}", body.session_id(), e);
+                        }
+                    })
+                    .blockLast();
+            } catch (Exception e) {
+                log.error("stream fatal error: sessionId={}", body.session_id(), e);
+            } finally {
+                writer.flush();
+            }
         };
 
         return ResponseEntity.ok()

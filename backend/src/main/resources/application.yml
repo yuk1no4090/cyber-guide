@@ -19,12 +19,26 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
+  # Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
 
 # AI configuration
 ai:
   api-key: ${OPENAI_API_KEY:}
   base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-  model: ${OPENAI_MODEL:glm-4.6}
+  model: ${OPENAI_MODEL:glm-4-flash}
   fallback-model: ${OPENAI_FALLBACK_MODEL:}
   timeout-ms: ${OPENAI_TIMEOUT_MS:25000}
   max-retries: ${OPENAI_MAX_RETRIES:0}
@@ -35,7 +49,34 @@ rag:
   max-evidence-chunk-length: 480
   default-top-k: 2
 
-# Rate limit
+# JWT Security
+security:
+  jwt:
+    secret: ${JWT_SECRET:cyber-guide-default-secret-key-change-in-production-32chars!!}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+# Resilience4j
+resilience4j:
+  ratelimiter:
+    instances:
+      chatRateLimit:
+        limit-for-period: 15
+        limit-refresh-period: 60s
+        timeout-duration: 0s
+  circuitbreaker:
+    instances:
+      aiService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+  retry:
+    instances:
+      aiRetry:
+        max-attempts: 2
+        wait-duration: 1s
+
+# Rate limit (legacy, kept for reference)
 rate-limit:
   chat-per-minute: 15
   feedback-per-minute: 5
@@ -48,6 +89,11 @@ management:
     web:
       exposure:
         include: health,info
+  health:
+    circuitbreakers:
+      enabled: true
+    redis:
+      enabled: true
 
 # SpringDoc
 springdoc:

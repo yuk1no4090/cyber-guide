@@ -1,5 +1,6 @@
 package com.cyberguide.rag;
 
+import com.cyberguide.infrastructure.cache.CacheGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -17,6 +19,8 @@ import java.util.stream.Stream;
 public class RagService {
 
     private static final Logger log = LoggerFactory.getLogger(RagService.class);
+    private static final Duration RAG_CACHE_TTL = Duration.ofMinutes(30);
+    private static final String CACHE_KEY_PREFIX = "rag:evidence:";
 
     @Value("${rag.knowledge-base-path:../knowledge_base/skills}")
     private String knowledgeBasePath;
@@ -28,9 +32,14 @@ public class RagService {
     private int defaultTopK;
 
     private final List<KnowledgeChunk> chunks = new ArrayList<>();
+    private final CacheGuard cacheGuard;
+
+    public RagService(CacheGuard cacheGuard) {
+        this.cacheGuard = cacheGuard;
+    }
 
     public record KnowledgeChunk(String content, String source, List<String> keywords) {}
-    public record RetrievalResult(String content, String source, double score) {}
+    public record RetrievalResult(String content, String source, double score) implements java.io.Serializable {}
 
     @PostConstruct
     public void loadKnowledgeBase() {
@@ -88,19 +97,42 @@ public class RagService {
         return result;
     }
 
+    /**
+     * Retrieve relevant knowledge chunks — cached in Redis for 30 minutes.
+     * Uses CacheGuard for penetration/avalanche/breakdown protection.
+     */
     public List<RetrievalResult> retrieve(String query, int topK) {
         if (chunks.isEmpty()) return List.of();
+
+        String cacheKey = CACHE_KEY_PREFIX + hashQuery(query) + ":" + topK;
+
+        @SuppressWarnings("unchecked")
+        List<RetrievalResult> cached = cacheGuard.getOrLoad(
+            cacheKey,
+            () -> doRetrieve(query, topK),
+            RAG_CACHE_TTL
+        );
+
+        return cached != null ? cached : List.of();
+    }
+
+    public List<RetrievalResult> retrieve(String query) {
+        return retrieve(query, defaultTopK);
+    }
+
+    /**
+     * Actual retrieval logic — keyword + bigram scoring.
+     */
+    private List<RetrievalResult> doRetrieve(String query, int topK) {
         String queryLower = query.toLowerCase();
 
         record Scored(KnowledgeChunk chunk, double score) {}
 
         List<Scored> scored = chunks.stream().map(chunk -> {
             double score = 0;
-            // keyword match
             for (String kw : chunk.keywords()) {
                 if (queryLower.contains(kw)) score += 3;
             }
-            // bigram overlap
             String contentLower = chunk.content().toLowerCase();
             for (int i = 0; i < queryLower.length() - 1; i++) {
                 String bigram = queryLower.substring(i, i + 2);
@@ -119,10 +151,6 @@ public class RagService {
         )).toList();
     }
 
-    public List<RetrievalResult> retrieve(String query) {
-        return retrieve(query, defaultTopK);
-    }
-
     public String formatEvidence(List<RetrievalResult> results) {
         if (results.isEmpty()) return "";
         StringBuilder sb = new StringBuilder("\n---\n# KNOWLEDGE BASE EVIDENCE\n\n");
@@ -138,5 +166,13 @@ public class RagService {
     private String truncate(String text, int maxLen) {
         if (text.length() <= maxLen) return text;
         return text.substring(0, maxLen) + "...";
+    }
+
+    /**
+     * Simple hash for cache key — keeps keys short and safe.
+     */
+    private String hashQuery(String query) {
+        int hash = query.hashCode();
+        return Integer.toHexString(hash);
     }
 }

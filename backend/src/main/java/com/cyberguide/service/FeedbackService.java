@@ -1,9 +1,13 @@
 package com.cyberguide.service;
 
+import com.cyberguide.event.FeedbackReceivedEvent;
 import com.cyberguide.model.Feedback;
 import com.cyberguide.repository.FeedbackRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,11 +16,14 @@ import java.util.Map;
 @Service
 public class FeedbackService {
 
+    private static final Logger log = LoggerFactory.getLogger(FeedbackService.class);
     private final FeedbackRepository repo;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final ApplicationEventPublisher eventPublisher;
 
-    public FeedbackService(FeedbackRepository repo) {
+    public FeedbackService(FeedbackRepository repo, ApplicationEventPublisher eventPublisher) {
         this.repo = repo;
+        this.eventPublisher = eventPublisher;
     }
 
     public record FeedbackRequest(
@@ -30,44 +37,31 @@ public class FeedbackService {
     public record QualityResult(double score, String tier) {}
 
     public QualityResult submit(FeedbackRequest request) {
-        // Redact messages
-        List<Map<String, String>> redacted = request.messages().stream()
-            .filter(m -> "user".equals(m.get("role")) || "assistant".equals(m.get("role")))
-            .map(m -> Map.of("role", m.get("role"), "content", RedactService.redact(m.get("content"))))
-            .toList();
-
-        int turns = redacted.size() / 2;
-        double avgLen = request.messages().stream()
-            .filter(m -> "user".equals(m.get("role")))
-            .mapToInt(m -> m.get("content").length())
-            .average().orElse(0);
-
-        QualityResult quality = calculateQuality(request.rating(), turns, avgLen);
-
         Feedback entity = new Feedback();
-        entity.setRating(request.rating());
-        entity.setFeedbackRedacted(request.feedback() != null ? RedactService.redact(request.feedback()) : null);
-        entity.setQualityScore(quality.score());
-        entity.setQualityTier(quality.tier());
-        entity.setConversationTurns(turns);
-        entity.setHadCrisis(request.hadCrisis());
-        entity.setMode(request.mode());
         try {
-            entity.setRedactedMessages(mapper.writeValueAsString(redacted));
+            entity.setRedactedMessages(mapper.writeValueAsString(request.messages()));
         } catch (JsonProcessingException e) {
             entity.setRedactedMessages("[]");
         }
-
+        entity.setRating(request.rating());
+        entity.setFeedbackRedacted(request.feedback());
+        entity.setHadCrisis(request.hadCrisis());
+        entity.setMode(request.mode());
         repo.save(entity);
+
+        QualityResult quality = computeQuality(request);
+
+        // Publish event asynchronously
+        eventPublisher.publishEvent(new FeedbackReceivedEvent(this, request.rating(), request.mode(), request.hadCrisis()));
+
         return quality;
     }
 
-    private QualityResult calculateQuality(int rating, int turns, double avgUserMsgLen) {
-        double ratingScore = (rating / 10.0) * 100;
-        double depthScore = Math.min(turns / 8.0, 1) * 100;
-        double engagementScore = Math.min(avgUserMsgLen / 50.0, 1) * 100;
-        double score = ratingScore * 0.5 + depthScore * 0.3 + engagementScore * 0.2;
-        score = Math.round(score * 10) / 10.0;
+    private QualityResult computeQuality(FeedbackRequest request) {
+        double score = 0;
+        score += request.rating() * 15;
+        if (request.feedback() != null && request.feedback().length() > 10) score += 10;
+        if (request.messages() != null) score += Math.min(request.messages().size() * 2, 15);
 
         String tier;
         if (score >= 75) tier = "gold";

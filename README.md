@@ -1,100 +1,95 @@
-# Cyber Guide - Fullstack Resume Edition
+# Cyber Guide
 
-Cyber Guide is a portfolio-grade AI companion system for academic and career planning.
-This branch introduces a production-style fullstack architecture:
+> AI-powered academic & career planning companion.
+> AI 驱动的学业与职业规划助手。
 
-- `frontend/`: Next.js 15 + React + TypeScript
-- `backend/`: Java 21 + Spring Boot + PostgreSQL
-- `crawler/`: Python + Scrapy + APScheduler
-- `knowledge_base/`: markdown knowledge cards for lightweight RAG
+## Architecture（架构）
 
-The project is intentionally designed to show engineering depth for resume and interview scenarios:
-frontend engineering, enterprise backend, data pipeline, and deployment automation.
+```
+┌───────────┐    ┌──────────────┐    ┌────────────┐
+│  Frontend  │───▶│   Backend    │◀───│  Crawler    │
+│ Next.js 15 │    │ Spring Boot  │    │  Python     │
+└───────────┘    └──────┬───────┘    └─────┬──────┘
+                        │                  │
+                 ┌──────┴───────┐          │
+                 │  PostgreSQL  │◀─────────┘
+                 │    + Redis   │
+                 └──────────────┘
+```
 
-## Why this architecture
+## Tech Stack（技术栈）
 
-- **Resume value**: mainstream backend stack (Spring Boot + PostgreSQL)
-- **Multi-language ability**: Java + TypeScript + Python in one coherent system
-- **Real data loop**: crawler -> local DB -> backend API -> frontend insights
-- **Production thinking**: Docker Compose, Nginx reverse proxy, CI workflow, runbooks
+| Layer | Technologies |
+|-------|-------------|
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| Backend | Java 21, Spring Boot 3.3, Spring Security, JPA, Resilience4j |
+| Database | PostgreSQL 16, Redis 7 |
+| Crawler | Python 3.10, Scrapy, APScheduler |
+| Infra | Docker Compose, Nginx, JWT Auth |
 
-## Repository layout
+## Quick Start（快速启动）
 
-```text
+```bash
+git clone https://github.com/yuk1no4090/cyber-guide.git
+cd cyber-guide
+cp .env.example .env   # edit .env, set OPENAI_API_KEY at minimum
+docker compose up -d
+```
+
+Verify（验证）:
+
+```bash
+curl http://localhost:8080/actuator/health   # backend health
+curl -o /dev/null -w "%{http_code}" http://localhost:3000  # frontend → 200
+docker exec cyber-guide-redis redis-cli ping               # → PONG
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8080
+
+## Project Structure（项目结构）
+
+```
 cyber-guide/
-  frontend/                 # Next.js 15 app router frontend
-  backend/                  # Spring Boot API service
-  crawler/                  # Python crawler and scheduler
-  knowledge_base/skills/    # RAG source markdown files
-  docs/                     # PRD, architecture, API, DB, deploy, user manual
-  docker-compose.yml        # local/prod service orchestration
-  nginx.conf                # reverse proxy config
+├── frontend/           # Next.js app router frontend
+├── backend/            # Spring Boot API service
+├── crawler/            # Python crawler & scheduler
+├── knowledge_base/     # RAG source markdown files
+├── docs/               # Documentation (EN + CN)
+├── scripts/            # Utility scripts
+├── docker-compose.yml  # Service orchestration
+└── nginx.conf          # Reverse proxy config
 ```
 
-## Runtime strategy (important)
+## Documentation（文档）
 
-Recommended setup:
+| Document | EN | CN |
+|----------|----|----|
+| Product Requirements | [PRD.md](docs/PRD.md) | — |
+| Architecture | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | — |
+| API Contract | [API.md](docs/API.md) | — |
+| Database Design | [DATABASE.md](docs/DATABASE.md) | — |
+| Crawler Design | [CRAWLER.md](docs/CRAWLER.md) | — |
+| Deployment Guide | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | [DEPLOYMENT_CN.md](docs/DEPLOYMENT_CN.md) |
+| Development Guide | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | — |
+| User Manual | [USER_MANUAL.md](docs/USER_MANUAL.md) | — |
 
-- **Develop on Mac (Apple Silicon)**:
-  - code, debug, and run Docker locally
-  - fastest feedback loop and best IDE experience
-- **Deploy on Linux server**:
-  - stable 24x7 runtime for backend/frontend/crawler
-  - fixed network egress for scheduled crawling
+## License（许可证）
 
-Decision rule:
+[MIT](LICENSE)
 
-- if your goal is productivity and interview-ready architecture, use **Mac for development + Linux for production**
-- avoid "server-only development" except for final integration verification
+---
 
-## Quick start
+## 中文说明
 
-### 1) Prepare env file
+Cyber Guide 是一个面向学生和职场新人的 AI 规划助手，提供学业规划、职业指导和情绪支持。
 
-Copy `.env.example` to `.env` and fill secrets:
+项目采用主流全栈架构：Java 后端 + React 前端 + Python 爬虫 + PostgreSQL + Redis，支持 Docker Compose 一键部署。
 
-```bash
-cp .env.example .env
-```
+主要功能：
+- 多轮 AI 对话与建议引导
+- 7 天行动计划生成与追踪
+- 爬虫数据管道与 RAG 检索增强
+- JWT 无状态认证、Redis 分布式限流、熔断降级
 
-### 2) Start full stack with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-Services:
-
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8080`
-- PostgreSQL: `localhost:5432`
-
-### 3) Run crawler once manually
-
-```bash
-docker compose run --rm crawler python run.py --once
-```
-
-## Main features
-
-- AI chat and guided suggestions for study/career planning
-- 7-day action plan generate/fetch/update/regenerate endpoints
-- Feedback scoring and persistence in PostgreSQL
-- Local RAG evidence retrieval from `knowledge_base/skills`
-- Scheduled crawler pipeline for public career/education content
-
-## Documentation index
-
-- Product requirements: `docs/PRD.md`
-- System architecture: `docs/ARCHITECTURE.md`
-- API contract: `docs/API.md`
-- Database design: `docs/DATABASE.md`
-- Crawler design: `docs/CRAWLER.md`
-- Deployment guide: `docs/DEPLOYMENT.md`
-- Development guide: `docs/DEVELOPMENT.md`
-- User manual: `docs/USER_MANUAL.md`
-
-## Disclaimer
-
-Cyber Guide is not a medical or clinical system and does not provide diagnosis or treatment advice.
-In crisis scenarios, users should be directed to local emergency and professional support resources.
+详细文档见 `docs/` 目录，部署指南提供中文版本（`docs/DEPLOYMENT_CN.md`）。

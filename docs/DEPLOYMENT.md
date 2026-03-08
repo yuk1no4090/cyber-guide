@@ -1,127 +1,84 @@
 # Deployment Guide
 
-## 1. Deployment model
+## Docker Compose (recommended)
 
-- development environment:
-  - Mac (Apple Silicon) + Docker Compose
-- production environment:
-  - Linux server + Docker Compose + Nginx
+One-command startup for all services:
 
-This split balances local productivity and production stability.
+```bash
+# Clone and configure
+git clone https://github.com/yuk1no4090/cyber-guide.git
+cd cyber-guide
+cp .env.example .env
+# Edit .env — at minimum set OPENAI_API_KEY
 
-## 2. Prerequisites
+# Start everything
+docker compose up -d
 
-- Docker 24+
-- Docker Compose v2
-- domain and SSL (production)
-- OpenAI-compatible API key
+# Check status
+docker compose ps
+docker compose logs -f backend
+```
 
-## 3. Environment variables
+Services started:
 
-Create `.env` in project root:
+| Service | Port | Image |
+|---|---|---|
+| PostgreSQL | 5432 | postgres:16-alpine |
+| Redis | 6379 | redis:7-alpine (128MB, LRU eviction) |
+| Backend | 8080 | Java 21 + Spring Boot 3.3 |
+| Frontend | 3000 | Next.js 15 (standalone) |
+| Crawler | — | Python 3.10 (scheduled, no exposed port) |
+
+## Health verification
+
+```bash
+# Backend health (includes DB + Redis status)
+curl http://localhost:8080/actuator/health
+
+# Frontend
+curl -o /dev/null -w "%{http_code}" http://localhost:3000
+
+# Redis
+docker exec cyber-guide-redis redis-cli ping
+
+# JWT flow
+curl -s -X POST http://localhost:8080/api/auth/anonymous \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"test"}' | python3 -m json.tool
+```
+
+## Environment variables
+
+See `DEVELOPMENT.md` for the full variable table. Production-critical ones:
 
 ```env
-# backend
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-OPENAI_MODEL=glm-4.6
-OPENAI_FALLBACK_MODEL=gpt-4o-mini
-BACKEND_PORT=8080
-
-# database
-POSTGRES_DB=cyber_guide
-POSTGRES_USER=cyber_guide
-POSTGRES_PASSWORD=change_me
-POSTGRES_PORT=5432
-
-# frontend
-FRONTEND_PORT=3000
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
-
-# crawler
-CRAWLER_ENABLED=true
-CRAWLER_INTERVAL_MINUTES=360
-CRAWLER_MAX_PAGES_PER_SOURCE=3
+OPENAI_API_KEY=your-key          # required
+JWT_SECRET=your-32-char-secret   # change from default
+POSTGRES_PASSWORD=strong-pw      # change from default
 ```
 
-## 4. Local startup
+## Updating
 
 ```bash
-docker compose up --build
+cd cyber-guide
+git pull
+docker compose build
+docker compose up -d
 ```
 
-Verify:
+## Scaling notes
 
-- frontend: `http://localhost:3000`
-- backend health: `http://localhost:8080/actuator/health`
+- Backend is stateless (JWT + Redis) — can run multiple instances behind a load balancer
+- Redis rate limiter is distributed — shared across all backend instances
+- PostgreSQL connection pool: 10 max (adjust `spring.datasource.hikari.maximum-pool-size`)
+- Redis connection pool: 16 max active, 8 idle
 
-## 5. Production rollout
+## Troubleshooting
 
-### 5.1 Pull and build
-
-```bash
-git pull --ff-only origin main
-docker compose pull
-docker compose up -d --build
-```
-
-### 5.2 Run migrations
-
-```bash
-docker compose exec backend ./migrate.sh
-```
-
-### 5.3 Smoke test
-
-```bash
-curl -f http://127.0.0.1:8080/actuator/health
-curl -f http://127.0.0.1:3000
-```
-
-## 6. Nginx example
-
-```nginx
-server {
-  listen 80;
-  server_name your-domain.com;
-
-  location /api/ {
-    proxy_pass http://127.0.0.1:8080/;
-    proxy_http_version 1.1;
-    proxy_set_header Connection "";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_read_timeout 120s;
-    proxy_send_timeout 120s;
-    proxy_buffering off;
-  }
-
-  location / {
-    proxy_pass http://127.0.0.1:3000/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-  }
-}
-```
-
-## 7. Rollback
-
-1. identify last stable image tag or git commit
-2. redeploy stable version
-3. run health checks and minimal chat test
-
-Example:
-
-```bash
-git checkout <stable_commit>
-docker compose up -d --build
-```
-
-## 8. Ops checklist
-
-- backend health green
-- frontend responds
-- chat endpoint returns stream/json
-- plan generate/fetch/update works
-- crawler recent run status is successful
+| Symptom | Check |
+|---|---|
+| 403 on all API calls | Frontend not sending JWT — check browser console, clear localStorage |
+| AI responses slow / failing | Check `docker compose logs backend` for circuit breaker state |
+| Redis connection refused | `docker compose ps redis` — ensure it's running |
+| Plan data stale | Redis cache TTL is 10min — wait or call a write endpoint to evict |
+| Rate limited (429) | 15 req/min per session — wait 60s or use a different session_id |

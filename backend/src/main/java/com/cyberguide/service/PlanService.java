@@ -1,6 +1,7 @@
 package com.cyberguide.service;
 
 import com.cyberguide.ai.AiClient;
+import com.cyberguide.infrastructure.cache.CacheGuard;
 import com.cyberguide.model.PlanDay;
 import com.cyberguide.repository.PlanDayRepository;
 import org.slf4j.Logger;
@@ -18,13 +19,17 @@ public class PlanService {
     private static final int PLAN_DAYS = 7;
     private static final int TASK_MIN_LEN = 8;
     private static final int TASK_MAX_LEN = 40;
+    private static final Duration PLAN_CACHE_TTL = Duration.ofMinutes(10);
+    private static final String CACHE_KEY_PREFIX = "plan:session:";
 
     private final PlanDayRepository repo;
     private final AiClient aiClient;
+    private final CacheGuard cacheGuard;
 
-    public PlanService(PlanDayRepository repo, AiClient aiClient) {
+    public PlanService(PlanDayRepository repo, AiClient aiClient, CacheGuard cacheGuard) {
         this.repo = repo;
         this.aiClient = aiClient;
+        this.cacheGuard = cacheGuard;
     }
 
     // ---- Fallback task pools (same as TS) ----
@@ -38,19 +43,29 @@ public class PlanService {
         7, List.of("总结本周收获并规划下周第一步", "写3句话总结这一周然后定下周第一件事")
     );
 
-    public record FetchResult(List<PlanDay> plans, int todayIndex, PlanDay todayPlan) {}
+    public record FetchResult(List<PlanDay> plans, int todayIndex, PlanDay todayPlan) implements java.io.Serializable {}
 
+    /**
+     * Fetch plans — Cache-Aside pattern: check Redis first, miss -> load from DB -> write cache.
+     */
     public FetchResult fetch(String sessionId) {
-        List<PlanDay> plans = repo.findBySessionIdOrderByDayIndexAsc(sessionId);
-        int todayIndex = computeTodayIndex(plans);
-        PlanDay todayPlan = plans.stream()
-            .filter(p -> p.getDayIndex() == todayIndex)
-            .findFirst().orElse(null);
-        return new FetchResult(plans, todayIndex, todayPlan);
+        String cacheKey = CACHE_KEY_PREFIX + sessionId;
+
+        return cacheGuard.getOrLoad(cacheKey, () -> {
+            log.info("plan cache miss, loading from DB: sessionId={}", sessionId);
+            List<PlanDay> plans = repo.findBySessionIdOrderByDayIndexAsc(sessionId);
+            int todayIndex = computeTodayIndex(plans);
+            PlanDay todayPlan = plans.stream()
+                .filter(p -> p.getDayIndex() == todayIndex)
+                .findFirst().orElse(null);
+            return new FetchResult(plans, todayIndex, todayPlan);
+        }, PLAN_CACHE_TTL);
     }
 
+    /**
+     * Generate plan — write DB then evict cache (Cache-Aside write path).
+     */
     public FetchResult generate(String sessionId, String context) {
-        // Call AI to generate 7 tasks
         String systemPrompt = "你是行动教练，请生成简洁、可执行、当天可完成的任务。\n" +
             "请输出 7 条任务，中文，每条 8-40 字。\n" +
             "禁止输出解释，只输出 JSON：{\"tasks\":[\"任务1\",\"任务2\"]}";
@@ -59,24 +74,21 @@ public class PlanService {
 
         List<String> tasks;
         try {
-            String response = aiClient.chatCompletion(
-                List.of(Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userPrompt)),
-                0.8, 300);
+            String response = aiClient.chat(
+                List.of(Map.of("role", "user", "content", userPrompt)),
+                systemPrompt, 300);
             tasks = parseTasksFromAI(response);
         } catch (Exception e) {
             log.warn("AI plan generation failed, using fallback", e);
             tasks = new ArrayList<>();
         }
 
-        // Pad with fallback if needed
         while (tasks.size() < PLAN_DAYS) {
             int day = tasks.size() + 1;
             List<String> pool = FALLBACK_POOLS.getOrDefault(day, List.of("完成今天的一个小目标"));
             tasks.add(pool.get(new Random().nextInt(pool.size())));
         }
 
-        // Upsert into DB
         List<PlanDay> saved = new ArrayList<>();
         for (int i = 0; i < PLAN_DAYS; i++) {
             int dayIndex = i + 1;
@@ -94,16 +106,28 @@ public class PlanService {
         PlanDay todayPlan = saved.stream()
             .filter(p -> p.getDayIndex() == todayIndex)
             .findFirst().orElse(null);
+
+        // Evict cache after write
+        evictPlanCache(sessionId);
+
         return new FetchResult(saved, todayIndex, todayPlan);
     }
 
+    /**
+     * Update status — write DB then evict cache.
+     */
     public PlanDay update(String sessionId, int dayIndex, String status) {
         PlanDay plan = repo.findBySessionIdAndDayIndex(sessionId, dayIndex)
             .orElseThrow(() -> new NoSuchElementException("Plan not found for day " + dayIndex));
         plan.setStatus(status);
-        return repo.save(plan);
+        PlanDay saved = repo.save(plan);
+        evictPlanCache(sessionId);
+        return saved;
     }
 
+    /**
+     * Regenerate a single day — write DB then evict cache.
+     */
     public PlanDay regenerateDay(String sessionId, int dayIndex, String context) {
         String systemPrompt = "你是行动教练，请生成简洁、可执行、当天可完成的任务。\n" +
             "请输出 1 条任务，中文，8-40 字。\n禁止输出解释，只输出 JSON：{\"tasks\":[\"任务\"]}";
@@ -112,10 +136,9 @@ public class PlanService {
 
         String taskText;
         try {
-            String response = aiClient.chatCompletion(
-                List.of(Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userPrompt)),
-                0.8, 100);
+            String response = aiClient.chat(
+                List.of(Map.of("role", "user", "content", userPrompt)),
+                systemPrompt, 100);
             List<String> tasks = parseTasksFromAI(response);
             taskText = tasks.isEmpty() ? getFallbackTask(dayIndex) : sanitizeTask(tasks.get(0), dayIndex);
         } catch (Exception e) {
@@ -128,16 +151,25 @@ public class PlanService {
         plan.setDayIndex(dayIndex);
         plan.setTaskText(taskText);
         plan.setStatus("todo");
-        return repo.save(plan);
+        PlanDay saved = repo.save(plan);
+
+        evictPlanCache(sessionId);
+        return saved;
+    }
+
+    /**
+     * Evict plan cache for a session (called after any write operation).
+     */
+    private void evictPlanCache(String sessionId) {
+        cacheGuard.evict(CACHE_KEY_PREFIX + sessionId);
+        log.debug("plan cache evicted: sessionId={}", sessionId);
     }
 
     // ---- Helpers ----
 
     private List<String> parseTasksFromAI(String text) {
-        // Try JSON parse
         try {
             String cleaned = text.replaceAll("```(?:json)?\\s*", "").replaceAll("```", "").trim();
-            // Simple extraction of array values
             int start = cleaned.indexOf('[');
             int end = cleaned.lastIndexOf(']');
             if (start >= 0 && end > start) {
@@ -151,7 +183,6 @@ public class PlanService {
             }
         } catch (Exception ignored) {}
 
-        // Fallback: line-by-line
         List<String> result = new ArrayList<>();
         for (String line : text.split("\n")) {
             String trimmed = line.replaceAll("^[-*•\\d.、)\\s]+", "").trim();

@@ -1,11 +1,38 @@
 # API Contract
 
-Base URL examples:
+Base URL: `http://localhost:8080` (dev) / behind Next.js rewrite in production.
 
-- local backend: `http://localhost:8080`
-- production backend: `https://your-domain.com/api`
+All endpoints under `/api/**` (except `/api/auth/**`) require JWT authentication.
 
-All responses use JSON unless explicitly marked as NDJSON stream.
+## 0. Authentication
+
+### POST `/api/auth/anonymous`
+
+Public endpoint — issue an anonymous session token.
+
+Request:
+
+```json
+{
+  "session_id": "optional-uuid-v4"
+}
+```
+
+Response:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzM4NCJ9...",
+  "session_id": "uuid-v4",
+  "type": "anonymous"
+}
+```
+
+All subsequent requests must include:
+
+```
+Authorization: Bearer <token>
+```
 
 ## 1. Common response envelope
 
@@ -32,15 +59,13 @@ Failure:
 }
 ```
 
+All error responses include `X-Trace-Id` header for log correlation.
+
 ## 2. Chat APIs
 
 ### 2.1 POST `/api/chat`
 
-Description:
-
-- main chat endpoint
-- supports normal chat, profile modes, report modes
-- can return NDJSON stream for incremental rendering
+Main chat endpoint. Rate limited: 15 req/min per session (Redis distributed).
 
 Request:
 
@@ -58,9 +83,10 @@ Request:
 Fields:
 
 - `mode`: `chat | profile | profile_other | generate_report | generate_report_other | generate_recap`
-- `scenario`: optional relationship scenario
+- `scenario`: optional, used in `profile_other` mode
+- `session_id`: required
 
-JSON response example:
+JSON response:
 
 ```json
 {
@@ -70,13 +96,23 @@ JSON response example:
 }
 ```
 
-NDJSON response line types:
+### 2.2 POST `/api/chat/stream`
 
-- `{"t":"delta","c":"文本分片"}`
-- `{"t":"meta","message":"完整文本","suggestions":[]}`
-- `{"t":"error","message":"错误信息"}`
+Streaming endpoint. Same request body as `/api/chat`. Returns NDJSON (`application/x-ndjson`).
 
-### 2.2 POST `/api/feedback`
+Each line:
+
+```json
+{"token": "文本分片"}
+```
+
+Error line:
+
+```json
+{"error": true, "message": "AI 服务异常: ..."}
+```
+
+### 2.3 POST `/api/feedback`
 
 Request:
 
@@ -86,12 +122,17 @@ Request:
     { "role": "user", "content": "..." },
     { "role": "assistant", "content": "..." }
   ],
-  "rating": 8,
+  "rating": 4,
   "feedback": "很有帮助",
   "hadCrisis": false,
   "mode": "chat"
 }
 ```
+
+Fields:
+
+- `rating`: 1-5 (required)
+- `mode`: `chat | profile | profile_other`
 
 Response:
 
@@ -103,14 +144,38 @@ Response:
       "score": 78.5,
       "tier": "gold"
     }
-  },
-  "error": null
+  }
 }
 ```
 
 ## 3. Plan APIs
 
-### 3.1 POST `/api/plan/generate`
+All plan endpoints use Redis Cache-Aside pattern. Reads are cached (TTL 10min), writes evict cache.
+
+### 3.1 GET `/api/plan/fetch?session_id=...`
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "plans": [
+      {
+        "id": "uuid",
+        "sessionId": "uuid-v4",
+        "dayIndex": 1,
+        "taskText": "先完成 1 道简单题并复盘",
+        "status": "todo",
+        "createdAt": "2025-03-08T12:00:00Z"
+      }
+    ],
+    "today_index": 1
+  }
+}
+```
+
+### 3.2 POST `/api/plan/generate`
 
 Request:
 
@@ -121,39 +186,9 @@ Request:
 }
 ```
 
-Response:
+Response: same structure as fetch, with 7 plan items.
 
-```json
-{
-  "success": true,
-  "data": {
-    "plans": [
-      { "day_index": 1, "task_text": "先完成 1 道简单题并复盘", "status": "todo" }
-    ],
-    "today_index": 1,
-    "used_fallback": false
-  },
-  "error": null
-}
-```
-
-### 3.2 GET `/api/plan/fetch?session_id=...`
-
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "plans": [],
-    "today_index": 1,
-    "today_plan": null
-  },
-  "error": null
-}
-```
-
-### 3.3 POST `/api/plan/update`
+### 3.3 PUT `/api/plan/status`
 
 Request:
 
@@ -165,7 +200,22 @@ Request:
 }
 ```
 
-### 3.4 POST `/api/plan/regenerate-day`
+Fields:
+
+- `status`: `todo | done | skipped`
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "plan": { "dayIndex": 1, "taskText": "...", "status": "done" }
+  }
+}
+```
+
+### 3.4 POST `/api/plan/regenerate`
 
 Request:
 
@@ -177,37 +227,77 @@ Request:
 }
 ```
 
-## 4. Metrics API
+Fields:
 
-### POST `/api/metrics`
+- `day_index`: 1-7
 
-Collect optional session metrics for product iteration.
+Response: same as status update, returns the regenerated plan item.
 
-## 5. Crawler read APIs
+## 4. Crawler APIs
 
-### 5.1 GET `/api/crawler/articles`
+### GET `/api/crawler/articles`
 
-Query:
+Query params:
 
-- `source` optional
-- `limit` default `20`, max `100`
-- `q` optional keyword
+- `source` — optional, filter by source name
+- `limit` — default 20, max 100
 
-Response data:
+Cached in Redis (TTL 1h).
 
-- article id, source, title, summary, url, tags, published_at, score
+Response:
 
-### 5.2 GET `/api/crawler/sources`
+```json
+{
+  "success": true,
+  "data": {
+    "articles": [
+      {
+        "id": "uuid",
+        "sourceName": "zhihu",
+        "title": "...",
+        "summary": "...",
+        "url": "https://...",
+        "crawlTime": "2025-03-08T06:00:00Z"
+      }
+    ]
+  }
+}
+```
 
-Returns enabled source list and recent crawl status.
+## 5. Health check
+
+### GET `/actuator/health`
+
+Public endpoint (no JWT required).
+
+```json
+{
+  "status": "UP"
+}
+```
+
+Includes Redis and database health indicators.
 
 ## 6. Error codes
 
-- `INVALID_SESSION_ID`
-- `INVALID_DAY_INDEX`
-- `INVALID_STATUS`
-- `RATE_LIMITED`
-- `DB_ERROR`
-- `INTERNAL_ERROR`
-- `PLAN_NOT_FOUND`
-- `AI_TIMEOUT`
+| Code | HTTP Status | Description |
+|---|---|---|
+| `INVALID_REQUEST` | 400 | Missing or malformed request body |
+| `INVALID_SESSION_ID` | 400 | session_id is blank or missing |
+| `INVALID_DAY_INDEX` | 400 | day_index not in 1-7 |
+| `INVALID_STATUS` | 400 | status not in todo/done/skipped |
+| `INVALID_RATING` | 400 | rating not in 1-5 |
+| `INVALID_MODE` | 400 | mode not recognized |
+| `RESOURCE_NOT_FOUND` | 404 | Plan or entity not found |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `AI_SERVICE_ERROR` | 503 | AI service unavailable (circuit open) |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+## 7. Rate limits
+
+| Endpoint | Limit | Window | Scope |
+|---|---|---|---|
+| `/api/chat` | 15 | 60s | per session_id |
+| `/api/chat/stream` | 15 | 60s | per session_id |
+
+Rate limiting is distributed via Redis (shared across backend instances).

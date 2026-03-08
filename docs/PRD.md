@@ -7,10 +7,11 @@ The product focus is study planning, career planning, and emotional support duri
 
 This version is rebuilt with a resume-oriented engineering target:
 
-- mainstream fullstack architecture
-- clear domain boundaries
+- mainstream fullstack architecture (Java + React + Python)
+- clear domain boundaries (DDD four-layer architecture)
 - real data pipeline (crawler -> db -> rag -> chat)
-- deployable system with runbooks
+- production-grade infrastructure (JWT auth, Redis cache, circuit breaker, distributed rate limiting)
+- deployable system with Docker Compose one-command startup
 
 ## 2. Goals and non-goals
 
@@ -38,9 +39,9 @@ This version is rebuilt with a resume-oriented engineering target:
 
 ### 4.1 Journey A: chat guidance
 
-1. user opens chat
+1. user opens chat, frontend obtains anonymous JWT via `/api/auth/anonymous`
 2. user describes confusion (study/job/skills)
-3. system performs crisis check and context retrieval
+3. message pipeline: PII redaction -> crisis check -> RAG retrieval -> AI completion -> response parsing
 4. model returns response + suggestion chips
 5. user continues with follow-up questions
 
@@ -52,10 +53,10 @@ Success metric:
 ### 4.2 Journey B: 7-day plan
 
 1. user asks for a plan
-2. system generates 7-day tasks from context
+2. system generates 7-day tasks from context (AI + fallback pool)
 3. user marks tasks done/skipped
 4. user can regenerate a specific day
-5. system keeps progression state per session
+5. system keeps progression state per session (cached in Redis, persisted in PostgreSQL)
 
 Success metric:
 
@@ -66,7 +67,7 @@ Success metric:
 
 1. scheduled crawler fetches public articles/posts
 2. data cleaner deduplicates and scores quality
-3. backend exposes curated records to frontend
+3. backend exposes curated records to frontend (cached in Redis, TTL 1h)
 4. user sees "recent practical suggestions" panel
 5. chat/rag can cite crawler-backed evidence
 
@@ -77,30 +78,49 @@ Success metric:
 
 ## 5. Functional requirements
 
-### 5.1 Frontend (Next.js 15)
+### 5.1 Frontend (Next.js 15 + React 19 + TypeScript + Tailwind CSS)
 
-- Chat UI with stream rendering and suggestion chips
-- Profile mode and report generation
-- 7-day plan card with status actions
-- Feedback submission and quality display
-- Crawler insights page (latest planning suggestions)
+- Chat UI with NDJSON stream rendering and suggestion chips
+- Profile mode (self / other) and report generation
+- Scenario picker for role-play practice
+- 7-day plan card with status actions (done/skipped/regenerate)
+- Feedback submission with quality scoring display
+- Recap card for conversation summary
+- JWT token lifecycle (auto-obtain, cache in localStorage, auto-refresh on 401)
 
-### 5.2 Backend (Spring Boot)
+### 5.2 Backend (Java 21 + Spring Boot 3.3 + JPA + PostgreSQL + Redis)
 
-- `POST /api/chat` streaming and JSON fallback
-- `POST /api/feedback` with pii redaction and scoring
-- plan routes:
-  - `POST /api/plan/generate`
-  - `GET /api/plan/fetch`
-  - `POST /api/plan/update`
-  - `POST /api/plan/regenerate-day`
-- `GET /api/crawler/articles` for frontend insights
+Authentication:
+- `POST /api/auth/anonymous` — issue anonymous JWT token
+
+Chat:
+- `POST /api/chat` — streaming (NDJSON) and JSON response
+- `POST /api/chat/stream` — dedicated streaming endpoint
+
+Feedback:
+- `POST /api/feedback` — with PII redaction and quality scoring
+
+Plan:
+- `GET /api/plan/fetch?session_id=` — fetch plans (Redis cached)
+- `POST /api/plan/generate` — generate 7-day plan
+- `PUT /api/plan/status` — update day status
+- `POST /api/plan/regenerate` — regenerate single day
+
+Crawler data:
+- `GET /api/crawler/articles` — list articles (Redis cached, TTL 1h)
+
+Infrastructure:
+- Global exception handler with unified error codes
+- TraceId filter (MDC + X-Trace-Id header)
+- Resilience4j circuit breaker + retry on AI calls
+- Redis distributed rate limiting (Lua atomic script)
+- Redis multi-TTL caching with penetration/avalanche/breakdown protection
 
 ### 5.3 Crawler (Python)
 
-- Source config and scheduling
+- Source config and scheduling (configurable interval, default 6h)
 - Public pages fetch + parse + normalize
-- Duplicate detection and persistence
+- Duplicate detection (dedupe hash) and persistence
 - Structured output to PostgreSQL
 
 ## 6. Non-functional requirements
@@ -108,30 +128,68 @@ Success metric:
 - Availability target: 99.5%
 - p95 backend latency:
   - chat first chunk < 3s
-  - non-chat apis < 600ms
-- all services containerized for one-command startup
-- sensitive fields never logged in plain text
+  - non-chat APIs < 600ms
+- All services containerized for one-command startup (`docker compose up`)
+- Sensitive fields never logged in plain text (PII redaction in pipeline)
+- Redis graceful degradation: cache failure falls through to DB, does not block requests
+- Circuit breaker: AI service failure >50% triggers open state, auto-recovers after 30s
 
 ## 7. Compliance and safety
 
-- crisis keyword detection and emergency handoff response
-- privacy-by-default:
+- Crisis keyword detection and emergency handoff response (hotline: 400-161-9995)
+- Privacy-by-default:
   - metrics and optional logs are opt-in
-  - pii redaction before persistence
-- crawler only collects public pages and honors robots policies when applicable
+  - PII redaction before persistence (phone, email, ID card patterns)
+- Crawler only collects public pages and honors robots policies when applicable
+- JWT stateless authentication — no server-side session storage
 
 ## 8. Milestones
 
-- Phase 0: docs and contracts
-- Phase 1: backend service and db migration
-- Phase 2: frontend migration to separated backend
-- Phase 3: crawler module and insights integration
-- Phase 4: dockerized deployment and ci hardening
+- Phase 0: docs and contracts — DONE
+- Phase 1: backend service (Spring Boot + JPA + PostgreSQL) — DONE
+- Phase 2: frontend migration to separated backend (JWT auth) — DONE
+- Phase 3: crawler module and insights integration — DONE
+- Phase 4: dockerized deployment (Docker Compose) and CI — DONE
+- Phase 5: engineering hardening — DONE
+  - Global exception handling + error codes
+  - Spring Security + JWT authentication
+  - Resilience4j circuit breaker + retry
+  - Strategy pattern (ChatStrategy) + chain of responsibility (MessagePipeline)
+  - Spring Events (async analytics)
+  - DDD four-layer package structure
+- Phase 6: Redis caching layer — DONE
+  - RedisTemplate + Jackson serialization
+  - Multi-TTL CacheManager (rag 30min, plan 10min, articles 1h)
+  - CacheGuard: penetration/avalanche/breakdown protection
+  - Distributed rate limiter (Redis INCR + Lua script)
 
 ## 9. Resume-facing highlights
 
-- fullstack separation with API contract governance
-- java service design: controller/service/repository layering
-- python data pipeline with scheduling and cleaning
-- postgres schema design + query/index optimization
-- production deployment workflow with rollback strategy
+Architecture & design patterns:
+- Fullstack separation: Java backend + React frontend + Python crawler
+- DDD four-layer architecture (domain / application / infrastructure / interfaces)
+- Strategy pattern for multi-mode chat (default, crisis, scenario)
+- Chain of responsibility for message processing pipeline (redact -> moderate -> RAG -> AI -> parse)
+- Event-driven architecture with Spring ApplicationEvent (async analytics)
+- Cache-Aside pattern for data consistency
+
+Backend engineering:
+- Java 21 + Spring Boot 3.3 + Spring Security + JPA
+- Stateless JWT authentication (anonymous session tokens)
+- Resilience4j circuit breaker + retry with fallback model
+- Redis multi-layer caching with TTL jitter (avalanche protection)
+- Cache penetration guard (null sentinel) + breakdown guard (local lock + double-check)
+- Distributed rate limiting via Redis Lua atomic script
+- Global exception handling with unified error codes + trace ID propagation
+- NDJSON streaming response for real-time AI output
+
+Data pipeline:
+- Python crawler with scheduling, deduplication, and quality scoring
+- PostgreSQL schema design with indexes and unique constraints
+- Local RAG retrieval (keyword + bigram scoring) with Redis-cached results
+
+Infrastructure:
+- Docker Compose one-command deployment (backend + frontend + PostgreSQL + Redis + crawler)
+- Logback MDC trace ID for request-level log correlation
+- Actuator health checks (DB + Redis + circuit breaker status)
+- Graceful degradation: Redis failure does not block core functionality

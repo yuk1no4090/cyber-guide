@@ -1,90 +1,93 @@
 # Development Guide
 
-## 1. Recommended workflow
+## Prerequisites
 
-- develop on Mac
-- run full stack via Docker Compose
-- keep Linux server for integration and production verification
+- Java 21 (OpenJDK or GraalVM)
+- Node.js 18+ and npm
+- Docker (for PostgreSQL and Redis)
+- Python 3.10+ (for crawler, optional)
 
-## 2. Project modules
-
-- `frontend/`: Next.js app
-- `backend/`: Spring Boot service
-- `crawler/`: Python scheduled pipeline
-- `knowledge_base/`: markdown rag corpus
-
-## 3. Local setup
-
-### 3.1 Start all services
+## Quick start
 
 ```bash
-docker compose up --build
-```
+# 1. Start infrastructure
+docker compose up -d postgres redis
 
-### 3.2 Module-by-module development
+# 2. Start backend
+cd backend
+export OPENAI_API_KEY="your-key"
+export OPENAI_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
+export OPENAI_MODEL="glm-4-flash"
+./mvnw spring-boot:run
 
-Frontend:
-
-```bash
+# 3. Start frontend (new terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-Backend:
+Open http://localhost:3000. The frontend rewrites `/api/*` to `localhost:8080`.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | yes | — | AI provider API key |
+| `OPENAI_BASE_URL` | no | `https://open.bigmodel.cn/api/paas/v4` | OpenAI-compatible endpoint |
+| `OPENAI_MODEL` | no | `glm-4-flash` | Primary model |
+| `OPENAI_FALLBACK_MODEL` | no | — | Fallback model (circuit breaker) |
+| `POSTGRES_HOST` | no | `localhost` | PostgreSQL host |
+| `POSTGRES_DB` | no | `cyber_guide` | Database name |
+| `POSTGRES_USER` | no | `cyber_guide` | Database user |
+| `POSTGRES_PASSWORD` | no | `changeme` | Database password |
+| `REDIS_HOST` | no | `localhost` | Redis host |
+| `REDIS_PORT` | no | `6379` | Redis port |
+| `JWT_SECRET` | no | built-in default | JWT signing secret (change in production) |
+
+## Backend development
 
 ```bash
 cd backend
+
+# Compile
+./mvnw compile
+
+# Run
 ./mvnw spring-boot:run
+
+# Package
+./mvnw package -DskipTests
 ```
 
-Crawler:
+Key URLs when running:
+- API: http://localhost:8080/api/
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- Health check: http://localhost:8080/actuator/health
+
+## Frontend development
 
 ```bash
-cd crawler
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python run.py --once
+cd frontend
+npm install
+npm run dev        # dev server on port 3000
+npm run build      # production build
+npm run lint       # ESLint
+npx tsc --noEmit   # type check
 ```
 
-## 4. API contract rules
+## Project structure
 
-- any backend response change must update `docs/API.md`
-- frontend should consume response envelope consistently
-- avoid silent schema drift
-
-## 5. Branch strategy
-
-- `main`: stable branch
-- feature branch naming:
-  - `feature/backend-plan-refactor`
-  - `feature/crawler-source-nowcoder`
-  - `fix/frontend-stream-parser`
-
-## 6. Test strategy
-
-- frontend unit tests (components/hooks)
-- backend unit + integration tests for core endpoints
-- crawler parser tests using saved html fixtures
-
-Suggested commands:
-
-```bash
-# frontend
-cd frontend && npm test
-
-# backend
-cd backend && ./mvnw test
-
-# crawler
-cd crawler && pytest
+```
+cyber-guide/
+├── backend/          Java 21 + Spring Boot 3.3
+├── frontend/         Next.js 15 + React 19 + TypeScript
+├── crawler/          Python scheduled crawler
+├── knowledge_base/   RAG source markdown files
+├── docs/             Project documentation
+├── docker-compose.yml
+└── .env
 ```
 
-## 7. Definition of done
-
-- code compiles and tests pass
-- API docs updated
-- migration scripts included if schema changes
-- runbook impact documented in `docs/DEPLOYMENT.md`
-- no hardcoded secrets in repo
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed backend package structure.

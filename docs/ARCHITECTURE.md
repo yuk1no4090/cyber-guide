@@ -1,122 +1,171 @@
-# Architecture
+# Cyber Guide — Architecture
 
-## 1. System overview
+## System overview
 
-Cyber Guide uses a multi-service architecture designed for interview-ready fullstack practice:
+```
+┌─────────────┐     ┌──────────────────────────────────────────────┐
+│   Browser    │────>│  Frontend (Next.js 15 / React 19 / TS)      │
+│              │<────│  Port 3000, rewrites /api/* to backend       │
+└─────────────┘     └──────────────┬───────────────────────────────┘
+                                   │ HTTP (JWT Bearer)
+                    ┌──────────────▼───────────────────────────────┐
+                    │  Backend (Java 21 / Spring Boot 3.3)         │
+                    │  Port 8080                                   │
+                    │                                              │
+                    │  ┌─ interfaces/rest ── Controllers ──────┐   │
+                    │  │  TraceIdFilter → JwtFilter → Security │   │
+                    │  └───────────────┬───────────────────────┘   │
+                    │                  │                            │
+                    │  ┌─ application ─▼───────────────────────┐   │
+                    │  │  MessagePipeline (chain of resp.)     │   │
+                    │  │  ChatStrategyFactory (strategy)       │   │
+                    │  │  Spring Events (async analytics)      │   │
+                    │  └───────────────┬───────────────────────┘   │
+                    │                  │                            │
+                    │  ┌─ domain ──────▼───────────────────────┐   │
+                    │  │  ChatSession, ChatResult, QualityScore│   │
+                    │  │  PlanDomainService, ErrorCode          │   │
+                    │  └───────────────┬───────────────────────┘   │
+                    │                  │                            │
+                    │  ┌─ infrastructure ▼─────────────────────┐   │
+                    │  │  AiClient (OpenAI-compatible)         │   │
+                    │  │  RagService (keyword + bigram)         │   │
+                    │  │  Redis (cache + rate limit)            │   │
+                    │  │  JPA Repositories (PostgreSQL)         │   │
+                    │  │  Resilience4j (circuit breaker)        │   │
+                    │  └───────────────────────────────────────┘   │
+                    └──────────┬──────────────┬────────────────────┘
+                               │              │
+                    ┌──────────▼──┐  ┌────────▼────────┐
+                    │ PostgreSQL  │  │  Redis 7         │
+                    │ (JPA/DDL)   │  │  (cache + rate)  │
+                    └─────────────┘  └─────────────────┘
 
-- `frontend` (Next.js 15): UI and user interaction
-- `backend` (Spring Boot 3): core business APIs
-- `crawler` (Python): scheduled ingestion pipeline
-- `postgres` (PostgreSQL 16): unified data storage
-
-## 2. High-level diagram
-
-```mermaid
-graph TB
-  subgraph fe [Frontend]
-    nextApp[NextJsApp]
-    chatPage[ChatPage]
-    planPage[PlanPage]
-    insightsPage[InsightsPage]
-  end
-
-  subgraph be [Backend]
-    apiGateway[RestControllers]
-    chatService[ChatService]
-    planService[PlanService]
-    feedbackService[FeedbackService]
-    ragService[RagService]
-    crawlerReadService[CrawlerReadService]
-  end
-
-  subgraph data [Data]
-    postgresDb[PostgreSQL]
-    kbFiles[KnowledgeBaseFiles]
-  end
-
-  subgraph crawlerSystem [CrawlerSystem]
-    scheduler[APScheduler]
-    spiderEngine[ScrapySpiders]
-    cleaner[DataCleaner]
-  end
-
-  nextApp --> apiGateway
-  apiGateway --> chatService
-  apiGateway --> planService
-  apiGateway --> feedbackService
-  apiGateway --> crawlerReadService
-  chatService --> ragService
-  ragService --> kbFiles
-  planService --> postgresDb
-  feedbackService --> postgresDb
-  crawlerReadService --> postgresDb
-  scheduler --> spiderEngine
-  spiderEngine --> cleaner
-  cleaner --> postgresDb
+                    ┌──────────────────────────────────┐
+                    │  Crawler (Python)                 │
+                    │  Scheduled, writes to PostgreSQL  │
+                    └──────────────────────────────────┘
 ```
 
-## 3. Request flow examples
+## Backend package structure (DDD four-layer)
 
-### 3.1 Chat request
+```
+com.cyberguide/
+├── CyberGuideApplication.java          # @SpringBootApplication + @EnableAsync
+│
+├── domain/                             # Domain layer — entities, value objects, domain services
+│   ├── chat/        ChatSession, ChatResult
+│   ├── plan/        PlanDomainService
+│   ├── feedback/    QualityScore
+│   └── shared/      ErrorCode, BizException
+│
+├── service/                            # Application layer — orchestration
+│   ├── ChatService                     # Uses MessagePipeline for sync, direct AI for stream
+│   ├── PlanService                     # Cache-Aside with CacheGuard
+│   ├── FeedbackService                 # Publishes FeedbackReceivedEvent
+│   ├── ModerationService               # Crisis keyword detection
+│   ├── RedactService                   # PII redaction (phone, email, ID card)
+│   ├── strategy/                       # Strategy pattern
+│   │   ├── ChatStrategy (interface)
+│   │   ├── DefaultChatStrategy
+│   │   ├── CrisisChatStrategy
+│   │   ├── ScenarioChatStrategy
+│   │   └── ChatStrategyFactory
+│   └── pipeline/                       # Chain of responsibility
+│       ├── MessageHandler (interface)
+│       ├── MessageContext
+│       ├── MessagePipeline             # Orchestrator
+│       ├── RedactHandler        (order 10)
+│       ├── ModerationHandler    (order 20)
+│       ├── RagEnrichHandler     (order 30)
+│       ├── AiCompletionHandler  (order 40)
+│       └── ResponseParseHandler (order 50)
+│
+├── controller/                         # Interface layer — REST controllers
+│   ├── ChatController                  # @RateLimiter via RedisRateLimiter
+│   ├── PlanController
+│   ├── FeedbackController
+│   ├── CrawlerController               # @Cacheable("articles")
+│   └── ApiResponse                     # Unified response envelope
+│
+├── model/                              # JPA entities
+│   ├── PlanDay, Feedback, CrawledArticle
+│
+├── repository/                         # Spring Data JPA
+│   ├── PlanDayRepository, FeedbackRepository, CrawledArticleRepository
+│
+├── ai/              AiClient           # @CircuitBreaker + @Retry + fallback model
+├── rag/             RagService         # CacheGuard-backed retrieval
+├── config/          AiProperties, WebConfig
+├── security/        JwtTokenProvider, JwtAuthenticationFilter, SecurityConfig, AuthController
+├── filter/          TraceIdFilter      # MDC traceId + X-Trace-Id header
+├── exception/       ErrorCode, BizException, AiServiceException, RateLimitException, GlobalExceptionHandler
+├── event/           ChatCompletedEvent, FeedbackReceivedEvent, CrisisDetectedEvent, EventListeners
+└── infrastructure/
+    └── cache/       RedisConfig, CacheGuard, RedisRateLimiter
+```
 
-1. frontend sends `POST /api/chat`
-2. backend validates request and rate limits
-3. moderation layer checks crisis keywords
-4. rag service retrieves evidence from local markdown and db
-5. ai client calls OpenAI-compatible endpoint
-6. backend streams response chunks to frontend
+## Design patterns
 
-### 3.2 Plan generation
+### Strategy pattern — ChatStrategy
 
-1. frontend sends `POST /api/plan/generate`
-2. backend builds task prompt from recent context
-3. ai returns 7 tasks, backend validates length and format
-4. fallback tasks are used when ai output is invalid
-5. tasks upserted into `study_plans` and `plan_days`
+Different chat modes (default, crisis, scenario) each have their own strategy for building system prompts and parsing AI responses. `ChatStrategyFactory` resolves the correct strategy by mode name at runtime.
 
-### 3.3 Crawler ingestion
+### Chain of responsibility — MessagePipeline
 
-1. scheduler triggers source-specific spider
-2. spider fetches and parses public pages
-3. cleaner normalizes content and removes duplicates
-4. records inserted into `crawled_articles`
-5. backend reads latest records for frontend insights
+Sync chat requests pass through a pipeline of 5 handlers in order. Each handler can read/write the shared `MessageContext` or abort the chain (e.g. crisis detection stops further processing).
 
-## 4. Backend module boundaries
+### Event-driven — Spring ApplicationEvent
 
-- `controller`: request/response contracts only
-- `service`: business workflows and orchestration
-- `repository`: database access
-- `ai`: model invocation and retry strategy
-- `rag`: retrieval, scoring, evidence formatting
-- `security`: rate limiting and request validation
+After chat completion, feedback submission, or crisis detection, events are published and consumed asynchronously by `EventListeners`. This decouples analytics from the request path.
 
-## 5. Data boundaries
+### Cache-Aside — Redis caching
 
-- chat records, plans, feedback, crawler data all in PostgreSQL
-- local knowledge base remains in `knowledge_base/skills/*.md`
-- pii redaction happens before persistence
+Read path: check Redis -> miss -> load from DB/compute -> write Redis with jittered TTL.
+Write path: update DB -> evict Redis cache.
+Implemented via `CacheGuard` with three protections: penetration (null sentinel), avalanche (TTL jitter ±20%), breakdown (local lock + double-check).
 
-## 6. Runtime and environment strategy
+## Request flow (chat)
 
-- development:
-  - Mac (Apple Silicon), Docker Compose for all services
-- production:
-  - Linux server with Docker Compose + Nginx reverse proxy
-  - crawler runs as always-on scheduled container
+```
+Browser
+  → POST /api/chat (JWT in Authorization header)
+  → TraceIdFilter (assigns traceId to MDC)
+  → JwtAuthenticationFilter (validates token, sets SecurityContext)
+  → ChatController
+    → RedisRateLimiter.allowChat() — distributed rate check
+    → ChatService.chat()
+      → MessagePipeline.execute()
+        → RedactHandler: PII redaction
+        → ModerationHandler: crisis keyword check (may abort)
+        → RagEnrichHandler: Redis-cached knowledge retrieval
+        → AiCompletionHandler: strategy.buildSystemPrompt() + aiClient.chat()
+          → @CircuitBreaker + @Retry (fallback to backup model)
+        → ResponseParseHandler: strategy.process()
+      → publish ChatCompletedEvent (async)
+    → return ChatResponse
+  → GlobalExceptionHandler (catches any BizException/unexpected error)
+  → JSON response with X-Trace-Id header
+```
 
-## 7. Observability
+## Data stores
 
-- structured logs with request id
-- health check endpoints:
-  - backend: `/actuator/health`
-  - frontend: `/api/health` (optional)
-- optional metrics export for latency/error tracking
+| Store | Purpose | TTL / retention |
+|---|---|---|
+| PostgreSQL | plan_days, feedback, crawled_articles | permanent |
+| Redis `rag-evidence` | RAG retrieval results | 30 min |
+| Redis `plan-session` | plan fetch results | 10 min |
+| Redis `articles` | crawler article lists | 60 min |
+| Redis `rate:chat:*` | distributed rate limit counters | 60 sec |
 
-## 8. Resilience strategy
+## Resilience
 
-- ai timeout and retry bounds
-- fallback models and fallback plan tasks
-- graceful degradation:
-  - chat can work without crawler data
-  - plan endpoints return explicit error codes
+| Mechanism | Scope | Config |
+|---|---|---|
+| Circuit breaker | AI calls | window=10, threshold=50%, open=30s |
+| Retry | AI calls | max 2 attempts, 1s delay |
+| Fallback model | AI calls | configurable via `OPENAI_FALLBACK_MODEL` |
+| Rate limiter | chat endpoint | 15 req/min per session (Redis) |
+| Cache degradation | all Redis usage | Redis failure → fall through to DB |
+| Null sentinel | CacheGuard | prevents cache penetration, TTL 2min |
+| TTL jitter | CacheGuard | ±20% prevents cache avalanche |

@@ -1,13 +1,23 @@
 'use client';
 
-export function TypingIndicator() {
+import React from 'react';
+
+export default function TypingIndicator() {
   return (
-    <div className="flex justify-start fade-in-up">
-      <div className="bg-[var(--color-bg-card)] px-4 py-3 rounded-2xl rounded-bl-md shadow-sm border border-[var(--color-border)]">
-        <div className="flex gap-1.5 items-center">
-          <span className="typing-dot w-2 h-2 rounded-full bg-[var(--color-text-muted)]" />
-          <span className="typing-dot w-2 h-2 rounded-full bg-[var(--color-text-muted)]" style={{ animationDelay: '0.15s' }} />
-          <span className="typing-dot w-2 h-2 rounded-full bg-[var(--color-text-muted)]" style={{ animationDelay: '0.3s' }} />
+    <div className="message-bubble flex justify-start mb-3" role="status" aria-live="polite" aria-label="小舟正在输入">
+      <div className="ai-bubble rounded-2xl rounded-bl-sm px-3.5 py-2.5 sm:px-4 sm:py-3">
+        {/* AI 标识 */}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="w-4 h-4 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-[9px]">
+            🛶
+          </span>
+          <span className="text-[11px] text-sky-500 font-medium">小舟</span>
+        </div>
+        {/* 跳动的点 */}
+        <div className="flex items-center gap-1 py-0.5 px-1">
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
+          <div className="typing-dot w-[6px] h-[6px] bg-sky-400 rounded-full" />
         </div>
       </div>
     </div>
