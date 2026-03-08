@@ -1,95 +1,137 @@
-# Cyber Guide - 产品需求文档 (PRD)
+# Cyber Guide PRD (Resume-Focused Rebuild)
 
-## 1. 产品概述
+## 1. Product positioning
 
-**Cyber Guide** 是一款基于 AI 的心理支持聊天 Web 应用，旨在为用户提供情感支持和心理疏导。本产品**不提供医学诊断或治疗**，仅作为心理健康支持工具。
+Cyber Guide is an AI companion product for students and early-career professionals.
+The product focus is study planning, career planning, and emotional support during uncertainty.
 
-### 1.1 产品愿景
-构建一个安全、温暖、可信赖的 AI 心理支持伙伴，帮助用户在情绪低落时获得即时的倾听和支持。
+This version is rebuilt with a resume-oriented engineering target:
 
-### 1.2 目标用户
-- 需要情感倾诉的普通用户
-- 轻度焦虑或压力困扰的人群
-- 希望学习情绪管理技巧的用户
+- mainstream fullstack architecture
+- clear domain boundaries
+- real data pipeline (crawler -> db -> rag -> chat)
+- deployable system with runbooks
 
-### 1.3 非目标用户
-- 需要专业心理治疗的患者（应引导至专业机构）
-- 处于紧急危机状态的用户（提供危机干预资源）
+## 2. Goals and non-goals
 
-## 2. 核心功能
+### 2.1 Goals
 
-### 2.1 聊天界面
-| 功能 | 描述 | 优先级 |
-|-----|------|-------|
-| 消息气泡 | 区分用户/AI 消息，支持 Markdown 渲染 | P0 |
-| 输入框 | 多行文本输入，支持 Enter 发送 | P0 |
-| 发送按钮 | 明确的视觉反馈 | P0 |
-| 隐私开关 | "允许匿名记录用于改进" 开关，默认关闭 | P0 |
-| 打字指示器 | AI 响应时显示"正在输入..." | P1 |
+- Provide useful planning support through multi-turn chat
+- Generate and track 7-day action plans
+- Continuously ingest public planning-related content via crawler
+- Ground model output with local RAG evidence
+- Deliver a production-style architecture for interview discussion
 
-### 2.2 安全机制
-| 功能 | 描述 | 优先级 |
-|-----|------|-------|
-| 内容审核 | 使用 OpenAI Moderation API 检测有害内容 | P0 |
-| 危机检测 | 识别自伤/他伤/危机关键词 | P0 |
-| 危机响应 | 返回危机资源模板，不调用生成模型 | P0 |
-| 数据脱敏 | 替换手机号/邮箱/姓名等敏感信息 | P0 |
+### 2.2 Non-goals
 
-### 2.3 RAG 知识库
-| 功能 | 描述 | 优先级 |
-|-----|------|-------|
-| 知识库导入 | 将技能卡 Markdown 切片并生成 embedding | P0 |
-| 语义检索 | 根据用户查询检索相关知识片段 | P0 |
-| 上下文增强 | 将检索结果作为 evidence 注入 prompt | P0 |
+- Medical diagnosis or clinical treatment guidance
+- Unbounded social-media crawling of private data
+- Fully autonomous recommendations without human-readable evidence
 
-### 2.4 数据记录
-| 功能 | 描述 | 优先级 |
-|-----|------|-------|
-| 可选记录 | 仅在用户同意时记录对话 | P0 |
-| 案例卡片 | 生成脱敏后的对话摘要 | P1 |
-| 本地存储 | 使用 JSONL 格式本地存储 | P0 |
+## 3. Target users
 
-## 3. 技术架构
+- CS students (undergrad/master) with direction anxiety
+- New graduates preparing for internship/job search
+- Early-career professionals considering next-step transitions
 
-```
-┌─────────────────┐     ┌─────────────────┐
-│   Next.js App   │────▶│   /api/chat     │
-│   (Frontend)    │     │   (Backend)     │
-└─────────────────┘     └────────┬────────┘
-                                 │
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-              ┌─────────┐  ┌─────────┐  ┌─────────┐
-              │Moderation│  │ RAG     │  │ OpenAI  │
-              │  API    │  │ Vectra  │  │ Chat    │
-              └─────────┘  └─────────┘  └─────────┘
-```
+## 4. Core user journeys
 
-## 4. 非功能需求
+### 4.1 Journey A: chat guidance
 
-- **响应时间**: 首字节 < 2s
-- **可用性**: 99.5% uptime
-- **安全性**: 所有 API 调用使用 HTTPS
-- **隐私**: 严格遵循最小化数据收集原则
+1. user opens chat
+2. user describes confusion (study/job/skills)
+3. system performs crisis check and context retrieval
+4. model returns response + suggestion chips
+5. user continues with follow-up questions
 
-## 5. 版本规划
+Success metric:
 
-### v0.1 (MVP)
-- [x] 基础聊天界面
-- [x] OpenAI 集成
-- [x] 内容审核与危机检测
-- [x] 基础 RAG 检索
-- [x] 可选匿名记录
+- median chat turn count >= 5
+- user feedback average >= 7/10
 
-### v0.2 (计划中)
-- [ ] 多轮对话优化
-- [ ] 情绪追踪仪表板
-- [ ] 更丰富的技能卡库
+### 4.2 Journey B: 7-day plan
 
-## 6. 成功指标
+1. user asks for a plan
+2. system generates 7-day tasks from context
+3. user marks tasks done/skipped
+4. user can regenerate a specific day
+5. system keeps progression state per session
 
-| 指标 | 目标值 |
-|-----|-------|
-| 危机检测准确率 | > 95% |
-| 用户满意度 | > 4.0/5.0 |
-| 平均对话轮次 | > 5 轮 |
+Success metric:
+
+- plan generation success rate >= 98%
+- day status update success rate >= 99%
+
+### 4.3 Journey C: crawler-informed suggestions
+
+1. scheduled crawler fetches public articles/posts
+2. data cleaner deduplicates and scores quality
+3. backend exposes curated records to frontend
+4. user sees "recent practical suggestions" panel
+5. chat/rag can cite crawler-backed evidence
+
+Success metric:
+
+- daily crawl job success rate >= 95%
+- duplicate ratio < 20%
+
+## 5. Functional requirements
+
+### 5.1 Frontend (Next.js 15)
+
+- Chat UI with stream rendering and suggestion chips
+- Profile mode and report generation
+- 7-day plan card with status actions
+- Feedback submission and quality display
+- Crawler insights page (latest planning suggestions)
+
+### 5.2 Backend (Spring Boot)
+
+- `POST /api/chat` streaming and JSON fallback
+- `POST /api/feedback` with pii redaction and scoring
+- plan routes:
+  - `POST /api/plan/generate`
+  - `GET /api/plan/fetch`
+  - `POST /api/plan/update`
+  - `POST /api/plan/regenerate-day`
+- `GET /api/crawler/articles` for frontend insights
+
+### 5.3 Crawler (Python)
+
+- Source config and scheduling
+- Public pages fetch + parse + normalize
+- Duplicate detection and persistence
+- Structured output to PostgreSQL
+
+## 6. Non-functional requirements
+
+- Availability target: 99.5%
+- p95 backend latency:
+  - chat first chunk < 3s
+  - non-chat apis < 600ms
+- all services containerized for one-command startup
+- sensitive fields never logged in plain text
+
+## 7. Compliance and safety
+
+- crisis keyword detection and emergency handoff response
+- privacy-by-default:
+  - metrics and optional logs are opt-in
+  - pii redaction before persistence
+- crawler only collects public pages and honors robots policies when applicable
+
+## 8. Milestones
+
+- Phase 0: docs and contracts
+- Phase 1: backend service and db migration
+- Phase 2: frontend migration to separated backend
+- Phase 3: crawler module and insights integration
+- Phase 4: dockerized deployment and ci hardening
+
+## 9. Resume-facing highlights
+
+- fullstack separation with API contract governance
+- java service design: controller/service/repository layering
+- python data pipeline with scheduling and cleaning
+- postgres schema design + query/index optimization
+- production deployment workflow with rollback strategy

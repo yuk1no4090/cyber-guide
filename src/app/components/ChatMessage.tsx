@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -8,12 +9,12 @@ interface ChatMessageProps {
   isCrisis?: boolean;
 }
 
-export default function ChatMessage({ role, content, isCrisis }: ChatMessageProps) {
+const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }: ChatMessageProps) {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
 
-  const formatContent = (text: string) => {
-    let formatted = text;
+  const formattedHtml = useMemo(() => {
+    let formatted = content;
 
     formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-slate-800 mt-2 mb-1">$1</div>');
     formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-slate-800 mt-3 mb-1">$1</div>');
@@ -25,8 +26,11 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
 
-    return formatted;
-  };
+    return DOMPurify.sanitize(formatted, {
+      ALLOWED_TAGS: ['div', 'span', 'strong', 'code', 'br'],
+      ALLOWED_ATTR: ['class'],
+    });
+  }, [content]);
 
   const handleCopy = async () => {
     try {
@@ -44,7 +48,7 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
         <div className="user-bubble max-w-[82%] sm:max-w-[65%] rounded-2xl rounded-br-sm px-3.5 py-2.5 sm:px-4 sm:py-3 overflow-hidden">
           <div
             className="text-[14px] sm:text-[15px] leading-relaxed text-white/95 break-words overflow-wrap-anywhere"
-            dangerouslySetInnerHTML={{ __html: formatContent(content) }}
+            dangerouslySetInnerHTML={{ __html: formattedHtml }}
           />
         </div>
       </div>
@@ -93,9 +97,11 @@ export default function ChatMessage({ role, content, isCrisis }: ChatMessageProp
         {/* 消息内容 */}
         <div
           className="text-[14px] sm:text-[15px] leading-[1.7] text-slate-700 break-words overflow-wrap-anywhere"
-          dangerouslySetInnerHTML={{ __html: formatContent(content) }}
+          dangerouslySetInnerHTML={{ __html: formattedHtml }}
         />
       </div>
     </div>
   );
-}
+});
+
+export default ChatMessage;

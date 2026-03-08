@@ -1,5 +1,22 @@
 import type { Metadata, Viewport } from 'next';
+import { Nunito, Lexend } from 'next/font/google';
+import ErrorBoundary from './components/ErrorBoundary';
 import './globals.css';
+
+const nunito = Nunito({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  style: ['normal', 'italic'],
+  display: 'swap',
+  variable: '--font-nunito',
+});
+
+const lexend = Lexend({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-lexend',
+});
 
 export const metadata: Metadata = {
   title: '小舟 · Cyber Guide',
@@ -16,8 +33,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
   themeColor: '#f0f7ff',
 };
@@ -28,9 +43,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" className={`${nunito.variable} ${lexend.variable}`}>
       <body className="bg-gradient-mesh antialiased">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );

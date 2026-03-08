@@ -1,0 +1,57 @@
+server:
+  port: ${BACKEND_PORT:8080}
+
+spring:
+  application:
+    name: cyber-guide-backend
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:cyber_guide}
+    username: ${POSTGRES_USER:cyber_guide}
+    password: ${POSTGRES_PASSWORD:changeme}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+
+# AI configuration
+ai:
+  api-key: ${OPENAI_API_KEY:}
+  base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+  model: ${OPENAI_MODEL:glm-4.6}
+  fallback-model: ${OPENAI_FALLBACK_MODEL:}
+  timeout-ms: ${OPENAI_TIMEOUT_MS:25000}
+  max-retries: ${OPENAI_MAX_RETRIES:0}
+
+# RAG configuration
+rag:
+  knowledge-base-path: ${RAG_KNOWLEDGE_BASE_PATH:../knowledge_base/skills}
+  max-evidence-chunk-length: 480
+  default-top-k: 2
+
+# Rate limit
+rate-limit:
+  chat-per-minute: 15
+  feedback-per-minute: 5
+  plan-generate-per-minute: 5
+  plan-mutate-per-minute: 20
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# SpringDoc
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

@@ -273,10 +273,16 @@ export async function regenerateSingleDayTask(input: {
   }
 }
 
+// UUID v4 格式 + 兼容旧格式 session-{timestamp}-{hex}
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEGACY_SESSION_RE = /^session-\d{13,}-[0-9a-f]{6,13}$/;
+
 export function parseSessionId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const sessionId = value.trim();
   if (!sessionId || sessionId.length > 128) return null;
+  // 严格校验格式：必须是 UUID v4 或旧版 session-{ts}-{hex}
+  if (!UUID_V4_RE.test(sessionId) && !LEGACY_SESSION_RE.test(sessionId)) return null;
   return sessionId;
 }
 

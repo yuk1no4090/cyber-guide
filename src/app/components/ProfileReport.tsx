@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface ProfileReportProps {
   content: string;
@@ -8,11 +9,11 @@ interface ProfileReportProps {
   isOtherMode?: boolean;
 }
 
-export default function ProfileReport({ content, onClose, isOtherMode }: ProfileReportProps) {
+const ProfileReport = React.memo(function ProfileReport({ content, onClose, isOtherMode }: ProfileReportProps) {
   const [copied, setCopied] = useState(false);
 
-  const formatReport = (text: string) => {
-    let formatted = text;
+  const formattedHtml = useMemo(() => {
+    let formatted = content;
     formatted = formatted.replace(/^### (.+)/gm, '<h3 class="text-base font-semibold text-slate-800 mt-4 mb-2">$1</h3>');
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-800 font-semibold">$1</strong>');
     formatted = formatted.replace(/\| (.+?) \| (.+?) \|/g, (_, col1, col2) => {
@@ -23,8 +24,12 @@ export default function ProfileReport({ content, onClose, isOtherMode }: Profile
     formatted = formatted.replace(/^- (.+)/gm, '<div class="flex gap-1.5 items-start text-[13px] mb-1"><span class="text-sky-500 mt-0.5">•</span><span class="text-slate-700">$1</span></div>');
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
-    return formatted;
-  };
+
+    return DOMPurify.sanitize(formatted, {
+      ALLOWED_TAGS: ['h3', 'div', 'span', 'strong', 'br'],
+      ALLOWED_ATTR: ['class'],
+    });
+  }, [content]);
 
   const handleCopy = async () => {
     try {
@@ -63,10 +68,12 @@ export default function ProfileReport({ content, onClose, isOtherMode }: Profile
         <div className="ai-bubble rounded-t-none border-t-0 px-4 py-3">
           <div
             className="text-[13px] sm:text-[14px] leading-[1.7] text-slate-700 break-words overflow-wrap-anywhere"
-            dangerouslySetInnerHTML={{ __html: formatReport(content) }}
+            dangerouslySetInnerHTML={{ __html: formattedHtml }}
           />
         </div>
       </div>
     </div>
   );
-}
+});
+
+export default ProfileReport;

@@ -33,22 +33,44 @@ function encodeLine(obj: NDJSONLine): Uint8Array {
 type ChatStream = Stream<OpenAI.Chat.Completions.ChatCompletionChunk>;
 
 /**
+ * 给异步迭代器加 chunk 级超时：如果两个 chunk 之间超过 timeoutMs 没有数据，抛出超时错误。
+ */
+async function* withChunkTimeout<T>(
+  iterable: AsyncIterable<T>,
+  timeoutMs: number,
+): AsyncGenerator<T> {
+  const iterator = iterable[Symbol.asyncIterator]();
+  while (true) {
+    const result = await Promise.race([
+      iterator.next(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Stream chunk timeout after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ]);
+    if (result.done) break;
+    yield result.value;
+  }
+}
+
+/**
  * Pipe an OpenAI streaming completion into a NDJSON ReadableStream.
  *
  * @param stream  - OpenAI chat completion stream (stream: true)
  * @param buildMeta - Called with full accumulated text; returns the meta payload to send as last line
  * @param requestId - For logging
+ * @param chunkTimeoutMs - Max ms to wait between chunks before aborting (default 30s)
  */
 export function openaiStreamToNDJSON(
   stream: ChatStream,
   buildMeta: (fullText: string) => Omit<NDJSONMeta, 't'> | Partial<Omit<NDJSONMeta, 't'>>,
   requestId: string,
+  chunkTimeoutMs = 30_000,
 ): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       let accumulated = '';
       try {
-        for await (const chunk of stream) {
+        for await (const chunk of withChunkTimeout(stream, chunkTimeoutMs)) {
           const delta = chunk.choices[0]?.delta?.content;
           if (delta) {
             accumulated += delta;

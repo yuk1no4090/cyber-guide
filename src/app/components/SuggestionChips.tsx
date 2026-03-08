@@ -2,6 +2,16 @@
 
 import React from 'react';
 
+const ACTION_LABELS: Record<string, string> = {
+  '__action:profile_self': '🙋 了解我自己',
+  '__action:profile_other': '👥 看懂身边的人',
+  '__action:generate_report': '✨ 生成画像',
+};
+
+function displayText(text: string): string {
+  return ACTION_LABELS[text] ?? text;
+}
+
 interface SuggestionChipsProps {
   suggestions: string[];
   onSelect: (text: string) => void;
@@ -18,7 +28,7 @@ export default function SuggestionChips({ suggestions, onSelect, disabled }: Sug
           key={index}
           onClick={() => onSelect(text)}
           disabled={disabled}
-          aria-label={`发送：${text}`}
+          aria-label={`发送：${displayText(text)}`}
           className="
             suggestion-chip
             px-3 py-1.5 sm:px-3.5 sm:py-2
@@ -34,7 +44,7 @@ export default function SuggestionChips({ suggestions, onSelect, disabled }: Sug
             whitespace-nowrap
           "
         >
-          {text}
+          {displayText(text)}
         </button>
       ))}
     </div>

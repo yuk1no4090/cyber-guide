@@ -51,11 +51,13 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
 
         <div className="ai-bubble rounded-t-none border-t-0 px-4 py-4 space-y-4">
           <div>
-            <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center justify-between gap-1" role="radiogroup" aria-label="评分（1到10分）">
               {[1,2,3,4,5,6,7,8,9,10].map(n => (
                 <button
                   key={n}
                   onClick={() => setRating(n)}
+                  aria-label={`${n} 分`}
+                  aria-pressed={rating === n}
                   className={`
                     w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[12px] sm:text-[13px] font-medium transition-all duration-150
                     ${rating === n
@@ -80,6 +82,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
             value={feedback}
             onChange={e => setFeedback(e.target.value)}
             placeholder="一句话反馈（选填）"
+            aria-label="一句话反馈（选填）"
             className="w-full px-3 py-2 bg-slate-50 text-slate-700 text-[13px] border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:border-sky-300"
             maxLength={200}
           />

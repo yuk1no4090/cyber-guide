@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import type { SessionMetricsRow } from '@/lib/supabase';
 import { redact } from '@/lib/redact';
-import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -30,8 +30,16 @@ function validateMetricsBody(body: unknown): SessionMetricsRow {
 
   const raw = body as MetricsRequest;
 
+  const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const LEGACY_SESSION_RE = /^session-\d{13,}-[0-9a-f]{6,13}$/;
+
   if (typeof raw.session_id !== 'string' || !raw.session_id.trim() || raw.session_id.trim().length > MAX_SESSION_ID_LENGTH) {
     throw new ValidationError('session_id 无效');
+  }
+
+  const trimmedSessionId = raw.session_id.trim();
+  if (!UUID_V4_RE.test(trimmedSessionId) && !LEGACY_SESSION_RE.test(trimmedSessionId)) {
+    throw new ValidationError('session_id 格式无效');
   }
 
   const mode = typeof raw.mode === 'string' ? raw.mode.trim() : 'chat';
@@ -81,7 +89,7 @@ export async function POST(request: NextRequest) {
   try {
     console.info(`[${requestId}] metrics.post start`);
     const clientIP = getClientIP(request);
-    const rateLimit = checkRateLimit(`metrics:${clientIP}`, { windowMs: 60_000, maxRequests: 10 });
+    const rateLimit = checkRateLimit(`metrics:${clientIP}`, RATE_LIMITS.metrics);
     if (!rateLimit.allowed) {
       console.warn(`[${requestId}] metrics.post rate_limited`);
       return NextResponse.json({ error: '请求太频繁' }, { status: 429 });

@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cyber_guide}
+      POSTGRES_USER: ${POSTGRES_USER:-cyber_guide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cyber_guide}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-cyber_guide}
+      POSTGRES_USER: ${POSTGRES_USER:-cyber_guide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      OPENAI_MODEL: ${OPENAI_MODEL:-glm-4.6}
+      OPENAI_FALLBACK_MODEL: ${OPENAI_FALLBACK_MODEL:-}
+      OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-25000}
+      RAG_KNOWLEDGE_BASE_PATH: /app/knowledge_base
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ./knowledge_base:/app/knowledge_base:ro
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://backend:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  crawler:
+    build: ./crawler
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-cyber_guide}
+      POSTGRES_USER: ${POSTGRES_USER:-cyber_guide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      CRAWLER_ENABLED: ${CRAWLER_ENABLED:-true}
+      CRAWLER_INTERVAL_MINUTES: ${CRAWLER_INTERVAL_MINUTES:-360}
+      CRAWLER_MAX_PAGES_PER_SOURCE: ${CRAWLER_MAX_PAGES_PER_SOURCE:-3}
+
+volumes:
+  pgdata:

@@ -1,9 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 服务端写入使用 service role key（不暴露给客户端）
+// 如果未配置 SUPABASE_SERVICE_ROLE_KEY，降级使用 anon key 并打印警告
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('[SECURITY] SUPABASE_SERVICE_ROLE_KEY 未配置，服务端正在使用 anon key，请尽快设置');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface CaseCardRow {
   id?: string;

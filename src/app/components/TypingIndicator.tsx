@@ -4,7 +4,7 @@ import React from 'react';
 
 export default function TypingIndicator() {
   return (
-    <div className="message-bubble flex justify-start mb-3">
+    <div className="message-bubble flex justify-start mb-3" role="status" aria-live="polite" aria-label="小舟正在输入">
       <div className="ai-bubble rounded-2xl rounded-bl-sm px-3.5 py-2.5 sm:px-4 sm:py-3">
         {/* AI 标识 */}
         <div className="flex items-center gap-1.5 mb-1.5">

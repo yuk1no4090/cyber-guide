@@ -9,6 +9,10 @@ import ProfileReport from './components/ProfileReport';
 import FeedbackCard from './components/FeedbackCard';
 import RecapCard from './components/RecapCard';
 import ScenarioPicker from './components/ScenarioPicker';
+import PlanCard from './components/PlanCard';
+import { useSession } from './hooks/useSession';
+import { usePlan, buildPlanContextFromChat } from './hooks/usePlan';
+import type { PlanItem } from './hooks/usePlan';
 import { analytics } from '@/lib/analytics';
 import { pickGroup, pickOne, pickN } from '@/lib/random';
 import type { Recap } from '@/lib/recap';
@@ -25,16 +29,6 @@ interface Message {
 }
 
 type PlanStatus = 'todo' | 'done' | 'skipped';
-
-interface PlanItem {
-  id?: string;
-  session_id: string;
-  day_index: number;
-  task_text: string;
-  status: PlanStatus;
-  created_at?: string;
-  updated_at?: string;
-}
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -71,12 +65,6 @@ interface NDJSONErrorLine {
 type NDJSONLine = NDJSONDeltaLine | NDJSONMetaLine | NDJSONErrorLine;
 
 const STORAGE_KEY = 'cyber-guide-chat';
-const SESSION_KEY = 'cyber-guide-session-id';
-const DATA_OPT_IN_KEY = 'cyber-guide-data-opt-in';
-const PLAN_CACHE_KEY_PREFIX = 'cyber-guide-plan-cache:';
-const PLAN_CONTEXT_MAX_CHARS = 500;
-const PLAN_FETCH_TIMEOUT_MS = 6_000;
-const PLAN_GENERATE_TIMEOUT_MS = 12_000;
 
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
@@ -109,9 +97,19 @@ const PROFILE_CHOOSE: Message = {
   content: '想分析谁？我来帮你看看 🛶',
 };
 
+// ===== Action 标识符（suggestion chip 用前缀触发特定行为） =====
+const ACTION_PREFIX = '__action:';
+const ACTION_PROFILE_SELF = `${ACTION_PREFIX}profile_self`;
+const ACTION_PROFILE_OTHER = `${ACTION_PREFIX}profile_other`;
+const ACTION_GENERATE_REPORT = `${ACTION_PREFIX}generate_report`;
+
+function isAction(text: string): boolean {
+  return text.startsWith(ACTION_PREFIX);
+}
+
 const PROFILE_CHOOSE_SUGGESTIONS = [
-  '🙋 了解我自己',
-  '👥 看懂身边的人',
+  ACTION_PROFILE_SELF,
+  ACTION_PROFILE_OTHER,
 ];
 
 const PROFILE_SELF_WELCOME: Message = {
@@ -182,34 +180,6 @@ function clearStorage() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
 }
 
-function loadDataOptIn(): boolean {
-  try {
-    return localStorage.getItem(DATA_OPT_IN_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function saveDataOptIn(value: boolean) {
-  try {
-    localStorage.setItem(DATA_OPT_IN_KEY, value ? 'true' : 'false');
-  } catch {}
-}
-
-function getOrCreateSessionId(): string {
-  try {
-    const existing = localStorage.getItem(SESSION_KEY);
-    if (existing && existing.length <= 128) return existing;
-    const generated = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    localStorage.setItem(SESSION_KEY, generated);
-    return generated;
-  } catch {
-    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-}
-
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -226,49 +196,6 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
-}
-
-function buildPlanContextFromChat(messages: Message[]): string {
-  const userMessages = messages
-    .filter((message) => message.role === 'user')
-    .map((message) => message.content.trim())
-    .filter(Boolean);
-
-  const joined = userMessages.slice(-4).join('\n');
-  if (!joined) return '';
-  return joined.length > PLAN_CONTEXT_MAX_CHARS ? joined.slice(-PLAN_CONTEXT_MAX_CHARS) : joined;
-}
-
-function loadPlanCache(sessionId: string): { plans: PlanItem[]; today_index: number; today_plan: PlanItem | null } | null {
-  try {
-    const raw = localStorage.getItem(`${PLAN_CACHE_KEY_PREFIX}${sessionId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const plans = (parsed as { plans?: unknown }).plans;
-    const todayIndex = (parsed as { today_index?: unknown }).today_index;
-    const todayPlan = (parsed as { today_plan?: unknown }).today_plan;
-    if (!Array.isArray(plans) || typeof todayIndex !== 'number') return null;
-    return {
-      plans: plans as PlanItem[],
-      today_index: todayIndex,
-      today_plan: (todayPlan as PlanItem | null) ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function savePlanCache(
-  sessionId: string,
-  payload: { plans: PlanItem[]; today_index: number; today_plan: PlanItem | null }
-) {
-  try {
-    localStorage.setItem(
-      `${PLAN_CACHE_KEY_PREFIX}${sessionId}`,
-      JSON.stringify({ ...payload, cached_at: Date.now() })
-    );
-  } catch {}
 }
 
 function parsePlanQuery(text: string, todayIndex: number): { kind: 'all' } | { kind: 'day'; day_index: number } | null {
@@ -387,6 +314,7 @@ async function readNDJSONStream<T extends { message?: string }>(
 }
 
 export default function Home() {
+  const { sessionId, dataOptIn, toggleDataOptIn } = useSession();
   const [mode, setMode] = useState<AppMode>('chat');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
@@ -403,16 +331,14 @@ export default function Home() {
   const [recap, setRecap] = useState<Recap | null>(null);
   const [recapMeta, setRecapMeta] = useState<{ success?: boolean; latencyMs?: number; errorType?: string }>();
   const [isRecapLoading, setIsRecapLoading] = useState(false);
-  const [sessionId, setSessionId] = useState('');
-  const [plans, setPlans] = useState<PlanItem[]>([]);
-  const [todayPlan, setTodayPlan] = useState<PlanItem | null>(null);
-  const [todayIndex, setTodayIndex] = useState(1);
-  const [isPlanLoading, setIsPlanLoading] = useState(false);
-  const [isPlanActing, setIsPlanActing] = useState(false);
-  const [planError, setPlanError] = useState<string | null>(null);
   const [scenarioCopied, setScenarioCopied] = useState(false);
-  const [dataOptIn, setDataOptIn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const {
+    plans, todayPlan, todayIndex,
+    isPlanLoading, isPlanActing, planError,
+    generatePlan, updateTodayPlanStatus, regenerateTodayPlan,
+  } = usePlan(sessionId, messages);
 
   useEffect(() => {
     const saved = loadFromStorage();
@@ -421,26 +347,8 @@ export default function Home() {
       setSuggestions([]);
       return;
     }
-    // 避免 SSR/CSR 首屏随机值不一致导致 hydration 报错，随机化放到挂载后执行
     setSuggestions(getWelcomeSuggestions());
   }, []);
-
-  useEffect(() => {
-    setSessionId(getOrCreateSessionId());
-    setDataOptIn(loadDataOptIn());
-  }, []);
-
-  useEffect(() => {
-    if (!sessionId) return;
-    const cached = loadPlanCache(sessionId);
-    if (cached?.plans?.length) {
-      applyPlanData(cached);
-      fetchPlanData({ silent: true });
-      return;
-    }
-    fetchPlanData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
 
   // 关闭/刷新页面时提醒（聊了足够多且没评价过）
   useEffect(() => {
@@ -469,12 +377,6 @@ export default function Home() {
 
   const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
-
-  const toggleDataOptIn = () => {
-    const next = !dataOptIn;
-    setDataOptIn(next);
-    saveDataOptIn(next);
-  };
 
   const sendSessionMetrics = async (msgs: Message[], currentMode: AppMode) => {
     if (!dataOptIn || !sessionId) return;
@@ -548,190 +450,6 @@ export default function Home() {
     setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? getWelcomeSuggestions() : []));
     setReportContent(null);
     setSelectedScenario(null);
-  };
-
-  const applyPlanData = (payload: { plans?: PlanItem[]; today_index?: number; today_plan?: PlanItem | null }) => {
-    const nextPlans = payload.plans || [];
-    const nextTodayIndex = payload.today_index || 1;
-    const nextTodayPlan = payload.today_plan ?? nextPlans.find(plan => plan.day_index === nextTodayIndex) ?? null;
-    setPlans(nextPlans);
-    setTodayIndex(nextTodayIndex);
-    setTodayPlan(nextTodayPlan);
-  };
-
-  const fetchPlanData = async (options?: { silent?: boolean; retryOnTimeout?: boolean }) => {
-    if (!sessionId) return;
-    const silent = options?.silent === true;
-    const retryOnTimeout = options?.retryOnTimeout !== false;
-    if (!silent) {
-      setIsPlanLoading(true);
-      setPlanError(null);
-    }
-    try {
-      const response = await fetchWithTimeout(
-        `/api/plan/fetch?session_id=${encodeURIComponent(sessionId)}`,
-        { method: 'GET' },
-        PLAN_FETCH_TIMEOUT_MS
-      );
-      const raw = await response.json();
-      const payload = unwrapEnvelope<{
-        plans: PlanItem[];
-        today_index: number;
-        today_plan: PlanItem | null;
-      }>(raw);
-
-      if (!response.ok || !payload) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || '读取计划失败');
-      }
-
-      applyPlanData(payload);
-      savePlanCache(sessionId, payload);
-      setPlanError(null);
-    } catch (error) {
-      const aborted = isAbortError(error);
-      const message = aborted
-        ? '读取计划有点慢，先用当前数据，稍后会自动刷新。'
-        : (error instanceof Error ? error.message : '读取计划失败');
-      if (!silent) {
-        setPlanError(message);
-      }
-      if (aborted && retryOnTimeout) {
-        setTimeout(() => {
-          fetchPlanData({ silent: true, retryOnTimeout: false });
-        }, 1200);
-      }
-    } finally {
-      if (!silent) setIsPlanLoading(false);
-    }
-  };
-
-  const generatePlan = async () => {
-    if (!sessionId) return;
-    setIsPlanActing(true);
-    setPlanError(null);
-    try {
-      const context = buildPlanContextFromChat(messages);
-      const response = await fetchWithTimeout(
-        '/api/plan/generate',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            context,
-          }),
-        },
-        PLAN_GENERATE_TIMEOUT_MS
-      );
-      const raw = await response.json();
-      const payload = unwrapEnvelope<{
-        plans: PlanItem[];
-        today_index: number;
-      }>(raw);
-
-      if (!response.ok || !payload) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || '生成计划失败');
-      }
-
-      applyPlanData(payload);
-      savePlanCache(sessionId, {
-        plans: payload.plans,
-        today_index: payload.today_index,
-        today_plan: payload.plans.find((plan) => plan.day_index === payload.today_index) ?? null,
-      });
-    } catch (error) {
-      const message = isAbortError(error)
-        ? '生成有点慢，已自动走快速策略。你可以稍后再点一次确认。'
-        : (error instanceof Error ? error.message : '生成计划失败');
-      setPlanError(message);
-    } finally {
-      setIsPlanActing(false);
-    }
-  };
-
-  const updateTodayPlanStatus = async (status: Extract<PlanStatus, 'done' | 'skipped'>) => {
-    if (!sessionId || !todayPlan) return;
-    setIsPlanActing(true);
-    setPlanError(null);
-    try {
-      const response = await fetch('/api/plan/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          day_index: todayPlan.day_index,
-          status,
-        }),
-      });
-      const raw = await response.json();
-      const payload = unwrapEnvelope<{ plan: PlanItem }>(raw);
-
-      if (!response.ok || !payload?.plan) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || '更新任务状态失败');
-      }
-
-      const nextPlan = payload.plan;
-      setPlans((prev) => {
-        const nextPlans = prev.map((plan) => (
-          plan.day_index === nextPlan.day_index ? nextPlan : plan
-        ));
-        savePlanCache(sessionId, {
-          plans: nextPlans,
-          today_index: todayIndex,
-          today_plan: nextPlan,
-        });
-        return nextPlans;
-      });
-      setTodayPlan(nextPlan);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '更新任务状态失败';
-      setPlanError(message);
-    } finally {
-      setIsPlanActing(false);
-    }
-  };
-
-  const regenerateTodayPlan = async () => {
-    if (!sessionId || !todayPlan) return;
-    setIsPlanActing(true);
-    setPlanError(null);
-    try {
-      const context = buildPlanContextFromChat(messages);
-      const response = await fetch('/api/plan/regenerate-day', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          day_index: todayPlan.day_index,
-          context,
-        }),
-      });
-      const raw = await response.json();
-      const payload = unwrapEnvelope<{ plan: PlanItem }>(raw);
-
-      if (!response.ok || !payload?.plan) {
-        throw new Error((raw as ApiEnvelope<unknown>)?.error?.message || '重生成任务失败');
-      }
-
-      const nextPlan = payload.plan;
-      setPlans((prev) => {
-        const nextPlans = prev.map((plan) => (
-          plan.day_index === nextPlan.day_index ? nextPlan : plan
-        ));
-        savePlanCache(sessionId, {
-          plans: nextPlans,
-          today_index: todayIndex,
-          today_plan: nextPlan,
-        });
-        return nextPlans;
-      });
-      setTodayPlan(nextPlan);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '重生成任务失败';
-      setPlanError(message);
-    } finally {
-      setIsPlanActing(false);
-    }
   };
 
   const maybeAnswerPlanQuestion = (content: string): string | null => {
@@ -917,6 +635,30 @@ export default function Home() {
   };
 
   const sendMessage = async (content: string) => {
+    // ===== Action 路由（显式标识符，不依赖文本匹配） =====
+    if (isAction(content)) {
+      if (content === ACTION_PROFILE_SELF && mode === 'profile') {
+        setSelectedScenario(null);
+        setProfileMessages([PROFILE_SELF_WELCOME]);
+        setSuggestions(getProfileSelfSuggestions());
+        return;
+      }
+      if (content === ACTION_PROFILE_OTHER && mode === 'profile') {
+        setMode('profile_other');
+        setSelectedScenario(null);
+        setProfileMessages([PROFILE_OTHER_WELCOME]);
+        setSuggestions(getProfileOtherSuggestions());
+        return;
+      }
+      if (content === ACTION_GENERATE_REPORT && isProfileMode) {
+        generateReport();
+        return;
+      }
+      // 未知 action，忽略
+      return;
+    }
+
+    // ===== 兼容旧文本匹配（用户手动输入的情况） =====
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('了解我自己')) {
       setSelectedScenario(null);
       setProfileMessages([PROFILE_SELF_WELCOME]);
@@ -1212,113 +954,22 @@ export default function Home() {
       </header>
 
       {/* ===== 消息区域 ===== */}
-      <main className="flex-1 overflow-y-auto overscroll-contain">
+      <main className="flex-1 overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label="对话消息">
         <div className="px-3 sm:px-5 lg:px-8 py-4 sm:py-6 space-y-1">
           {mode === 'chat' && (
-            <section className="message-bubble flex justify-start mb-3">
-              <div className="max-w-[95%] sm:max-w-[82%] rounded-2xl rounded-bl-sm overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 via-sky-50 to-indigo-50 border border-indigo-200 rounded-t-2xl px-4 py-3">
-                  <p className="text-[14px] font-semibold text-indigo-700">📅 7天微行动计划 · 今日任务</p>
-                </div>
-                <div className="ai-bubble rounded-t-none border-t-0 px-4 py-3">
-                  {isPlanLoading ? (
-                    <p className="text-[13px] text-slate-500">正在读取你的今日任务...</p>
-                  ) : todayPlan ? (
-                    <div className="space-y-2">
-                      <p className="text-[12px] text-slate-500">
-                        Day {todayPlan.day_index}/7 · 当前状态：
-                        {todayPlan.status === 'done'
-                          ? ' ✅ 已完成'
-                          : todayPlan.status === 'skipped'
-                            ? ' ⏭ 已跳过'
-                            : ' 🕒 待完成'}
-                      </p>
-                      <p className="text-[14px] text-slate-700 leading-relaxed break-words">
-                        {todayPlan.task_text}
-                      </p>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button
-                          onClick={() => updateTodayPlanStatus('done')}
-                          disabled={isPlanActing || todayPlan.status === 'done'}
-                          className="px-2.5 py-1.5 text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40 transition-colors"
-                        >
-                          ✅ 完成
-                        </button>
-                        <button
-                          onClick={() => updateTodayPlanStatus('skipped')}
-                          disabled={isPlanActing || todayPlan.status === 'skipped'}
-                          className="px-2.5 py-1.5 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-40 transition-colors"
-                        >
-                          ⏭ 跳过
-                        </button>
-                        <button
-                          onClick={regenerateTodayPlan}
-                          disabled={isPlanActing}
-                          className="px-2.5 py-1.5 text-[12px] text-sky-700 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-40 transition-colors"
-                        >
-                          🔄 重生成今天
-                        </button>
-                        {messages.some((m) => m.role === 'user' && m.content.trim().length > 0) && (
-                          <button
-                            onClick={() => {
-                              if (confirm('会覆盖现有 7 天任务并重置状态，继续吗？')) generatePlan();
-                            }}
-                            disabled={isPlanActing}
-                            className="px-2.5 py-1.5 text-[12px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
-                          >
-                            ♻️ 重新生成7天
-                          </button>
-                        )}
-                      </div>
-                      {todayIndex < 7 && (
-                        <div className="pt-2 border-t border-slate-200/60">
-                          <p className="text-[12px] text-slate-500 mb-0.5">
-                            明天（Day {todayIndex + 1}/7）
-                          </p>
-                          <p className="text-[13px] text-slate-700 leading-relaxed break-words">
-                            {plans.find((plan) => plan.day_index === todayIndex + 1)?.task_text || '（还没生成/还在读取）'}
-                          </p>
-                        </div>
-                      )}
-                      {plans.length > 0 && (
-                        <details className="pt-1">
-                          <summary className="cursor-pointer select-none text-[12px] text-slate-500 hover:text-slate-700">
-                            查看全部 7 天
-                          </summary>
-                          <div className="mt-2 space-y-1">
-                            {plans.map((plan) => (
-                              <div key={plan.day_index} className="text-[12px] text-slate-600 break-words">
-                                <span className="font-semibold text-slate-700">Day {plan.day_index}/7</span>
-                                <span className="ml-2">{plan.task_text}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-[13px] text-slate-500">还没有你的 7 天计划，先生成一份吧。</p>
-                      {messages.filter((m) => m.role === 'user').length === 0 && (
-                        <p className="text-[12px] text-slate-400">
-                          小提示：先聊两句再生成，任务会更贴合你现在的情况。
-                        </p>
-                      )}
-                      <button
-                        onClick={generatePlan}
-                        disabled={isPlanActing || !sessionId}
-                        className="px-3 py-1.5 text-[12px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
-                      >
-                        {isPlanActing ? '生成中...' : '✨ 生成7天计划'}
-                      </button>
-                    </div>
-                  )}
-                  {planError && (
-                    <p className="text-[12px] text-rose-500 mt-2">{planError}</p>
-                  )}
-                </div>
-              </div>
-            </section>
+            <PlanCard
+              plans={plans}
+              todayPlan={todayPlan}
+              todayIndex={todayIndex}
+              isPlanLoading={isPlanLoading}
+              isPlanActing={isPlanActing}
+              planError={planError}
+              sessionId={sessionId}
+              hasUserMessages={messages.some((m) => m.role === 'user' && m.content.trim().length > 0)}
+              onUpdateStatus={updateTodayPlanStatus}
+              onRegenerate={regenerateTodayPlan}
+              onGeneratePlan={generatePlan}
+            />
           )}
 
           {mode === 'profile_other' && !reportContent && (

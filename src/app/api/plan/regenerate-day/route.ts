@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import type { ActionPlanRow } from '@/lib/supabase';
+import { checkRateLimit, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 import {
   failure,
   parseDayIndex,
@@ -30,6 +31,19 @@ export async function POST(request: NextRequest) {
   const started = Date.now();
 
   try {
+    // 限流
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(`plan-regenerate:${clientIP}`, RATE_LIMITS.planGenerate);
+    if (!rateLimit.allowed) {
+      trackPlanEvent('plan_regenerated', {
+        day_index: 1,
+        success: false,
+        latency_ms: Date.now() - started,
+        error_type: 'rate_limited',
+      });
+      return failure('RATE_LIMITED', '重新生成太频繁，请稍后再试', 429);
+    }
+
     const parseStarted = Date.now();
     const body = await request.json() as RegenerateDayBody;
     const sessionId = parseSessionId(body.session_id);
@@ -144,7 +158,7 @@ export async function POST(request: NextRequest) {
       latency_ms: Date.now() - started,
       error_type: 'unexpected_error',
     });
-    return failure('INTERNAL_ERROR', `重生成任务失败: ${message}`, 500);
+    return failure('INTERNAL_ERROR', '重生成任务失败，请稍后再试', 500);
   }
 }
 

@@ -185,10 +185,15 @@ type PlanQuery =
   | { kind: 'day'; day_index: number }
   | { kind: 'relative'; offset: 0 | 1 | 2 };
 
+// UUID v4 格式 + 兼容旧格式 session-{timestamp}-{hex}
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEGACY_SESSION_RE = /^session-\d{13,}-[0-9a-f]{6,13}$/;
+
 function parseSessionId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const sessionId = value.trim();
   if (!sessionId || sessionId.length > 128) return null;
+  if (!UUID_V4_RE.test(sessionId) && !LEGACY_SESSION_RE.test(sessionId)) return null;
   return sessionId;
 }
 
@@ -778,6 +783,314 @@ const REPORT_SYSTEM_PROMPT = `根据对话内容生成一份用户画像报告�
 
 核心原则：**有几分信息说几分话**，没聊到的就写"暂未了解"，绝不编造。`;
 
+// ===== Handler Context =====
+interface HandlerContext {
+  requestId: string;
+  messages: Message[];
+  lastUserMessage: Message;
+  mode: ChatRequest['mode'];
+  scenario: string | null;
+  sessionId: string | null;
+}
+
+// ===== Mode Handlers =====
+
+async function handleRecap(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages } = ctx;
+  if (messages.length < 4) {
+    return NextResponse.json(
+      buildRecapFailureResponse('INSUFFICIENT_CONTEXT', '对话轮次太少，先多聊几句再生成复盘卡吧')
+    );
+  }
+
+  const result = await generateRecapFromMessages(messages, {
+    invokeAI: async ({ systemPrompt, conversation }) => {
+      const llmStartedAt = Date.now();
+      const { stream, model } = await createStreamingCompletion({
+        model: CHAT_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: conversation },
+        ],
+        temperature: 0.3,
+        max_tokens: 400,
+      }, requestId);
+      const text = await collectStreamingText(stream);
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'generate_recap',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: text.length,
+      });
+      return text;
+    },
+  });
+
+  return NextResponse.json(
+    buildRecapSuccessResponse(result.recap, result.message)
+  );
+}
+
+async function handleGenerateReportOther(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages, lastUserMessage, scenario } = ctx;
+  const scenarioStartedAt = Date.now();
+  const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
+  const contextMessages = buildContextMessages(messages, { maxChars: REPORT_CONTEXT_MAX_CHARS });
+  const contextChars = getMessagesCharCount(contextMessages);
+  const ragTopK = getRagTopK(contextChars);
+  const ragStartedAt = Date.now();
+  const reportOtherResults = scenario
+    ? retrieve(lastUserMessage.content, ragTopK, { mode: 'generate_report_other', scenario })
+    : [];
+  console.info(`[${requestId}] RAG done`, {
+    mode: 'generate_report_other',
+    ms: Date.now() - ragStartedAt,
+    hits: reportOtherResults.length,
+    ragTopK,
+    contextChars,
+  });
+  const scenarioEvidence = scenario ? formatEvidence(reportOtherResults) : '';
+  const payload: CompletionPayload = {
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: REPORT_OTHER_SYSTEM_PROMPT + scenarioPrompt + scenarioEvidence },
+      ...contextMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      { role: 'user', content: '请根据我们刚才的对话，分析一下这个人，生成读人报告。' },
+    ],
+    temperature: 0.5,
+    max_tokens: MAX_REPORT_TOKENS,
+  };
+  const llmStartedAt = Date.now();
+  const { stream, model } = await createStreamingCompletion(payload, requestId);
+  const streamResponse = openaiStreamToNDJSON(
+    stream,
+    (fullText) => {
+      const report = fullText.trim() || '抱歉，分析暂时生成不了 😵 稍后再试试。';
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'generate_report_other',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: report.length,
+      });
+      if (scenario) {
+        const parsed = parseScenarioModelOutput(report, scenario);
+        const scenarioMessage = formatScenarioScript(parsed.script);
+        trackScenarioResponseGenerated(scenario, {
+          success: true,
+          latency_ms: Date.now() - scenarioStartedAt,
+          error_type: parsed.usedFallback ? 'ai_format_error' : 'none',
+        });
+        return {
+          message: scenarioMessage,
+          suggestions: [],
+          isCrisis: false,
+          isReport: true,
+          scenario,
+        };
+      }
+      return { message: report, suggestions: [], isCrisis: false, isReport: true };
+    },
+    requestId
+  );
+  return ndjsonResponse(streamResponse);
+}
+
+async function handleGenerateReport(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages, lastUserMessage } = ctx;
+  const contextMessages = buildContextMessages(messages, { maxChars: REPORT_CONTEXT_MAX_CHARS });
+  const contextChars = getMessagesCharCount(contextMessages);
+  const ragTopK = getRagTopK(contextChars);
+  const ragStartedAt = Date.now();
+  const reportResults = retrieve(lastUserMessage.content, ragTopK, { mode: 'generate_report' });
+  console.info(`[${requestId}] RAG done`, {
+    mode: 'generate_report',
+    ms: Date.now() - ragStartedAt,
+    hits: reportResults.length,
+    ragTopK,
+    contextChars,
+  });
+  const reportEvidence = formatEvidence(reportResults);
+  const payload: CompletionPayload = {
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: REPORT_SYSTEM_PROMPT + reportEvidence },
+      ...contextMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      { role: 'user', content: '请根据我们刚才的对话，生成我的画像分析报告。' },
+    ],
+    temperature: 0.5,
+    max_tokens: MAX_REPORT_TOKENS,
+  };
+  const llmStartedAt = Date.now();
+  const { stream, model } = await createStreamingCompletion(payload, requestId);
+  const streamResponse = openaiStreamToNDJSON(
+    stream,
+    (fullText) => {
+      const report = fullText.trim() || '抱歉，画像暂时生成不了 😵 稍后再试试。';
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'generate_report',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: report.length,
+      });
+      return { message: report, suggestions: [], isCrisis: false, isReport: true };
+    },
+    requestId
+  );
+  return ndjsonResponse(streamResponse);
+}
+
+async function handleProfileOther(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages, lastUserMessage, scenario } = ctx;
+  const scenarioStartedAt = Date.now();
+  const scenarioPrompt = scenario ? `\n\n${buildScenarioSystemPrompt(scenario)}` : '';
+  const contextMessages = buildContextMessages(messages);
+  const contextChars = getMessagesCharCount(contextMessages);
+  const ragTopK = getRagTopK(contextChars);
+  const ragStartedAt = Date.now();
+  const otherResults = scenario
+    ? retrieve(lastUserMessage.content, ragTopK, { mode: 'profile_other', scenario })
+    : [];
+  console.info(`[${requestId}] RAG done`, {
+    mode: 'profile_other',
+    ms: Date.now() - ragStartedAt,
+    hits: otherResults.length,
+    ragTopK,
+    contextChars,
+  });
+  const otherEvidence = scenario ? formatEvidence(otherResults) : '';
+  const payload: CompletionPayload = {
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: PROFILE_OTHER_SYSTEM_PROMPT + scenarioPrompt + otherEvidence },
+      ...contextMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ],
+    temperature: 0.65,
+    max_tokens: MAX_OUTPUT_TOKENS,
+  };
+  const llmStartedAt = Date.now();
+  const { stream, model } = await createStreamingCompletion(payload, requestId);
+  const streamResponse = openaiStreamToNDJSON(
+    stream,
+    (fullText) => {
+      const rawMessage = fullText.trim() || '抱歉，我现在脑子转不动了 😵 稍后再试试。';
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'profile_other',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: rawMessage.length,
+      });
+      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+      if (scenario) {
+        trackScenarioResponseGenerated(scenario, {
+          success: true,
+          latency_ms: Date.now() - scenarioStartedAt,
+          error_type: 'none',
+        });
+      }
+      return {
+        message: assistantMessage,
+        suggestions: suggestions.length > 0 ? suggestions : [],
+        isCrisis: false,
+        scenario,
+      };
+    },
+    requestId
+  );
+  return ndjsonResponse(streamResponse);
+}
+
+async function handleProfile(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages } = ctx;
+  const contextMessages = buildContextMessages(messages);
+  const payload: CompletionPayload = {
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: PROFILE_SYSTEM_PROMPT },
+      ...contextMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ],
+    temperature: 0.65,
+    max_tokens: MAX_OUTPUT_TOKENS,
+  };
+  const llmStartedAt = Date.now();
+  const { stream, model } = await createStreamingCompletion(payload, requestId);
+  const streamResponse = openaiStreamToNDJSON(
+    stream,
+    (fullText) => {
+      const rawMessage = fullText.trim() || '抱歉，我现在脑子转不动了 😵 稍后再试试。';
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'profile',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: rawMessage.length,
+      });
+      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+      return {
+        message: assistantMessage,
+        suggestions: suggestions.length > 0 ? suggestions : [],
+        isCrisis: false,
+      };
+    },
+    requestId
+  );
+  return ndjsonResponse(streamResponse);
+}
+
+async function handleChat(ctx: HandlerContext): Promise<Response> {
+  const { requestId, messages, lastUserMessage } = ctx;
+  const contextMessages = buildContextMessages(messages);
+  const contextChars = getMessagesCharCount(contextMessages);
+  const ragTopK = getRagTopK(contextChars);
+  const ragStartedAt = Date.now();
+  const retrievalResults = retrieve(lastUserMessage.content, ragTopK);
+  console.info(`[${requestId}] RAG done`, {
+    mode: 'chat',
+    ms: Date.now() - ragStartedAt,
+    hits: retrievalResults.length,
+    ragTopK,
+    contextChars,
+  });
+  const evidence = formatEvidence(retrievalResults);
+  const systemPrompt = getSystemPrompt() + evidence;
+
+  const payload: CompletionPayload = {
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...contextMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ],
+    temperature: 0.75,
+    max_tokens: MAX_OUTPUT_TOKENS,
+  };
+  const llmStartedAt = Date.now();
+  const { stream, model } = await createStreamingCompletion(payload, requestId);
+  const streamResponse = openaiStreamToNDJSON(
+    stream,
+    (fullText) => {
+      const rawMessage = fullText.trim() || '抱歉，我现在脑子转不动了 😵 稍后再试试。';
+      console.info(`[${requestId}] LLM stream done`, {
+        mode: 'chat',
+        model,
+        ms: Date.now() - llmStartedAt,
+        chars: rawMessage.length,
+      });
+      const { message: assistantMessage, suggestions } = parseSuggestions(rawMessage);
+      const finalSuggestions = suggestions.length > 0
+        ? suggestions
+        : fallbackSuggestions(assistantMessage);
+      return {
+        message: assistantMessage,
+        suggestions: finalSuggestions,
+        isCrisis: false,
+        promptVersion: getPromptVersion(),
+      };
+    },
+    requestId
+  );
+  return ndjsonResponse(streamResponse);
+}
+
+// ===== POST Handler (thin dispatcher) =====
+
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID().slice(0, 8);
   const requestStartedAt = Date.now();
@@ -820,49 +1133,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ===== 对话复盘卡 =====
-    if (mode === 'generate_recap') {
-      if (messages.length < 4) {
-        return NextResponse.json(
-          buildRecapFailureResponse('INSUFFICIENT_CONTEXT', '对话轮次太少，先多聊几句再生成复盘卡吧')
-        );
-      }
-
-      const result = await generateRecapFromMessages(messages, {
-        invokeAI: async ({ systemPrompt, conversation }) => {
-          const llmStartedAt = Date.now();
-          const { stream, model } = await createStreamingCompletion({
-            model: CHAT_MODEL,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: conversation },
-            ],
-            temperature: 0.3,
-            max_tokens: 400,
-          }, requestId);
-          const text = await collectStreamingText(stream);
-          console.info(`[${requestId}] LLM stream done`, {
-            mode: 'generate_recap',
-            model,
-            ms: Date.now() - llmStartedAt,
-            chars: text.length,
-          });
-
-          return text;
-        },
-      });
-
-      return NextResponse.json(
-        buildRecapSuccessResponse(result.recap, result.message)
-      );
-    }
-
-    // 安全检查
+    // ===== 安全检查（所有模式都必须经过） =====
     const moderationResult = checkModeration(lastUserMessage.content);
 
     if (moderationResult.isCrisis) {
       console.log('[CRISIS DETECTED]', {
         crisisKeywordsFound: moderationResult.crisisKeywordsFound,
+        mode,
       });
 
       return NextResponse.json({
@@ -872,7 +1149,43 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ===== 计划问答（强联动：直接查 session 对应 action_plans） =====
+    // ===== 模式分发 =====
+    const ctx: HandlerContext = { requestId, messages, lastUserMessage, mode, scenario, sessionId };
+
+    if (mode === 'generate_recap') {
+      return handleRecap(ctx);
+    }
+
+    if (mode === 'chat' || mode === 'profile' || mode === 'profile_other') {
+      const planAnswer = await buildPlanQueryAnswer({
+        messages,
+        content: lastUserMessage.content,
+        sessionId,
+      });
+      if (planAnswer) {
+        return NextResponse.json(planAnswer);
+      }
+    }
+
+    if (mode === 'generate_report_other') {
+      return handleGenerateReportOther(ctx);
+    }
+
+    if (mode === 'generate_report') {
+      return handleGenerateReport(ctx);
+    }
+
+    if (mode === 'profile_other') {
+      return handleProfileOther(ctx);
+    }
+
+    if (mode === 'profile') {
+      return handleProfile(ctx);
+    }
+
+    return handleChat(ctx);
+
+  } catch (error) {
     if (mode === 'chat' || mode === 'profile' || mode === 'profile_other') {
       const planAnswer = await buildPlanQueryAnswer({
         messages,

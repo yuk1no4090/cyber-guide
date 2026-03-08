@@ -67,6 +67,7 @@ export default function RecapCard({ recap, onClose, generationMeta }: RecapCardP
               onClick={handleCopyActions}
               className="text-[11px] sm:text-xs px-2 py-1 text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
               title="复制行动清单"
+              aria-label="复制行动清单"
             >
               {copied ? '✅ 已复制' : '📋 复制行动'}
             </button>
@@ -74,6 +75,7 @@ export default function RecapCard({ recap, onClose, generationMeta }: RecapCardP
               <button
                 onClick={onClose}
                 className="text-[11px] sm:text-xs px-2 py-1 text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                aria-label="关闭复盘卡"
               >
                 关闭
               </button>

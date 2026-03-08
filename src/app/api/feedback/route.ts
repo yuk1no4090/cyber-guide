@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, calculateQuality, CaseCardRow } from '@/lib/supabase';
 import { redact } from '@/lib/redact';
+import { checkRateLimit, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -76,6 +77,13 @@ function validateFeedbackBody(body: unknown): FeedbackRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // 限流
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(`feedback:${clientIP}`, RATE_LIMITS.feedback);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ error: '提交太频繁，请稍后再试' }, { status: 429 });
+    }
+
     const body = await request.json() as unknown;
     const { messages, rating, feedback, hadCrisis, mode } = validateFeedbackBody(body);
 

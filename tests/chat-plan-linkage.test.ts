@@ -159,11 +159,11 @@ describe('chat route plan linkage', () => {
   });
 
   it('chat 模式可直接回答指定天计划（第2天）', async () => {
-    mockPlanState.rows = buildSevenDayPlans('sess-day-2');
+    mockPlanState.rows = buildSevenDayPlans('d1d1d1d1-a2a2-4b2b-8c2c-e2e2e2e2e2e2');
 
     const { status, payload } = await postChat({
       mode: 'chat',
-      session_id: 'sess-day-2',
+      session_id: 'd1d1d1d1-a2a2-4b2b-8c2c-e2e2e2e2e2e2',
       messages: [{ role: 'user', content: '第二天的计划呢？' }],
     });
 
@@ -173,11 +173,11 @@ describe('chat route plan linkage', () => {
   });
 
   it('chat 模式可返回全部7天计划', async () => {
-    mockPlanState.rows = buildSevenDayPlans('sess-all');
+    mockPlanState.rows = buildSevenDayPlans('d2d2d2d2-a3a3-4b3b-8c3c-e3e3e3e3e3e3');
 
     const { status, payload } = await postChat({
       mode: 'chat',
-      session_id: 'sess-all',
+      session_id: 'd2d2d2d2-a3a3-4b3b-8c3c-e3e3e3e3e3e3',
       messages: [{ role: 'user', content: '把7天计划全部发我' }],
     });
 
@@ -187,11 +187,11 @@ describe('chat route plan linkage', () => {
   });
 
   it('profile_other 模式也能联动回答计划问题', async () => {
-    mockPlanState.rows = buildSevenDayPlans('sess-profile-mode');
+    mockPlanState.rows = buildSevenDayPlans('d3d3d3d3-a4a4-4b4b-8c4c-e4e4e4e4e4e4');
 
     const { status, payload } = await postChat({
       mode: 'profile_other',
-      session_id: 'sess-profile-mode',
+      session_id: 'd3d3d3d3-a4a4-4b4b-8c4c-e4e4e4e4e4e4',
       messages: [{ role: 'user', content: '明天任务是什么？' }],
     });
 
@@ -202,7 +202,7 @@ describe('chat route plan linkage', () => {
   it('无计划时不再返回伪动作按钮建议', async () => {
     const { status, payload } = await postChat({
       mode: 'chat',
-      session_id: 'sess-empty',
+      session_id: 'd4d4d4d4-a5a5-4b5b-8c5c-e5e5e5e5e5e5',
       messages: [{ role: 'user', content: '第二天计划是什么？' }],
     });
 
@@ -226,7 +226,7 @@ describe('chat route plan linkage', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         mode: 'chat',
-        session_id: 'sess-stream',
+        session_id: 'd5d5d5d5-a6a6-4b6b-8c6c-e6e6e6e6e6e6',
         messages: [{ role: 'user', content: '我最近有点迷茫，想找个方向' }],
       }),
     });

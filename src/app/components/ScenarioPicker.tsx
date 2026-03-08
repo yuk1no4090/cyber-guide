@@ -32,16 +32,17 @@ export default function ScenarioPicker({
 
   return (
     <section className={`message-bubble mt-2 mb-1 ${className}`.trim()}>
-      <p className="text-[12px] sm:text-[13px] text-slate-500 mb-1.5">
+      <p className="text-[12px] sm:text-[13px] text-slate-500 mb-1.5" id="scenario-picker-label">
         关系场景模板（可切换）
       </p>
 
-      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2" role="radiogroup" aria-labelledby="scenario-picker-label">
         {allowClear && (
           <button
             type="button"
             onClick={() => handleSelect(null)}
             disabled={disabled}
+            aria-pressed={value === null}
             className={`
               px-3 py-1.5 sm:px-3.5 sm:py-2
               text-[12px] sm:text-[13px]
@@ -62,6 +63,7 @@ export default function ScenarioPicker({
             type="button"
             onClick={() => handleSelect(option.id)}
             disabled={disabled}
+            aria-pressed={value === option.id}
             className={`
               px-3 py-1.5 sm:px-3.5 sm:py-2
               text-[12px] sm:text-[13px]

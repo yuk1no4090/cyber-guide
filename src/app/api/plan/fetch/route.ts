@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import type { ActionPlanRow } from '@/lib/supabase';
+import { checkRateLimit, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 import { computeTodayIndex, failure, parseSessionId, sortPlansByDay, success } from '../_shared';
 
 export const runtime = 'nodejs';
@@ -10,6 +11,13 @@ export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID().slice(0, 8);
   const startedAt = Date.now();
   try {
+    // 限流
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(`plan-fetch:${clientIP}`, RATE_LIMITS.planMutate);
+    if (!rateLimit.allowed) {
+      return failure('RATE_LIMITED', '请求太频繁，请稍后再试', 429);
+    }
+
     const sessionId = parseSessionId(request.nextUrl.searchParams.get('session_id'));
     if (!sessionId) {
       console.warn(`[${requestId}] plan.fetch invalid_session_id`);
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
       ms: Date.now() - startedAt,
       message,
     });
-    return failure('INTERNAL_ERROR', `读取计划失败: ${message}`, 500);
+    return failure('INTERNAL_ERROR', '读取计划失败，请稍后再试', 500);
   }
 }
 

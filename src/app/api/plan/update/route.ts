@@ -8,6 +8,7 @@ import {
   success,
   trackPlanEvent,
 } from '../_shared';
+import { checkRateLimit, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +23,13 @@ export async function POST(request: NextRequest) {
   const started = Date.now();
 
   try {
+    // 限流
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(`plan-update:${clientIP}`, RATE_LIMITS.planMutate);
+    if (!rateLimit.allowed) {
+      return failure('RATE_LIMITED', '操作太频繁，请稍后再试', 429);
+    }
+
     const parseStarted = Date.now();
     const body = await request.json() as UpdatePlanBody;
     const sessionId = parseSessionId(body.session_id);
@@ -122,7 +130,7 @@ export async function POST(request: NextRequest) {
       ms: Date.now() - started,
       message,
     });
-    return failure('INTERNAL_ERROR', `更新任务失败: ${message}`, 500);
+    return failure('INTERNAL_ERROR', '更新任务失败，请稍后再试', 500);
   }
 }
 

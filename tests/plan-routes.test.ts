@@ -185,7 +185,7 @@ describe('plan routes', () => {
       choices: [{ message: { content: JSON.stringify({ tasks: AI_TASKS }) } }],
     });
 
-    const response = await generatePlan(jsonPost('/api/plan/generate', { session_id: 'sess-a' }) as never);
+    const response = await generatePlan(jsonPost('/api/plan/generate', { session_id: 'a0a0a0a0-b1b1-4c1c-9d1d-e1e1e1e1e1e1' }) as never);
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -205,7 +205,7 @@ describe('plan routes', () => {
     expect(missingSessionPayload.error.code).toBe('INVALID_SESSION_ID');
 
     const outOfRangeDay = await regenerateDay(
-      jsonPost('/api/plan/regenerate-day', { session_id: 'sess-a', day_index: 9 }) as never
+      jsonPost('/api/plan/regenerate-day', { session_id: 'a0a0a0a0-b1b1-4c1c-9d1d-e1e1e1e1e1e1', day_index: 9 }) as never
     );
     const outOfRangePayload = await outOfRangeDay.json();
     expect(outOfRangeDay.status).toBe(400);
@@ -213,7 +213,7 @@ describe('plan routes', () => {
     expect(outOfRangePayload.error.code).toBe('INVALID_DAY_INDEX');
 
     const invalidStatus = await updatePlan(
-      jsonPost('/api/plan/update', { session_id: 'sess-a', day_index: 1, status: 'blocked' }) as never
+      jsonPost('/api/plan/update', { session_id: 'a0a0a0a0-b1b1-4c1c-9d1d-e1e1e1e1e1e1', day_index: 1, status: 'blocked' }) as never
     );
     const invalidStatusPayload = await invalidStatus.json();
     expect(invalidStatus.status).toBe(400);
@@ -225,10 +225,10 @@ describe('plan routes', () => {
     createCompletionMock.mockResolvedValue({
       choices: [{ message: { content: JSON.stringify({ tasks: AI_TASKS }) } }],
     });
-    await generatePlan(jsonPost('/api/plan/generate', { session_id: 'sess-flow' }) as never);
+    await generatePlan(jsonPost('/api/plan/generate', { session_id: 'b0b0b0b0-c2c2-4d2d-ae2e-f2f2f2f2f2f2' }) as never);
 
     const doneResponse = await updatePlan(
-      jsonPost('/api/plan/update', { session_id: 'sess-flow', day_index: 1, status: 'done' }) as never
+      jsonPost('/api/plan/update', { session_id: 'b0b0b0b0-c2c2-4d2d-ae2e-f2f2f2f2f2f2', day_index: 1, status: 'done' }) as never
     );
     const donePayload = await doneResponse.json();
     expect(doneResponse.status).toBe(200);
@@ -236,7 +236,7 @@ describe('plan routes', () => {
     expect(donePayload.data.plan.status).toBe('done');
 
     const skippedResponse = await updatePlan(
-      jsonPost('/api/plan/update', { session_id: 'sess-flow', day_index: 2, status: 'skipped' }) as never
+      jsonPost('/api/plan/update', { session_id: 'b0b0b0b0-c2c2-4d2d-ae2e-f2f2f2f2f2f2', day_index: 2, status: 'skipped' }) as never
     );
     const skippedPayload = await skippedResponse.json();
     expect(skippedResponse.status).toBe(200);
@@ -248,7 +248,7 @@ describe('plan routes', () => {
     createCompletionMock.mockRejectedValue(new Error('ai_failed'));
 
     const response = await generatePlan(
-      jsonPost('/api/plan/generate', { session_id: 'sess-fallback', context: '我最近很拖延' }) as never
+      jsonPost('/api/plan/generate', { session_id: 'c0c0c0c0-d3d3-4e3e-bf3f-a3a3a3a3a3a3', context: '我最近很拖延' }) as never
     );
     const payload = await response.json();
 

@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -8,7 +8,7 @@
 /coverage
 
 # next.js
-/.next/
+.next/
 /out/
 
 # production
@@ -26,6 +26,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
 
 # vercel
 .vercel
@@ -40,3 +41,24 @@ next-env.d.ts
 
 # vector store
 /vector_store/
+
+# Java / Maven
+backend/target/
+*.class
+*.jar
+!backend/.mvn/wrapper/*.jar
+
+# Python
+crawler/.venv/
+crawler/__pycache__/
+crawler/**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Docker
+pgdata/
+
+# IDE
+.idea/
+*.iml
+.vscode/
