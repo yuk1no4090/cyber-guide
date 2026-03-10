@@ -7,7 +7,62 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  backend:
+    name: Backend (Java 21 + Maven)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cyber_guide_test
+          POSTGRES_USER: cyber_guide
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compile
+        run: ./mvnw compile -q
+        working-directory: backend
+
+      - name: Run tests
+        run: ./mvnw test -q
+        working-directory: backend
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: cyber_guide_test
+          POSTGRES_USER: cyber_guide
+          POSTGRES_PASSWORD: testpass
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          OPENAI_API_KEY: test-key
+          OPENAI_BASE_URL: https://example.com
+          OPENAI_MODEL: test-model
+
+  frontend:
+    name: Frontend (Next.js 15 + TypeScript)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,23 +70,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Run tests
-        run: npm test
+        working-directory: frontend
 
       - name: Type check
         run: npx tsc --noEmit
+        working-directory: frontend
 
       - name: Build
         run: npm run build
-        env:
-          OPENAI_API_KEY: test-key-for-build
-          OPENAI_BASE_URL: https://example.com
-          OPENAI_MODEL: test-model
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-key
+        working-directory: frontend
 
+  crawler:
+    name: Crawler (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        working-directory: crawler
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+        working-directory: crawler
