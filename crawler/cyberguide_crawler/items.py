@@ -15,6 +15,7 @@ class ArticleItem(scrapy.Item):
     language = scrapy.Field()
     quality_score = scrapy.Field()
     dedupe_hash = scrapy.Field()
+    _career_case = scrapy.Field()   # set by ExtractorPipeline, consumed by DatabasePipeline
 
 
 class CareerCaseItem(scrapy.Item):

@@ -51,6 +51,7 @@ SPIDER_MIDDLEWARES = {
 ITEM_PIPELINES = {
     "cyberguide_crawler.pipelines.cleaner.CleanerPipeline": 100,
     "cyberguide_crawler.pipelines.dedup.DedupPipeline": 200,
+    "cyberguide_crawler.pipelines.extractor.ExtractorPipeline": 300,
     "cyberguide_crawler.pipelines.database.DatabasePipeline": 400,
 }
 
@@ -79,7 +80,7 @@ CRAWLER_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_PER_SOURCE", "3"))
 CLOSESPIDER_TIMEOUT = 300
 
 # --- AI extraction (optional, disabled by default) ---
-AI_EXTRACT_ENABLED = os.getenv("AI_EXTRACT_ENABLED", "false").lower() == "true"
+AI_EXTRACT_ENABLED = os.getenv("AI_EXTRACT_ENABLED", "true").lower() == "true"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "glm-4-flash")
