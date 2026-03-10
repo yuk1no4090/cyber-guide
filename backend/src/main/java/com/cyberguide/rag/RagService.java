@@ -1,9 +1,14 @@
 package com.cyberguide.rag;
 
 import com.cyberguide.infrastructure.cache.CacheGuard;
+import com.cyberguide.model.CareerCase;
+import com.cyberguide.model.CrawledArticle;
+import com.cyberguide.repository.CareerCaseRepository;
+import com.cyberguide.repository.CrawledArticleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -15,6 +20,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/**
+ * RAG service — retrieves relevant evidence from two sources:
+ * 1. In-memory knowledge base (knowledge_base/skills/*.md)
+ * 2. Database (career_cases + crawled_articles from crawler)
+ *
+ * Results are merged, scored, and cached in Redis.
+ */
 @Service
 public class RagService {
 
@@ -33,9 +45,15 @@ public class RagService {
 
     private final List<KnowledgeChunk> chunks = new ArrayList<>();
     private final CacheGuard cacheGuard;
+    private final CareerCaseRepository caseRepo;
+    private final CrawledArticleRepository articleRepo;
 
-    public RagService(CacheGuard cacheGuard) {
+    public RagService(CacheGuard cacheGuard,
+                      CareerCaseRepository caseRepo,
+                      CrawledArticleRepository articleRepo) {
         this.cacheGuard = cacheGuard;
+        this.caseRepo = caseRepo;
+        this.articleRepo = articleRepo;
     }
 
     public record KnowledgeChunk(String content, String source, List<String> keywords) {}
@@ -97,13 +115,7 @@ public class RagService {
         return result;
     }
 
-    /**
-     * Retrieve relevant knowledge chunks — cached in Redis for 30 minutes.
-     * Uses CacheGuard for penetration/avalanche/breakdown protection.
-     */
     public List<RetrievalResult> retrieve(String query, int topK) {
-        if (chunks.isEmpty()) return List.of();
-
         String cacheKey = CACHE_KEY_PREFIX + hashQuery(query) + ":" + topK;
 
         @SuppressWarnings("unchecked")
@@ -121,14 +133,32 @@ public class RagService {
     }
 
     /**
-     * Actual retrieval logic — keyword + bigram scoring.
+     * Merged retrieval: knowledge base (in-memory) + database (career_cases + crawled_articles).
      */
     private List<RetrievalResult> doRetrieve(String query, int topK) {
-        String queryLower = query.toLowerCase();
+        List<RetrievalResult> results = new ArrayList<>();
 
+        // 1. In-memory knowledge base chunks
+        results.addAll(retrieveFromKnowledgeBase(query, topK));
+
+        // 2. Career cases from database (AI-extracted structured data)
+        results.addAll(retrieveFromCareerCases(query, Math.max(1, topK / 2)));
+
+        // 3. Crawled articles from database
+        results.addAll(retrieveFromArticles(query, Math.max(1, topK / 2)));
+
+        // Sort by score descending, take top-K
+        results.sort(Comparator.comparingDouble(RetrievalResult::score).reversed());
+        return results.stream().limit(topK + 2).toList();
+    }
+
+    private List<RetrievalResult> retrieveFromKnowledgeBase(String query, int topK) {
+        if (chunks.isEmpty()) return List.of();
+
+        String queryLower = query.toLowerCase();
         record Scored(KnowledgeChunk chunk, double score) {}
 
-        List<Scored> scored = chunks.stream().map(chunk -> {
+        return chunks.stream().map(chunk -> {
             double score = 0;
             for (String kw : chunk.keywords()) {
                 if (queryLower.contains(kw)) score += 3;
@@ -142,13 +172,96 @@ public class RagService {
         }).filter(s -> s.score > 0)
           .sorted(Comparator.comparingDouble(Scored::score).reversed())
           .limit(topK)
-          .toList();
+          .map(s -> new RetrievalResult(
+              truncate(s.chunk.content(), maxEvidenceChunkLength),
+              "kb:" + s.chunk.source(),
+              s.score
+          )).toList();
+    }
 
-        return scored.stream().map(s -> new RetrievalResult(
-            truncate(s.chunk.content(), maxEvidenceChunkLength),
-            s.chunk.source(),
-            s.score
-        )).toList();
+    /**
+     * Search career_cases by keyword matching on title + background + tags.
+     */
+    private List<RetrievalResult> retrieveFromCareerCases(String query, int limit) {
+        try {
+            List<CareerCase> cases = caseRepo.findCases(null, PageRequest.of(0, 20));
+            if (cases.isEmpty()) return List.of();
+
+            String queryLower = query.toLowerCase();
+            return cases.stream()
+                .map(c -> {
+                    String searchable = ((c.getTitle() != null ? c.getTitle() : "") + " " +
+                        (c.getBackground() != null ? c.getBackground() : "") + " " +
+                        (c.getResult() != null ? c.getResult() : "") + " " +
+                        (c.getTags() != null ? c.getTags() : "")).toLowerCase();
+                    double score = 0;
+                    for (int i = 0; i < queryLower.length() - 1; i++) {
+                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
+                    }
+                    return new Object[]{c, score};
+                })
+                .filter(pair -> ((double) pair[1]) > 2)
+                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
+                .limit(limit)
+                .map(pair -> {
+                    CareerCase c = (CareerCase) pair[0];
+                    String evidence = formatCaseEvidence(c);
+                    return new RetrievalResult(truncate(evidence, maxEvidenceChunkLength),
+                        "case:" + c.getSource(), (double) pair[1]);
+                }).toList();
+        } catch (Exception e) {
+            log.warn("Career case retrieval failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Search crawled_articles by keyword matching on title + summary.
+     */
+    private List<RetrievalResult> retrieveFromArticles(String query, int limit) {
+        try {
+            List<CrawledArticle> articles = articleRepo.findArticles(null, PageRequest.of(0, 20));
+            if (articles.isEmpty()) return List.of();
+
+            String queryLower = query.toLowerCase();
+            return articles.stream()
+                .map(a -> {
+                    String searchable = ((a.getTitle() != null ? a.getTitle() : "") + " " +
+                        (a.getSummary() != null ? a.getSummary() : "")).toLowerCase();
+                    double score = 0;
+                    for (int i = 0; i < queryLower.length() - 1; i++) {
+                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
+                    }
+                    return new Object[]{a, score};
+                })
+                .filter(pair -> ((double) pair[1]) > 2)
+                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
+                .limit(limit)
+                .map(pair -> {
+                    CrawledArticle a = (CrawledArticle) pair[0];
+                    String content = a.getSummary() != null ? a.getSummary() : a.getTitle();
+                    return new RetrievalResult(truncate(content, maxEvidenceChunkLength),
+                        "article:" + a.getSourceName(), (double) pair[1]);
+                }).toList();
+        } catch (Exception e) {
+            log.warn("Article retrieval failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private String formatCaseEvidence(CareerCase c) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("【真实案例】").append(c.getTitle()).append("\n");
+        if (c.getBackground() != null && !c.getBackground().isBlank()) {
+            sb.append("背景：").append(c.getBackground()).append("\n");
+        }
+        if (c.getResult() != null && !c.getResult().isBlank()) {
+            sb.append("结果：").append(c.getResult()).append("\n");
+        }
+        if (c.getTags() != null && !c.getTags().isBlank()) {
+            sb.append("标签：").append(c.getTags());
+        }
+        return sb.toString();
     }
 
     public String formatEvidence(List<RetrievalResult> results) {
@@ -168,9 +281,6 @@ public class RagService {
         return text.substring(0, maxLen) + "...";
     }
 
-    /**
-     * Simple hash for cache key — keeps keys short and safe.
-     */
     private String hashQuery(String query) {
         int hash = query.hashCode();
         return Integer.toHexString(hash);
