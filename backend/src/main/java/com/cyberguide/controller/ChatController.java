@@ -95,11 +95,14 @@ public class ChatController {
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
+            StringBuilder fullText = new StringBuilder();
             try {
                 chatService.chatStream(request)
                     .doOnNext(token -> {
                         try {
-                            String json = objectMapper.writeValueAsString(Map.of("token", token));
+                            fullText.append(token);
+                            // Format: {"t":"delta","c":"文本片段"} — matches frontend readNDJSONStream
+                            String json = objectMapper.writeValueAsString(Map.of("t", "delta", "c", token));
                             writer.write(json + "\n");
                             writer.flush();
                         } catch (Exception e) {
@@ -109,7 +112,7 @@ public class ChatController {
                     .doOnError(err -> {
                         try {
                             String errJson = objectMapper.writeValueAsString(
-                                Map.of("error", true, "message", "AI 服务异常: " + err.getMessage()));
+                                Map.of("t", "error", "message", "AI 服务异常: " + err.getMessage()));
                             writer.write(errJson + "\n");
                             writer.flush();
                         } catch (Exception e) {
@@ -117,6 +120,16 @@ public class ChatController {
                         }
                     })
                     .blockLast();
+
+                // Final meta line with full message — frontend uses this for suggestions/crisis
+                String metaJson = objectMapper.writeValueAsString(Map.of(
+                    "t", "meta",
+                    "message", fullText.toString(),
+                    "suggestions", List.of("继续聊聊", "换个话题", "帮我分析一下"),
+                    "isCrisis", false
+                ));
+                writer.write(metaJson + "\n");
+                writer.flush();
             } catch (Exception e) {
                 log.error("stream fatal error: sessionId={}", body.session_id(), e);
             } finally {

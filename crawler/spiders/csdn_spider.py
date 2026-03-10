@@ -1,53 +1,59 @@
 """
-CSDN spider — crawls public career/study planning articles.
+CSDN spider — crawls public hot-rank blog articles via JSON API.
+(The search page requires JS rendering, so we use the hot-rank API instead.)
 """
 import logging
-from .base import BaseSpider
+import requests
 from pipelines.cleaner import clean_text, truncate, compute_dedupe_hash, compute_quality_score
+from config import REQUEST_TIMEOUT, USER_AGENT
 
 logger = logging.getLogger(__name__)
 
 
-class CsdnSpider(BaseSpider):
+class CsdnSpider:
     source_name = 'csdn'
-    base_url = 'https://so.csdn.net/so/search'
 
-    SEARCH_QUERIES = ['职业规划 CS', '学习路线 计算机', '求职经验 后端']
+    # CSDN hot-rank API — returns JSON, no JS rendering needed
+    HOT_RANK_URL = 'https://blog.csdn.net/phoenix/web/blog/hot-rank'
 
     def crawl(self, max_pages: int = 3) -> list[dict]:
         articles = []
-        for query in self.SEARCH_QUERIES[:max_pages]:
-            url = f"{self.base_url}?q={query}&t=blog&p=1"
-            soup = self.fetch_page(url)
-            if not soup:
-                continue
+        headers = {'User-Agent': USER_AGENT}
 
-            items = soup.select('.search-list-con')
-            for item in items[:5]:
-                title_el = item.select_one('.limit_width a')
-                if not title_el:
-                    continue
+        for page in range(max_pages):
+            try:
+                params = {'page': page, 'pageSize': 10, 'type': 0}
+                resp = requests.get(self.HOT_RANK_URL, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+                resp.raise_for_status()
+                data = resp.json()
 
-                title = clean_text(title_el.get_text())
-                link = title_el.get('href', '')
-                if not link or not title:
-                    continue
+                items = data.get('data', [])
+                if not items:
+                    break
 
-                desc_el = item.select_one('.search-desc')
-                summary = clean_text(desc_el.get_text()) if desc_el else ''
+                for item in items:
+                    title = clean_text(item.get('articleTitle', ''))
+                    url = item.get('articleDetailUrl', '')
+                    author = item.get('nickName', '')
+                    if not title or not url:
+                        continue
 
-                dedupe_hash = compute_dedupe_hash(title, link)
-                quality = compute_quality_score(title, summary)
+                    summary = f"作者: {author}" if author else title
+                    dedupe = compute_dedupe_hash(title, url)
+                    score = compute_quality_score(title, summary)
 
-                articles.append({
-                    'source_name': self.source_name,
-                    'url': link,
-                    'title': truncate(title, 200),
-                    'summary': truncate(summary, 500),
-                    'content_snippet': truncate(summary, 500),
-                    'quality_score': quality,
-                    'dedupe_hash': dedupe_hash,
-                })
+                    articles.append({
+                        'source_name': self.source_name,
+                        'url': url,
+                        'title': truncate(title, 200),
+                        'summary': truncate(summary, 300),
+                        'content_snippet': truncate(summary, 500),
+                        'dedupe_hash': dedupe,
+                        'quality_score': score,
+                    })
+
+            except Exception as e:
+                logger.warning(f"[{self.source_name}] Page {page} failed: {e}")
 
         logger.info(f"[{self.source_name}] Crawled {len(articles)} articles")
         return articles

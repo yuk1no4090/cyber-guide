@@ -43,13 +43,14 @@ class JuejinSpider:
 
                 for item in data.get('data', []):
                     result_model = item.get('result_model', {})
-                    title = clean_text(result_model.get('title', ''))
-                    article_id = result_model.get('article_id', '')
+                    article_info = result_model.get('article_info', {})
+                    title = clean_text(article_info.get('title', ''))
+                    article_id = article_info.get('article_id', '') or result_model.get('article_id', '')
                     if not title or not article_id:
                         continue
 
                     link = f"https://juejin.cn/post/{article_id}"
-                    summary = clean_text(result_model.get('brief_content', ''))
+                    summary = clean_text(article_info.get('brief_content', ''))
 
                     dedupe_hash = compute_dedupe_hash(title, link)
                     quality = compute_quality_score(title, summary)

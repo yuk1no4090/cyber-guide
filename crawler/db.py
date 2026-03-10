@@ -1,6 +1,9 @@
 """
 Database access layer for the crawler.
 """
+import uuid
+from datetime import datetime, timezone
+
 import psycopg2
 from psycopg2.extras import execute_values
 from contextlib import contextmanager
@@ -32,7 +35,7 @@ def get_cursor():
 
 
 def ensure_tables():
-    """Create crawled_articles table if not exists (idempotent)."""
+    """Create crawled_articles table if not exists, and fix missing defaults on existing table."""
     with get_cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS crawled_articles (
@@ -51,6 +54,9 @@ def ensure_tables():
             CREATE INDEX IF NOT EXISTS idx_crawled_source ON crawled_articles(source_name);
             CREATE INDEX IF NOT EXISTS idx_crawled_dedupe ON crawled_articles(dedupe_hash);
         """)
+        # Fix defaults if table was created by JPA without them
+        cur.execute("ALTER TABLE crawled_articles ALTER COLUMN id SET DEFAULT gen_random_uuid();")
+        cur.execute("ALTER TABLE crawled_articles ALTER COLUMN crawl_time SET DEFAULT NOW();")
 
 
 def article_exists(dedupe_hash: str) -> bool:
@@ -62,21 +68,24 @@ def article_exists(dedupe_hash: str) -> bool:
 def insert_articles(articles: list[dict]):
     if not articles:
         return
+    now = datetime.now(timezone.utc)
     with get_cursor() as cur:
         execute_values(
             cur,
             """
             INSERT INTO crawled_articles
-                (source_name, url, title, summary, content_snippet, language, quality_score, dedupe_hash)
+                (id, source_name, url, title, summary, content_snippet, language, quality_score, dedupe_hash, crawl_time)
             VALUES %s
             ON CONFLICT (dedupe_hash) DO NOTHING
             """,
             [
                 (
+                    str(uuid.uuid4()),
                     a['source_name'], a['url'], a['title'],
                     a.get('summary', ''), a.get('content_snippet', ''),
                     a.get('language', 'zh'), a.get('quality_score', 0),
                     a['dedupe_hash'],
+                    now,
                 )
                 for a in articles
             ],

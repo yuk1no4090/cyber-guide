@@ -23,30 +23,41 @@ class V2exSpider(BaseSpider):
             if not soup:
                 continue
 
-            items = soup.select('.cell.item')
-            for item in items[:5]:
-                title_el = item.select_one('.topic-link')
-                if not title_el:
+            # V2EX uses .topic-link inside span.item_title
+            links = soup.select('.topic-link')
+            for link in links[:5]:
+                title = clean_text(link.text.strip())
+                href = link.get('href', '')
+                if not title or not href:
                     continue
 
-                title = clean_text(title_el.get_text())
-                href = title_el.get('href', '')
-                link = f"{self.base_url}{href}" if href.startswith('/') else href
-                if not link or not title:
-                    continue
+                full_url = f"{self.base_url}{href}" if href.startswith('/') else href
 
-                dedupe_hash = compute_dedupe_hash(title, link)
-                quality = compute_quality_score(title, title)
+                # Try to get a snippet from the topic page
+                summary = title  # fallback
+                try:
+                    topic_soup = self.fetch_page(full_url)
+                    if topic_soup:
+                        # Topic content is in .topic_content or .reply_content
+                        content_el = topic_soup.select_one('.topic_content')
+                        if content_el:
+                            summary = truncate(clean_text(content_el.get_text()), 300)
+                except Exception:
+                    pass
+
+                dedupe = compute_dedupe_hash(title, full_url)
+                score = compute_quality_score(title, summary)
 
                 articles.append({
                     'source_name': self.source_name,
-                    'url': link,
+                    'url': full_url,
                     'title': truncate(title, 200),
-                    'summary': '',
-                    'content_snippet': '',
-                    'quality_score': quality,
-                    'dedupe_hash': dedupe_hash,
+                    'summary': summary,
+                    'content_snippet': truncate(summary, 500),
+                    'dedupe_hash': dedupe,
+                    'quality_score': score,
                 })
 
-        logger.info(f"[{self.source_name}] Crawled {len(articles)} articles")
+            logger.info(f"[{self.source_name}] Crawled {len(articles)} articles from /go/{node}")
+
         return articles

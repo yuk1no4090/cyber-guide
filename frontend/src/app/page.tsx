@@ -497,7 +497,7 @@ export default function Home() {
           messages: messages.map(m => ({ role: m.role, content: m.content })),
           mode: 'generate_recap',
         }),
-      });
+      }, 30_000);
       const raw = await response.json();
       const payload = unwrapEnvelope<{
         message: string;
@@ -580,7 +580,7 @@ export default function Home() {
           scenario: mode === 'profile_other' ? selectedScenario : null,
           session_id: sessionId || null,
         }),
-      });
+      }, 30_000);
       let finalMessage = '';
       let nextSuggestions: string[] = [];
 
@@ -708,7 +708,7 @@ export default function Home() {
     const startedAt = Date.now();
 
     try {
-      const response = await authFetch(sessionId, '/api/chat', {
+      const response = await authFetch(sessionId, '/api/chat/stream', {
         method: 'POST',
         body: JSON.stringify({
           messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
@@ -716,7 +716,7 @@ export default function Home() {
           scenario: mode === 'profile_other' ? selectedScenario : null,
           session_id: sessionId || null,
         }),
-      });
+      }, 30_000);
       const upsertAssistantMessage = (nextContent: string, isCrisis?: boolean) => {
         const updater = (prev: Message[]) => {
           const next = [...prev];
@@ -743,6 +743,7 @@ export default function Home() {
 
       if (isStream) {
         let streamed = '';
+        let firstDelta = true;
         upsertAssistantMessage('');
         const data = await readNDJSONStream<{
           message?: string;
@@ -751,6 +752,10 @@ export default function Home() {
         }>(
           response,
           (delta) => {
+            if (firstDelta) {
+              setIsLoading(false); // Hide typing indicator as soon as stream starts
+              firstDelta = false;
+            }
             streamed += delta;
             upsertAssistantMessage(streamed);
           }
@@ -760,6 +765,10 @@ export default function Home() {
         isCrisis = Boolean(data.isCrisis);
         if (!response.ok || !finalMessage) {
           throw new Error('API request failed');
+        }
+        // Stream already built the assistant message via onDelta — just update crisis flag if needed
+        if (isCrisis) {
+          upsertAssistantMessage(finalMessage, true);
         }
       } else {
         const raw = await response.json();
@@ -786,7 +795,10 @@ export default function Home() {
         });
       }
 
-      upsertAssistantMessage(finalMessage, isCrisis);
+      // Only upsert for non-stream path; stream already built the message via onDelta
+      if (!isStream) {
+        upsertAssistantMessage(finalMessage, isCrisis);
+      }
       setSuggestions(nextSuggestions.length > 0 ? nextSuggestions : []);
     } catch (error) {
       console.error('Failed to send message:', error);
