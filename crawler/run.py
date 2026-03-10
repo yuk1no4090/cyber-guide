@@ -1,22 +1,15 @@
 """
-Crawler runner — can be invoked as one-shot or scheduled.
+Crawler runner — Scrapy-based CLI entry point.
 
 Usage:
-    python run.py --once          # run all spiders once
-    python run.py --once --dry-run  # parse only, don't write to DB
-    python run.py                 # start scheduler
+    python run.py --once                  # run all spiders once
+    python run.py --once --spider eeban   # run a single spider
+    python run.py                         # start APScheduler for periodic crawling
 """
 import argparse
 import logging
+import os
 import sys
-
-from config import CRAWLER_ENABLED, CRAWLER_INTERVAL_MINUTES, CRAWLER_MAX_PAGES_PER_SOURCE
-from db import ensure_tables, insert_articles, article_exists
-from spiders.eeban_spider import EebanSpider
-from spiders.kaoyan_spider import KaoyanSpider
-from spiders.juejin_spider import JuejinSpider
-from spiders.csdn_spider import CsdnSpider
-from spiders.v2ex_spider import V2exSpider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,79 +17,60 @@ logging.basicConfig(
 )
 logger = logging.getLogger('crawler')
 
-ALL_SPIDERS = [
-    EebanSpider,       # 保研经历帖
-    KaoyanSpider,      # 考研经验帖
-    JuejinSpider,      # 求职/职业规划
-    CsdnSpider,        # 技术热文
-    V2exSpider,        # 程序员职业讨论
-]
+
+def get_all_spider_names():
+    return ['eeban', 'kaoyan', 'juejin', 'csdn', 'v2ex']
 
 
-def run_all_spiders(dry_run: bool = False):
-    """Execute all spiders and persist results."""
-    logger.info("Starting crawl run (dry_run=%s, spiders=%d)", dry_run, len(ALL_SPIDERS))
-    total_new = 0
+def run_scrapy(spider_names=None):
+    """Run Scrapy spiders using CrawlerProcess."""
+    os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'cyberguide_crawler.settings')
 
-    for SpiderClass in ALL_SPIDERS:
-        spider = SpiderClass()
-        try:
-            articles = spider.crawl(max_pages=CRAWLER_MAX_PAGES_PER_SOURCE)
-        except Exception as e:
-            logger.error("Spider %s failed: %s", spider.source_name, e)
-            continue
+    from scrapy.crawler import CrawlerProcess
+    from scrapy.utils.project import get_project_settings
 
-        if dry_run:
-            for a in articles:
-                logger.info("[DRY] %s | %s | cat=%s | score=%.1f",
-                            a['source_name'], a['title'][:50],
-                            a.get('category', '?'), a['quality_score'])
-            total_new += len(articles)
-            continue
+    settings = get_project_settings()
+    process = CrawlerProcess(settings)
 
-        new_articles = [a for a in articles if not article_exists(a['dedupe_hash'])]
-        if new_articles:
-            insert_articles(new_articles)
-            total_new += len(new_articles)
-            logger.info("[%s] Inserted %d new articles (category=%s)",
-                        spider.source_name, len(new_articles),
-                        new_articles[0].get('category', '?'))
-        else:
-            logger.info("[%s] No new articles", spider.source_name)
+    names = spider_names or get_all_spider_names()
+    for name in names:
+        process.crawl(name)
 
-    logger.info("Crawl run complete. Total new: %d", total_new)
-    return total_new
+    logger.info("Starting Scrapy crawl: spiders=%s", names)
+    process.start()
+    logger.info("Scrapy crawl complete")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Cyber Guide Crawler')
+    parser = argparse.ArgumentParser(description='Cyber Guide Crawler (Scrapy)')
     parser.add_argument('--once', action='store_true', help='Run once and exit')
-    parser.add_argument('--dry-run', action='store_true', help='Parse only, no DB writes')
+    parser.add_argument('--spider', type=str, help='Run a specific spider only')
     args = parser.parse_args()
 
-    if not CRAWLER_ENABLED:
+    enabled = os.getenv('CRAWLER_ENABLED', 'true').lower() == 'true'
+    if not enabled:
         logger.warning("Crawler is disabled (CRAWLER_ENABLED=false). Exiting.")
         sys.exit(0)
 
-    if not args.dry_run:
-        ensure_tables()
-
     if args.once:
-        run_all_spiders(dry_run=args.dry_run)
+        spiders = [args.spider] if args.spider else None
+        run_scrapy(spiders)
         return
 
+    # Scheduled mode
+    interval = int(os.getenv('CRAWLER_INTERVAL_MINUTES', '360'))
     from apscheduler.schedulers.blocking import BlockingScheduler
     scheduler = BlockingScheduler()
     scheduler.add_job(
-        run_all_spiders,
+        run_scrapy,
         'interval',
-        minutes=CRAWLER_INTERVAL_MINUTES,
+        minutes=interval,
         id='crawl_job',
         max_instances=1,
     )
-    logger.info("Scheduler started. Interval: %d minutes", CRAWLER_INTERVAL_MINUTES)
+    logger.info("Scheduler started. Interval: %d minutes", interval)
 
-    run_all_spiders()
+    run_scrapy()
 
     try:
         scheduler.start()
