@@ -30,6 +30,9 @@ public class CrawledArticle {
     @Column(name = "content_snippet", columnDefinition = "TEXT")
     private String contentSnippet;
 
+    @Column(length = 32)
+    private String category;
+
     @Column(length = 16)
     private String language = "zh";
 
@@ -62,6 +65,8 @@ public class CrawledArticle {
     public void setSummary(String summary) { this.summary = summary; }
     public String getContentSnippet() { return contentSnippet; }
     public void setContentSnippet(String contentSnippet) { this.contentSnippet = contentSnippet; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
     public String getLanguage() { return language; }
     public void setLanguage(String language) { this.language = language; }
     public Instant getPublishedAt() { return publishedAt; }

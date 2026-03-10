@@ -12,9 +12,11 @@ import sys
 
 from config import CRAWLER_ENABLED, CRAWLER_INTERVAL_MINUTES, CRAWLER_MAX_PAGES_PER_SOURCE
 from db import ensure_tables, insert_articles, article_exists
+from spiders.eeban_spider import EebanSpider
+from spiders.kaoyan_spider import KaoyanSpider
+from spiders.juejin_spider import JuejinSpider
 from spiders.csdn_spider import CsdnSpider
 from spiders.v2ex_spider import V2exSpider
-from spiders.juejin_spider import JuejinSpider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,12 +24,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger('crawler')
 
-ALL_SPIDERS = [CsdnSpider, V2exSpider, JuejinSpider]
+ALL_SPIDERS = [
+    EebanSpider,       # 保研经历帖
+    KaoyanSpider,      # 考研经验帖
+    JuejinSpider,      # 求职/职业规划
+    CsdnSpider,        # 技术热文
+    V2exSpider,        # 程序员职业讨论
+]
 
 
 def run_all_spiders(dry_run: bool = False):
     """Execute all spiders and persist results."""
-    logger.info("Starting crawl run (dry_run=%s)", dry_run)
+    logger.info("Starting crawl run (dry_run=%s, spiders=%d)", dry_run, len(ALL_SPIDERS))
     total_new = 0
 
     for SpiderClass in ALL_SPIDERS:
@@ -40,16 +48,19 @@ def run_all_spiders(dry_run: bool = False):
 
         if dry_run:
             for a in articles:
-                logger.info("[DRY] %s | %s | score=%.1f", a['source_name'], a['title'], a['quality_score'])
+                logger.info("[DRY] %s | %s | cat=%s | score=%.1f",
+                            a['source_name'], a['title'][:50],
+                            a.get('category', '?'), a['quality_score'])
             total_new += len(articles)
             continue
 
-        # Filter already-seen articles
         new_articles = [a for a in articles if not article_exists(a['dedupe_hash'])]
         if new_articles:
             insert_articles(new_articles)
             total_new += len(new_articles)
-            logger.info("[%s] Inserted %d new articles", spider.source_name, len(new_articles))
+            logger.info("[%s] Inserted %d new articles (category=%s)",
+                        spider.source_name, len(new_articles),
+                        new_articles[0].get('category', '?'))
         else:
             logger.info("[%s] No new articles", spider.source_name)
 
@@ -74,7 +85,6 @@ def main():
         run_all_spiders(dry_run=args.dry_run)
         return
 
-    # Scheduled mode
     from apscheduler.schedulers.blocking import BlockingScheduler
     scheduler = BlockingScheduler()
     scheduler.add_job(
@@ -86,7 +96,6 @@ def main():
     )
     logger.info("Scheduler started. Interval: %d minutes", CRAWLER_INTERVAL_MINUTES)
 
-    # Run immediately on start
     run_all_spiders()
 
     try:
