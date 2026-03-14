@@ -45,6 +45,9 @@ public class CrawledArticle {
     @Column(name = "quality_score")
     private double qualityScore;
 
+    @Column(name = "relevance_tier", length = 16)
+    private String relevanceTier = "low";
+
     @Column(name = "dedupe_hash", nullable = false, length = 64)
     private String dedupeHash;
 
@@ -75,6 +78,8 @@ public class CrawledArticle {
     public void setCrawlTime(Instant crawlTime) { this.crawlTime = crawlTime; }
     public double getQualityScore() { return qualityScore; }
     public void setQualityScore(double qualityScore) { this.qualityScore = qualityScore; }
+    public String getRelevanceTier() { return relevanceTier; }
+    public void setRelevanceTier(String relevanceTier) { this.relevanceTier = relevanceTier; }
     public String getDedupeHash() { return dedupeHash; }
     public void setDedupeHash(String dedupeHash) { this.dedupeHash = dedupeHash; }
 }

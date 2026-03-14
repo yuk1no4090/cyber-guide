@@ -1,0 +1,122 @@
+[
+  {
+    "query": "我是211计算机大三，GPA 3.6，想保研，有什么建议？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["保研", "211", "计算机"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "双非软件工程大二，想冲保研夏令营，现在该准备什么？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["保研", "夏令营", "双非"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "我在985电子信息，准备推免，需要提前联系导师吗？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["推免", "导师", "985"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "大三计算机，竞赛一般，想保研到更好的学校要补什么？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["保研", "竞赛", "大三"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "我是大四，准备考研计算机，复试应该怎么准备？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["考研", "复试", "计算机"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "想考研上岸，调剂信息一般在哪里看比较靠谱？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["考研", "调剂", "上岸"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "二本通信工程考研，数学和专业课怎么分配时间？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["考研", "通信", "专业课"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "考研跨考计算机，零基础从哪里开始最稳妥？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["考研", "跨考", "计算机"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "我准备秋招找后端开发实习，简历怎么写更容易过筛？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["秋招", "实习", "简历"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "计算机大三想找实习，项目经历不够怎么补救？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["实习", "项目经历", "大三"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "春招 Java 后端面试一般问哪些重点？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["春招", "面试", "Java"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "没有大厂实习经历，校招怎么提高拿 offer 概率？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["校招", "offer", "实习"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "研二想找算法岗实习，应该怎么准备笔试和面试？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["算法岗", "实习", "面试"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "想走就业路线，前端和后端哪个更好找第一份工作？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["就业", "前端", "后端"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "我是211自动化，保研和就业都在考虑，怎么选？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["保研", "就业", "211"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "大四还没想好读研还是工作，能给我双路径建议吗？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["实习", "校招", "就业"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "保研失败后转考研，时间很紧，复习策略怎么调整？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["保研", "考研", "复习"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "计算机专业考研 408，刷题和背诵比例怎么安排？",
+    "expectedCategory": "kaoyan",
+    "expectedKeywords": ["考研", "408", "刷题"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "保研夏令营面试，科研一般会不会被卡？",
+    "expectedCategory": "baoyan",
+    "expectedKeywords": ["保研", "夏令营", "科研"],
+    "shouldContainUrl": true
+  },
+  {
+    "query": "秋招前两个月冲刺，如何规划每日学习与投递节奏？",
+    "expectedCategory": "job",
+    "expectedKeywords": ["秋招", "投递", "学习规划"],
+    "shouldContainUrl": true
+  }
+]

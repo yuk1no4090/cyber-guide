@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +32,9 @@ public class FeedbackService {
         int rating,
         String feedback,
         boolean hadCrisis,
-        String mode
+        String mode,
+        String sessionId,
+        UUID userId
     ) {}
 
     public record QualityResult(double score, String tier) {}
@@ -47,6 +50,8 @@ public class FeedbackService {
         entity.setFeedbackRedacted(request.feedback());
         entity.setHadCrisis(request.hadCrisis());
         entity.setMode(request.mode());
+        entity.setSessionId(request.sessionId());
+        entity.setUserId(request.userId());
         repo.save(entity);
 
         QualityResult quality = computeQuality(request);

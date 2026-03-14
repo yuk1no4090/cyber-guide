@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:cyber_guide_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+ai:
+  api-key: test-key
+  base-url: https://example.com
+  model: test-model
+  timeout-ms: 5000
+
+rag:
+  knowledge-base-path: ../knowledge_base/skills
+  default-top-k: 2
+
+security:
+  jwt:
+    secret: test-secret-key-for-unit-tests-minimum-32-chars!!
+    expiration-ms: 3600000
+
+resilience4j:
+  ratelimiter:
+    instances:
+      chatRateLimit:
+        limit-for-period: 100
+        limit-refresh-period: 60s
+        timeout-duration: 0s

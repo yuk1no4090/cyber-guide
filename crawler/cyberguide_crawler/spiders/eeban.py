@@ -13,16 +13,20 @@ class EebanSpider(scrapy.Spider):
     custom_settings = {
         'DOWNLOAD_DELAY': 2,
     }
+    FORUM_IDS = [662, 661]  # 保研交流 + 保研干货
 
     def start_requests(self):
-        max_pages = self.settings.getint('CRAWLER_MAX_PAGES', 3)
-        for page in range(1, max_pages + 1):
-            url = f'https://www.eeban.com/forum.php?mod=forumdisplay&fid=662&page={page}'
-            yield scrapy.Request(url, callback=self.parse_list, meta={'page': page})
+        max_pages = self.settings.getint('CRAWLER_MAX_PAGES', 10)
+        for fid in self.FORUM_IDS:
+            for page in range(1, max_pages + 1):
+                url = f'https://www.eeban.com/forum.php?mod=forumdisplay&fid={fid}&page={page}'
+                yield scrapy.Request(url, callback=self.parse_list, meta={'page': page, 'fid': fid})
 
     def parse_list(self, response):
         threads = response.css('a.s.xst')
-        self.logger.info(f"page={response.meta['page']}: {len(threads)} threads")
+        self.logger.info(
+            f"fid={response.meta.get('fid')} page={response.meta['page']}: {len(threads)} threads"
+        )
 
         for thread in threads:
             title = thread.css('::text').get('').strip()

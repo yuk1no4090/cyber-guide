@@ -17,6 +17,9 @@ public class PlanDay {
     @Column(name = "session_id", nullable = false, length = 128)
     private String sessionId;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "day_index", nullable = false)
     private int dayIndex;
 
@@ -48,6 +51,8 @@ public class PlanDay {
     public void setId(UUID id) { this.id = id; }
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
     public int getDayIndex() { return dayIndex; }
     public void setDayIndex(int dayIndex) { this.dayIndex = dayIndex; }
     public String getTaskText() { return taskText; }

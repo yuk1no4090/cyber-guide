@@ -34,11 +34,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (header != null && header.startsWith(BEARER_PREFIX)) {
             String token = header.substring(BEARER_PREFIX.length());
-            String sessionId = tokenProvider.getSessionId(token);
+            JwtTokenProvider.TokenIdentity identity = tokenProvider.parseIdentity(token);
 
-            if (sessionId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (identity != null
+                    && identity.subject() != null
+                    && SecurityContextHolder.getContext().getAuthentication() == null) {
+                String role = "user".equals(identity.type()) ? "ROLE_USER" : "ROLE_ANONYMOUS";
+                var principal = new AuthPrincipal(identity.subject(), identity.type(), identity.email());
                 var auth = new UsernamePasswordAuthenticationToken(
-                        sessionId, null, List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
+                        principal, null, List.of(new SimpleGrantedAuthority(role)));
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }

@@ -14,10 +14,10 @@ class KaoyanSpider(scrapy.Spider):
         'DOWNLOAD_DELAY': 2,
     }
 
-    FORUM_PATHS = ['f22p{}', 'f540p{}']
+    FORUM_PATHS = ['f22p{}', 'f540p{}', 'f105p{}', 'f97p{}']
 
     def start_requests(self):
-        max_pages = self.settings.getint('CRAWLER_MAX_PAGES', 3)
+        max_pages = self.settings.getint('CRAWLER_MAX_PAGES', 10)
         for path_tpl in self.FORUM_PATHS:
             for page in range(1, max_pages + 1):
                 path = path_tpl.format(page)
@@ -28,7 +28,7 @@ class KaoyanSpider(scrapy.Spider):
         threads = response.css('a.s.xst') or response.css('th a[href*="/t"]')
         self.logger.info(f"{response.meta['path']}: {len(threads)} threads")
 
-        for thread in threads[:10]:
+        for thread in threads:
             title = thread.css('::text').get('').strip()
             href = thread.attrib.get('href', '')
             if not title or not href or len(title) < 5:

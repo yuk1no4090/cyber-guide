@@ -1,5 +1,12 @@
 server:
   port: ${BACKEND_PORT:8080}
+  tomcat:
+    threads:
+      max: ${TOMCAT_THREADS_MAX:300}
+      min-spare: ${TOMCAT_THREADS_MIN_SPARE:20}
+    accept-count: ${TOMCAT_ACCEPT_COUNT:1000}
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:8192}
+    connection-timeout: ${TOMCAT_CONNECTION_TIMEOUT_MS:5000}
 
 spring:
   application:
@@ -9,8 +16,9 @@ spring:
     username: ${POSTGRES_USER:cyber_guide}
     password: ${POSTGRES_PASSWORD:changeme}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: ${DB_POOL_MAX:30}
+      minimum-idle: ${DB_POOL_MIN_IDLE:6}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:2000}
   jpa:
     hibernate:
       ddl-auto: update
@@ -29,10 +37,21 @@ spring:
       timeout: 3000ms
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
+          max-active: ${REDIS_POOL_MAX_ACTIVE:48}
+          max-idle: ${REDIS_POOL_MAX_IDLE:16}
+          min-idle: ${REDIS_POOL_MIN_IDLE:6}
           max-wait: 2000ms
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
 
 # AI configuration
 ai:
@@ -40,8 +59,7 @@ ai:
   base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
   model: ${OPENAI_MODEL:glm-4-flash}
   fallback-model: ${OPENAI_FALLBACK_MODEL:}
-  timeout-ms: ${OPENAI_TIMEOUT_MS:25000}
-  max-retries: ${OPENAI_MAX_RETRIES:0}
+  timeout-ms: ${OPENAI_TIMEOUT_MS:18000}
 
 # RAG configuration
 rag:
@@ -54,15 +72,21 @@ security:
   jwt:
     secret: ${JWT_SECRET:cyber-guide-default-secret-key-change-in-production-32chars!!}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  email-code:
+    enabled: ${EMAIL_CODE_ENABLED:false}
+    dev-log-only: ${EMAIL_CODE_DEV_LOG_ONLY:true}
+    from: ${EMAIL_CODE_FROM:}
+    hash-pepper: ${EMAIL_CODE_HASH_PEPPER:cyber-guide-email-code-pepper}
+  oauth:
+    github:
+      client-id: ${GITHUB_CLIENT_ID:}
+      client-secret: ${GITHUB_CLIENT_SECRET:}
+      redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:8080/api/auth/github/callback}
+      frontend-callback: ${GITHUB_FRONTEND_CALLBACK:http://localhost:3000}
+      allowed-redirect-origins: ${GITHUB_ALLOWED_REDIRECT_ORIGINS:http://localhost:3000}
 
 # Resilience4j
 resilience4j:
-  ratelimiter:
-    instances:
-      chatRateLimit:
-        limit-for-period: 15
-        limit-refresh-period: 60s
-        timeout-duration: 0s
   circuitbreaker:
     instances:
       aiService:
@@ -79,9 +103,12 @@ resilience4j:
 # Rate limit (legacy, kept for reference)
 rate-limit:
   chat-per-minute: 15
-  feedback-per-minute: 5
-  plan-generate-per-minute: 5
-  plan-mutate-per-minute: 20
+
+concurrency:
+  chat:
+    max-inflight: ${CHAT_MAX_INFLIGHT:90}
+  stream:
+    max-inflight: ${STREAM_MAX_INFLIGHT:20}
 
 # Actuator
 management:

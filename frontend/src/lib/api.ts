@@ -24,6 +24,14 @@ function cacheToken(token: string) {
   } catch {}
 }
 
+export function setToken(token: string) {
+  cacheToken(token);
+}
+
+export function getCachedTokenUnsafe(): string | null {
+  return getCachedToken();
+}
+
 /**
  * Get a valid JWT token. Fetches from /api/auth/anonymous if not cached.
  * Deduplicates concurrent calls (only one fetch in-flight at a time).

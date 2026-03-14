@@ -23,8 +23,9 @@ public class RagEnrichHandler implements MessageHandler {
 
     @Override
     public void handle(MessageContext context) {
-        var evidence = ragService.retrieve(context.getUserMessage());
-        String formatted = ragService.formatEvidence(evidence);
+        var profile = ragService.inferUserProfile(context.getMessages(), context.getUserMessage());
+        var evidence = ragService.retrieve(context.getUserMessage(), profile, 2);
+        String formatted = ragService.formatEvidence(evidence, profile);
         context.setEvidence(formatted);
         if (!evidence.isEmpty()) {
             log.debug("RAG enriched: {} chunks for session={}", evidence.size(), context.getSessionId());

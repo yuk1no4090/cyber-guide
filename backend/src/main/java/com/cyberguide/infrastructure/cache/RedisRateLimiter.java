@@ -76,25 +76,4 @@ public class RedisRateLimiter {
     public boolean allowChat(String sessionId, int limitPerMinute) {
         return isAllowed("rate:chat:" + sessionId, limitPerMinute, 60);
     }
-
-    /**
-     * Convenience method for feedback rate limiting.
-     */
-    public boolean allowFeedback(String sessionId, int limitPerMinute) {
-        return isAllowed("rate:feedback:" + sessionId, limitPerMinute, 60);
-    }
-
-    /**
-     * Get remaining requests for a key.
-     */
-    public int remaining(String key, int limit) {
-        try {
-            Object val = redisTemplate.opsForValue().get(key);
-            if (val == null) return limit;
-            int current = val instanceof Number n ? n.intValue() : Integer.parseInt(val.toString());
-            return Math.max(0, limit - current);
-        } catch (Exception e) {
-            return limit;
-        }
-    }
 }

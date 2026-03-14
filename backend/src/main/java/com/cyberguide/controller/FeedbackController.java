@@ -2,6 +2,7 @@ package com.cyberguide.controller;
 
 import com.cyberguide.exception.BizException;
 import com.cyberguide.exception.ErrorCode;
+import com.cyberguide.security.SecurityUtils;
 import com.cyberguide.service.FeedbackService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,7 +33,8 @@ public class FeedbackController {
         int rating,
         String feedback,
         boolean hadCrisis,
-        String mode
+        String mode,
+        String session_id
     ) {}
 
     @PostMapping("/feedback")
@@ -48,7 +50,13 @@ public class FeedbackController {
         log.info("feedback submit: rating={}, mode={}, hasCrisis={}", body.rating(), body.mode(), body.hadCrisis());
 
         var request = new FeedbackService.FeedbackRequest(
-            body.messages(), body.rating(), body.feedback(), body.hadCrisis(), body.mode()
+            body.messages(),
+            body.rating(),
+            body.feedback(),
+            body.hadCrisis(),
+            body.mode(),
+            body.session_id() != null ? body.session_id() : SecurityUtils.currentAnonymousSessionId().orElse(null),
+            SecurityUtils.currentUserId().orElse(null)
         );
         var quality = feedbackService.submit(request);
 

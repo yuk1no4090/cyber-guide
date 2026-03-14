@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 public class AiCompletionHandler implements MessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(AiCompletionHandler.class);
-    private static final int MAX_OUTPUT_TOKENS = 400;
+    private static final int MAX_OUTPUT_TOKENS = 800;
 
     private final AiClient aiClient;
     private final ChatStrategyFactory strategyFactory;

@@ -2,9 +2,7 @@ package com.cyberguide.controller;
 
 import com.cyberguide.infrastructure.cache.CacheGuard;
 import com.cyberguide.model.CareerCase;
-import com.cyberguide.model.CrawledArticle;
 import com.cyberguide.repository.CareerCaseRepository;
-import com.cyberguide.repository.CrawledArticleRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -28,12 +26,10 @@ public class CareerCaseController {
     private static final Set<String> VALID_CATEGORIES = Set.of("baoyan", "kaoyan", "liuxue", "job");
 
     private final CareerCaseRepository repo;
-    private final CrawledArticleRepository articleRepo;
     private final CacheGuard cacheGuard;
 
-    public CareerCaseController(CareerCaseRepository repo, CrawledArticleRepository articleRepo, CacheGuard cacheGuard) {
+    public CareerCaseController(CareerCaseRepository repo, CacheGuard cacheGuard) {
         this.repo = repo;
-        this.articleRepo = articleRepo;
         this.cacheGuard = cacheGuard;
     }
 

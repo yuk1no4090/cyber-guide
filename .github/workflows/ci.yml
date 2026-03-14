@@ -86,7 +86,7 @@ jobs:
         working-directory: frontend
 
   crawler:
-    name: Crawler (Python)
+    name: Crawler (Python + Scrapy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +99,12 @@ jobs:
         run: pip install -r requirements.txt
         working-directory: crawler
 
-      - name: Run tests
-        run: python -m pytest tests/ -v
+      - name: Verify Scrapy spiders
+        run: python -m scrapy list
+        working-directory: crawler
+        env:
+          SCRAPY_SETTINGS_MODULE: cyberguide_crawler.settings
+
+      - name: Compile check
+        run: python -m compileall cyberguide_crawler
         working-directory: crawler

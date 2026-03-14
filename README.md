@@ -70,6 +70,7 @@ cyber-guide/
 | API Contract | [API.md](docs/API.md) | — |
 | Database Design | [DATABASE.md](docs/DATABASE.md) | — |
 | Crawler Design | [CRAWLER.md](docs/CRAWLER.md) | — |
+| Load Test Guide | [LOAD_TEST.md](docs/LOAD_TEST.md) | — |
 | Deployment Guide | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | [DEPLOYMENT_CN.md](docs/DEPLOYMENT_CN.md) |
 | Development Guide | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | — |
 | User Manual | [USER_MANUAL.md](docs/USER_MANUAL.md) | — |

@@ -44,7 +44,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" className={`${nunito.variable} ${lexend.variable}`}>
-      <body className="bg-gradient-mesh antialiased">
+      <body className="bg-gradient-mesh antialiased h-screen overflow-hidden">
         <ErrorBoundary>
           {children}
         </ErrorBoundary>

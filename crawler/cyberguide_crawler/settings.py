@@ -76,7 +76,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "cyber_guide")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "changeme")
 
 # --- Crawler behavior ---
-CRAWLER_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_PER_SOURCE", "3"))
+CRAWLER_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_PER_SOURCE", "10"))
 CLOSESPIDER_TIMEOUT = 300
 
 # --- AI extraction (optional, disabled by default) ---

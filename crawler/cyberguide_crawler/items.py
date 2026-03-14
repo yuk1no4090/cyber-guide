@@ -14,6 +14,7 @@ class ArticleItem(scrapy.Item):
     category = scrapy.Field()       # baoyan / kaoyan / liuxue / job
     language = scrapy.Field()
     quality_score = scrapy.Field()
+    relevance_tier = scrapy.Field()  # high / medium / low
     dedupe_hash = scrapy.Field()
     _career_case = scrapy.Field()   # set by ExtractorPipeline, consumed by DatabasePipeline
 

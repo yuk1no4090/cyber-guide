@@ -20,7 +20,7 @@ public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     private static final int MAX_HISTORY = 8;
-    private static final int MAX_OUTPUT_TOKENS = 400;
+    private static final int MAX_OUTPUT_TOKENS = 800;
 
     private final AiClient aiClient;
     private final RagService ragService;
@@ -49,6 +49,11 @@ public class ChatService {
         String message,
         List<String> suggestions,
         boolean isCrisis
+    ) {}
+
+    public record StreamResponse(
+        Flux<String> stream,
+        List<Map<String, Object>> similarCases
     ) {}
 
     /**
@@ -83,23 +88,36 @@ public class ChatService {
      * Streaming chat — still uses direct AI call (pipeline is for sync path).
      */
     public Flux<String> chatStream(ChatRequest request) {
+        return chatStreamWithMeta(request).stream();
+    }
+
+    /**
+     * Streaming chat with precomputed metadata (similarCases).
+     * RAG retrieval runs once and is reused by both system prompt and metadata output.
+     */
+    public StreamResponse chatStreamWithMeta(ChatRequest request) {
         String lastUserMsg = getLastUserMessage(request.messages());
 
         // Quick crisis check
         var modResult = ModerationService.check(lastUserMsg);
         if (modResult.isCrisis()) {
             eventPublisher.publishEvent(new CrisisDetectedEvent(this, request.sessionId(), modResult.keywordsFound()));
-            return Flux.just(ModerationService.CRISIS_RESPONSE);
+            return new StreamResponse(Flux.just(ModerationService.CRISIS_RESPONSE), List.of());
         }
 
-        // RAG + strategy
-        var evidence = ragService.retrieve(lastUserMsg);
-        String evidenceText = ragService.formatEvidence(evidence);
+        // Single-pass RAG retrieval + strategy
+        var profile = ragService.inferUserProfile(request.messages(), lastUserMsg);
+        var retrieved = ragService.retrieve(lastUserMsg, profile, 6);
+        List<RagService.RetrievalResult> promptEvidence = retrieved.stream().limit(2).toList();
+        List<Map<String, Object>> similarCases = ragService.buildSimilarCases(retrieved, 3);
+
+        String evidenceText = ragService.formatEvidence(promptEvidence, profile);
         var strategy = strategyFactory.getStrategy(request.mode());
         String systemPrompt = strategy.buildSystemPrompt(evidenceText, request.scenario());
 
         List<Map<String, String>> userMessages = truncateHistory(request.messages());
-        return aiClient.chatStream(userMessages, systemPrompt, MAX_OUTPUT_TOKENS);
+        Flux<String> stream = aiClient.chatStream(userMessages, systemPrompt, MAX_OUTPUT_TOKENS);
+        return new StreamResponse(stream, similarCases);
     }
 
     private List<Map<String, String>> truncateHistory(List<Map<String, String>> messages) {

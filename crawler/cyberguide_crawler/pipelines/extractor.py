@@ -4,14 +4,12 @@ Runs after Dedup, before Database (order=300).
 
 For ArticleItems with high quality_score and sufficient content,
 calls glm-4-flash to extract background/result/tags,
-then yields an additional CareerCaseItem alongside the original.
+and attaches structured fields to item['_career_case'] for DatabasePipeline.
 """
 import json
 import logging
 
 import requests
-from scrapy.exceptions import DropItem
-from cyberguide_crawler.items import CareerCaseItem
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +41,6 @@ class ExtractorPipeline:
         self.model = model
         self.enabled = enabled
         self.extracted_count = 0
-        self.case_buffer = []
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -74,8 +71,6 @@ class ExtractorPipeline:
             return item
 
         category = item.get('category', '') or 'general'
-        if score < QUALITY_THRESHOLD or len(content) < MIN_CONTENT_LENGTH:
-            return item
 
         # Call AI extraction
         extracted = self._extract(item.get('title', ''), content)
@@ -94,6 +89,9 @@ class ExtractorPipeline:
                 'dedupe_hash': item.get('dedupe_hash', ''),
             }
             self.extracted_count += 1
+        else:
+            # Extraction failed: slightly lower quality to reduce future retrieval priority
+            item['quality_score'] = max(float(score) - 5.0, 0.0)
 
         return item
 

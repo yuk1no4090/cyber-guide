@@ -41,6 +41,7 @@ class DatabasePipeline:
     def close_spider(self, spider):
         self._flush_articles()
         self._flush_cases()
+        self._downgrade_stale_articles()
         if self.conn:
             self.conn.close()
 
@@ -71,7 +72,7 @@ class DatabasePipeline:
                     cur,
                     """
                     INSERT INTO crawled_articles
-                        (id, source_name, url, title, summary, content_snippet, category, language, quality_score, dedupe_hash, crawl_time)
+                        (id, source_name, url, title, summary, content_snippet, category, language, quality_score, relevance_tier, dedupe_hash, crawl_time)
                     VALUES %s
                     ON CONFLICT (dedupe_hash) DO NOTHING
                     """,
@@ -81,7 +82,7 @@ class DatabasePipeline:
                             a.get('source_name', ''), a.get('url', ''), a.get('title', ''),
                             a.get('summary', ''), a.get('content_snippet', ''),
                             a.get('category', ''), a.get('language', 'zh'),
-                            a.get('quality_score', 0), a.get('dedupe_hash', ''),
+                            a.get('quality_score', 0), a.get('relevance_tier', 'low'), a.get('dedupe_hash', ''),
                             now,
                         )
                         for a in self.article_buffer
@@ -144,6 +145,7 @@ class DatabasePipeline:
                     published_at TIMESTAMPTZ,
                     crawl_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     quality_score NUMERIC DEFAULT 0,
+                    relevance_tier VARCHAR(16) DEFAULT 'low',
                     dedupe_hash VARCHAR(64) NOT NULL UNIQUE
                 );
                 CREATE INDEX IF NOT EXISTS idx_crawled_source ON crawled_articles(source_name);
@@ -158,7 +160,15 @@ class DatabasePipeline:
                     END IF;
                 END $$;
             """)
+            cur.execute("""
+                DO $$ BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crawled_articles' AND column_name='relevance_tier')
+                    THEN ALTER TABLE crawled_articles ADD COLUMN relevance_tier VARCHAR(16) DEFAULT 'low';
+                    END IF;
+                END $$;
+            """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_crawled_category ON crawled_articles(category);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_crawled_tier ON crawled_articles(relevance_tier);")
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS career_cases (
@@ -181,3 +191,24 @@ class DatabasePipeline:
                 CREATE INDEX IF NOT EXISTS idx_cases_quality ON career_cases(quality_score DESC);
             """)
         self.conn.commit()
+
+    def _downgrade_stale_articles(self):
+        """
+        Downgrade stale articles (>180 days old) to low relevance_tier.
+        This keeps old content available while reducing its retrieval priority.
+        """
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE crawled_articles
+                    SET relevance_tier = 'low'
+                    WHERE crawl_time < NOW() - INTERVAL '180 days'
+                      AND COALESCE(relevance_tier, '') <> 'low'
+                """)
+                updated = cur.rowcount
+            self.conn.commit()
+            if updated > 0:
+                logger.info("Downgraded %d stale articles to low tier", updated)
+        except Exception as e:
+            self.conn.rollback()
+            logger.error("Stale article downgrade failed: %s", e)

@@ -10,12 +10,16 @@ import FeedbackCard from './components/FeedbackCard';
 import RecapCard from './components/RecapCard';
 import ScenarioPicker from './components/ScenarioPicker';
 import PlanCard from './components/PlanCard';
+import ProfileForm, { type StructuredProfileData } from './components/ProfileForm';
+import SimilarCasesCard, { type SimilarCaseItem } from './components/SimilarCasesCard';
+import Sidebar, { type SidebarSessionItem } from './components/Sidebar';
+import LoginModal from './components/LoginModal';
 import { useSession } from './hooks/useSession';
-import { usePlan, buildPlanContextFromChat } from './hooks/usePlan';
-import type { PlanItem } from './hooks/usePlan';
+import { usePlan } from './hooks/usePlan';
+import { useAuth } from './hooks/useAuth';
 import { analytics } from '@/lib/analytics';
-import { authFetch, getToken, authHeaders } from '@/lib/api';
-import { pickGroup, pickOne, pickN } from '@/lib/random';
+import { authFetch, unwrapEnvelope, type ApiEnvelope } from '@/lib/api';
+import { pickN } from '@/lib/random';
 import type { Recap } from '@/lib/recap';
 import {
   type RelationshipScenario,
@@ -27,17 +31,6 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   isCrisis?: boolean;
-}
-
-type PlanStatus = 'todo' | 'done' | 'skipped';
-
-interface ApiEnvelope<T> {
-  success: boolean;
-  data: T | null;
-  error?: {
-    code?: string;
-    message?: string;
-  } | null;
 }
 
 type AppMode = 'chat' | 'profile' | 'profile_other';
@@ -52,6 +45,7 @@ interface NDJSONMetaLine {
   message?: string;
   suggestions?: string[];
   isCrisis?: boolean;
+  similarCases?: SimilarCaseItem[];
   isReport?: boolean;
   scenario?: string | null;
   promptVersion?: string;
@@ -66,6 +60,8 @@ interface NDJSONErrorLine {
 type NDJSONLine = NDJSONDeltaLine | NDJSONMetaLine | NDJSONErrorLine;
 
 const STORAGE_KEY = 'cyber-guide-chat';
+const PROFILE_STORAGE_KEY = 'cyber-guide-profile';
+const PROFILE_DATA_PREFIX = '[PROFILE_DATA]';
 
 const WELCOME_MESSAGE: Message = {
   role: 'assistant',
@@ -92,6 +88,17 @@ function getWelcomeSuggestions(): string[] {
 }
 
 const DEFAULT_WELCOME_SUGGESTIONS = WELCOME_SUGGESTION_POOL.slice(0, 4);
+const DEFAULT_CHAT_FOLLOWUP_SUGGESTIONS = [
+  '继续聊聊',
+  '你能再具体一点吗？',
+  '给我一个可执行计划',
+  '换个角度分析一下',
+];
+const DEFAULT_PROFILE_FOLLOWUP_SUGGESTIONS = [
+  '请结合我的背景再细化',
+  '给我一版 7 天行动清单',
+  '帮我比较读研和就业',
+];
 
 const PROFILE_CHOOSE: Message = {
   role: 'assistant',
@@ -117,23 +124,6 @@ const PROFILE_SELF_WELCOME: Message = {
   role: 'assistant',
   content: '好嘞，让我来认识一下你 🛶\n\n别紧张，就当朋友闲聊。随时可以点「生成画像」看分析结果。\n\n先聊聊——你现在是在读还是已经毕业了？学的什么专业呀？',
 };
-
-const PROFILE_SELF_SUGGESTION_POOL = [
-  '刚上大学还在适应中',
-  '大三了有点慌',
-  '在读研，也不确定接下来',
-  '已经工作了但想聊聊',
-  '大二，专业不太喜欢',
-  '快毕业了还没想好出路',
-  '刚转专业到计算机',
-  '工作两年了想换方向',
-  '大一，什么都不懂',
-  '研二了还在迷茫',
-];
-
-function getProfileSelfSuggestions(): string[] {
-  return pickN(PROFILE_SELF_SUGGESTION_POOL, 4);
-}
 
 const PROFILE_OTHER_WELCOME: Message = {
   role: 'assistant',
@@ -181,22 +171,39 @@ function clearStorage() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
+function loadProfileFromStorage(): StructuredProfileData | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StructuredProfileData;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.school || !parsed.major || !parsed.stage || !parsed.intent) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
-async function fetchWithTimeout(
-  input: RequestInfo | URL,
-  init: RequestInit = {},
-  timeoutMs = 10_000
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+function saveProfileToStorage(profile: StructuredProfileData) {
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {}
+}
+
+function sanitizeProfileValue(value: string): string {
+  return (value || '').replace(/\|/g, '｜').replace(/=/g, '＝').trim();
+}
+
+function serializeProfileData(profile: StructuredProfileData): string {
+  return `${PROFILE_DATA_PREFIX} ` +
+    `school=${sanitizeProfileValue(profile.school)}|` +
+    `major=${sanitizeProfileValue(profile.major)}|` +
+    `stage=${sanitizeProfileValue(profile.stage)}|` +
+    `intent=${sanitizeProfileValue(profile.intent)}|` +
+    `gpa=${sanitizeProfileValue(profile.gpa)}|` +
+    `internship=${sanitizeProfileValue(profile.internship)}|` +
+    `research=${sanitizeProfileValue(profile.research)}|` +
+    `competition=${sanitizeProfileValue(profile.competition)}`;
 }
 
 function parsePlanQuery(text: string, todayIndex: number): { kind: 'all' } | { kind: 'day'; day_index: number } | null {
@@ -228,19 +235,6 @@ function parsePlanQuery(text: string, todayIndex: number): { kind: 'all' } | { k
   if (/后天/.test(input)) return { kind: 'day', day_index: Math.min(7, todayIndex + 2) };
 
   return null;
-}
-
-function unwrapEnvelope<T extends Record<string, unknown>>(raw: unknown): T {
-  if (
-    raw
-    && typeof raw === 'object'
-    && (raw as ApiEnvelope<T>).success === true
-    && (raw as ApiEnvelope<T>).data
-  ) {
-    return (raw as ApiEnvelope<T>).data as T;
-  }
-
-  return raw as T;
 }
 
 function isNDJSONResponse(response: Response): boolean {
@@ -316,6 +310,17 @@ async function readNDJSONStream<T extends { message?: string }>(
 
 export default function Home() {
   const { sessionId, dataOptIn, toggleDataOptIn } = useSession();
+  const {
+    user,
+    isLoggedIn,
+    isLoading: authLoading,
+    login,
+    register,
+    sendRegisterCode,
+    loginWithGithub,
+    logout,
+    upgradeAnonymousSession,
+  } = useAuth(sessionId);
   const [mode, setMode] = useState<AppMode>('chat');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [profileMessages, setProfileMessages] = useState<Message[]>([]);
@@ -329,10 +334,18 @@ export default function Home() {
   const [hadCrisis, setHadCrisis] = useState(false);
   const [pendingReset, setPendingReset] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<RelationshipScenario | null>(null);
+  const [structuredProfile, setStructuredProfile] = useState<StructuredProfileData | null>(null);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [similarCases, setSimilarCases] = useState<SimilarCaseItem[]>([]);
   const [recap, setRecap] = useState<Recap | null>(null);
   const [recapMeta, setRecapMeta] = useState<{ success?: boolean; latencyMs?: number; errorType?: string }>();
   const [isRecapLoading, setIsRecapLoading] = useState(false);
   const [scenarioCopied, setScenarioCopied] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [sessions, setSessions] = useState<SidebarSessionItem[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -342,14 +355,109 @@ export default function Home() {
   } = usePlan(sessionId, messages);
 
   useEffect(() => {
-    const saved = loadFromStorage();
-    if (saved) {
-      setMessages(saved);
-      setSuggestions([]);
-      return;
-    }
+    setStructuredProfile(loadProfileFromStorage());
+    // Refresh should always start a brand-new conversation.
+    clearStorage();
     setSuggestions(getWelcomeSuggestions());
   }, []);
+
+  const loadSessions = async () => {
+    if (!sessionId || !isLoggedIn) {
+      setSessions([]);
+      return;
+    }
+    try {
+      const res = await authFetch(sessionId, '/api/sessions?page=0&size=30', { method: 'GET' }, 8_000);
+      const raw = await res.json();
+      const payload = unwrapEnvelope<{ items: SidebarSessionItem[] }>(raw);
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      setSessions(items);
+      if (!selectedSessionId && items.length > 0) {
+        setSelectedSessionId(items[0].id);
+      }
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  const loadSessionMessages = async (id: string) => {
+    if (!sessionId || !id) return;
+    setIsSessionLoading(true);
+    try {
+      const res = await authFetch(sessionId, `/api/sessions/${id}/messages`, { method: 'GET' }, 10_000);
+      const raw = await res.json();
+      const payload = unwrapEnvelope<{ messages: Array<{ role: 'user' | 'assistant'; content: string; isCrisis?: boolean }> }>(raw);
+      const mapped = Array.isArray(payload?.messages) ? payload.messages : [];
+      if (mapped.length > 0) {
+        setMessages(mapped.map((m) => ({
+          role: m.role,
+          content: m.content,
+          isCrisis: m.isCrisis,
+        })));
+      } else {
+        setMessages([WELCOME_MESSAGE]);
+      }
+      setMode('chat');
+      setSelectedSessionId(id);
+      setSidebarOpen(false);
+    } catch {
+      // keep current messages
+    } finally {
+      setIsSessionLoading(false);
+    }
+  };
+
+  const createSession = async (): Promise<string | null> => {
+    if (!sessionId || !isLoggedIn) return null;
+    try {
+      const res = await authFetch(sessionId, '/api/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ title: '新对话', mode: 'chat', session_id: sessionId }),
+      }, 8_000);
+      const raw = await res.json();
+      const payload = unwrapEnvelope<{ session: SidebarSessionItem }>(raw);
+      if (payload?.session?.id) {
+        const next = payload.session;
+        setSessions((prev) => [next, ...prev.filter((s) => s.id !== next.id)]);
+        setSelectedSessionId(next.id);
+        return next.id;
+      }
+    } catch {
+      // ignored
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (!isLoggedIn) {
+      setSessions([]);
+      setSelectedSessionId(null);
+      return;
+    }
+    void (async () => {
+      await upgradeAnonymousSession();
+      await loadSessions();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, isLoggedIn]);
+
+  useEffect(() => {
+    if (!sessionId || !isLoggedIn) return;
+    void (async () => {
+      try {
+        const res = await authFetch(sessionId, '/api/profile', { method: 'GET' }, 8_000);
+        const raw = await res.json();
+        const payload = unwrapEnvelope<{ profile: StructuredProfileData }>(raw);
+        if (payload?.profile) {
+          setStructuredProfile(payload.profile);
+          saveProfileToStorage(payload.profile);
+        }
+      } catch {
+        // ignore profile sync errors
+      }
+    })();
+  }, [sessionId, isLoggedIn]);
 
   // 关闭/刷新页面时提醒（聊了足够多且没评价过）
   useEffect(() => {
@@ -364,10 +472,6 @@ export default function Home() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [messages, profileMessages, feedbackDone]);
 
-  useEffect(() => {
-    if (mode === 'chat') saveToStorage(messages);
-  }, [messages, mode]);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -378,6 +482,17 @@ export default function Home() {
 
   const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
+
+  const toApiMessages = (sourceMessages: Message[]) => {
+    const payload = sourceMessages.map((m) => ({ role: m.role, content: m.content }));
+    const profile = structuredProfile ?? loadProfileFromStorage();
+    if (!profile) return payload;
+    const serialized = serializeProfileData(profile);
+    if (payload.some((m) => m.role === 'user' && m.content.startsWith(PROFILE_DATA_PREFIX))) {
+      return payload;
+    }
+    return [{ role: 'user', content: serialized }, ...payload];
+  };
 
   const sendSessionMetrics = async (msgs: Message[], currentMode: AppMode) => {
     if (!dataOptIn || !sessionId) return;
@@ -424,6 +539,12 @@ export default function Home() {
     setRecap(null);
     setRecapMeta(undefined);
     setSelectedScenario(null);
+    setSimilarCases([]);
+    if (isLoggedIn) {
+      void createSession();
+    } else {
+      setSelectedSessionId(null);
+    }
   };
 
   const startProfile = () => {
@@ -433,6 +554,8 @@ export default function Home() {
     setSuggestions(PROFILE_CHOOSE_SUGGESTIONS);
     setReportContent(null);
     setSelectedScenario(null);
+    setShowProfileForm(false);
+    setSimilarCases([]);
   };
 
   const backToChat = () => {
@@ -450,6 +573,7 @@ export default function Home() {
     setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? getWelcomeSuggestions() : []));
     setReportContent(null);
     setSelectedScenario(null);
+    setShowProfileForm(false);
   };
 
   const maybeAnswerPlanQuestion = (content: string): string | null => {
@@ -494,8 +618,9 @@ export default function Home() {
       const response = await authFetch(sessionId, '/api/chat', {
         method: 'POST',
         body: JSON.stringify({
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: toApiMessages(messages),
           mode: 'generate_recap',
+          session_id: sessionId,
         }),
       }, 30_000);
       const raw = await response.json();
@@ -575,7 +700,7 @@ export default function Home() {
       const response = await authFetch(sessionId, '/api/chat', {
         method: 'POST',
         body: JSON.stringify({
-          messages: profileMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: toApiMessages(profileMessages),
           mode: mode === 'profile_other' ? 'generate_report_other' : 'generate_report',
           scenario: mode === 'profile_other' ? selectedScenario : null,
           session_id: sessionId || null,
@@ -632,13 +757,28 @@ export default function Home() {
     }
   };
 
+  const handleProfileFormSubmit = (data: StructuredProfileData) => {
+    setStructuredProfile(data);
+    saveProfileToStorage(data);
+    if (isLoggedIn && sessionId) {
+      void authFetch(sessionId, '/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }, 8_000);
+    }
+    setShowProfileForm(false);
+    void sendMessage('请基于我的画像先给我一版建议：如果我还没想好，请分别给出读研和就业两条路径，并给出7天行动清单。');
+  };
+
   const sendMessage = async (content: string) => {
     // ===== Action 路由（显式标识符，不依赖文本匹配） =====
     if (isAction(content)) {
       if (content === ACTION_PROFILE_SELF && mode === 'profile') {
         setSelectedScenario(null);
         setProfileMessages([PROFILE_SELF_WELCOME]);
-        setSuggestions(getProfileSelfSuggestions());
+        setShowProfileForm(true);
+        setSuggestions([]);
+        setSimilarCases([]);
         return;
       }
       if (content === ACTION_PROFILE_OTHER && mode === 'profile') {
@@ -646,6 +786,8 @@ export default function Home() {
         setSelectedScenario(null);
         setProfileMessages([PROFILE_OTHER_WELCOME]);
         setSuggestions(getProfileOtherSuggestions());
+        setShowProfileForm(false);
+        setSimilarCases([]);
         return;
       }
       if (content === ACTION_GENERATE_REPORT && isProfileMode) {
@@ -660,7 +802,9 @@ export default function Home() {
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('了解我自己')) {
       setSelectedScenario(null);
       setProfileMessages([PROFILE_SELF_WELCOME]);
-      setSuggestions(getProfileSelfSuggestions());
+      setShowProfileForm(true);
+      setSuggestions([]);
+      setSimilarCases([]);
       return;
     }
     if (mode === 'profile' && profileMessages.length === 1 && content.includes('看懂身边的人')) {
@@ -668,6 +812,8 @@ export default function Home() {
       setSelectedScenario(null);
       setProfileMessages([PROFILE_OTHER_WELCOME]);
       setSuggestions(getProfileOtherSuggestions());
+      setShowProfileForm(false);
+      setSimilarCases([]);
       return;
     }
     if ((mode === 'profile' || mode === 'profile_other') && (content.includes('结束画像') || content.includes('生成画像') || content.includes('看看分析'))) {
@@ -685,6 +831,14 @@ export default function Home() {
         setMessages([...updatedMessages, { role: 'assistant', content: planAnswer }]);
         setSuggestions([]);
         return;
+      }
+    }
+
+    let activePersistedSessionId = selectedSessionId;
+    if (isLoggedIn && !activePersistedSessionId) {
+      activePersistedSessionId = await createSession();
+      if (activePersistedSessionId) {
+        setSelectedSessionId(activePersistedSessionId);
       }
     }
 
@@ -711,10 +865,11 @@ export default function Home() {
       const response = await authFetch(sessionId, '/api/chat/stream', {
         method: 'POST',
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: toApiMessages(updatedMessages),
           mode: mode === 'profile_other' ? 'profile_other' : mode,
           scenario: mode === 'profile_other' ? selectedScenario : null,
           session_id: sessionId || null,
+          chat_session_id: activePersistedSessionId || null,
         }),
       }, 30_000);
       const upsertAssistantMessage = (nextContent: string, isCrisis?: boolean) => {
@@ -740,6 +895,7 @@ export default function Home() {
       let finalMessage = '';
       let nextSuggestions: string[] = [];
       let isCrisis = false;
+      let nextSimilarCases: SimilarCaseItem[] = [];
 
       if (isStream) {
         let streamed = '';
@@ -749,6 +905,7 @@ export default function Home() {
           message?: string;
           suggestions?: string[];
           isCrisis?: boolean;
+          similarCases?: SimilarCaseItem[];
         }>(
           response,
           (delta) => {
@@ -763,6 +920,17 @@ export default function Home() {
         finalMessage = typeof data.message === 'string' && data.message.length > 0 ? data.message : streamed;
         nextSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
         isCrisis = Boolean(data.isCrisis);
+        nextSimilarCases = Array.isArray(data.similarCases)
+          ? data.similarCases
+              .filter((item) => item && typeof item.url === 'string' && item.url.length > 0)
+              .map((item) => ({
+                title: item.title || '相似案例',
+                url: item.url,
+                snippet: item.snippet,
+                source: item.source,
+                category: item.category,
+              }))
+          : [];
         if (!response.ok || !finalMessage) {
           throw new Error('API request failed');
         }
@@ -799,7 +967,17 @@ export default function Home() {
       if (!isStream) {
         upsertAssistantMessage(finalMessage, isCrisis);
       }
-      setSuggestions(nextSuggestions.length > 0 ? nextSuggestions : []);
+      if (nextSuggestions.length > 0) {
+        setSuggestions(nextSuggestions);
+      } else if (isProfileMode) {
+        setSuggestions(pickN(DEFAULT_PROFILE_FOLLOWUP_SUGGESTIONS, 2));
+      } else {
+        setSuggestions(pickN(DEFAULT_CHAT_FOLLOWUP_SUGGESTIONS, 3));
+      }
+      setSimilarCases(nextSimilarCases.slice(0, 3));
+      if (isLoggedIn) {
+        void loadSessions();
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
       if (mode === 'profile_other' && selectedScenario) {
@@ -826,6 +1004,7 @@ export default function Home() {
         '稍等一下再试',
         '我换个说法试试',
       ], 2));
+      setSimilarCases([]);
     } finally {
       setIsLoading(false);
     }
@@ -841,6 +1020,7 @@ export default function Home() {
           feedback,
           hadCrisis,
           mode,
+          session_id: sessionId,
         }),
       });
     }
@@ -869,9 +1049,26 @@ export default function Home() {
     .find(m => m.role === 'assistant' && m.content.trim().length > 0);
 
   return (
-    <div className="chat-container flex flex-col h-screen h-[100dvh] max-w-3xl lg:max-w-4xl mx-auto relative">
-      {/* ===== Header ===== */}
-      <header className="glass safe-top sticky top-0 z-20 border-b border-slate-200/60">
+    <>
+      <div className="flex h-screen h-[100dvh]">
+        <Sidebar
+          open={sidebarOpen}
+          sessions={sessions}
+          selectedSessionId={selectedSessionId}
+          profile={structuredProfile}
+          todayPlan={todayPlan}
+          dataOptIn={dataOptIn}
+          user={user}
+          onCloseMobile={() => setSidebarOpen(false)}
+          onToggleDataOptIn={toggleDataOptIn}
+          onSelectSession={loadSessionMessages}
+          onNewSession={doResetChat}
+          onLoginClick={() => setShowLoginModal(true)}
+          onLogout={logout}
+        />
+        <div className="chat-container flex flex-col h-screen h-[100dvh] w-full max-w-3xl lg:max-w-4xl mx-auto relative">
+          {/* ===== Header ===== */}
+          <header className="glass safe-top sticky top-0 z-20 border-b border-slate-200/60">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-400 to-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
@@ -887,6 +1084,20 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors lg:hidden"
+            >
+              ☰
+            </button>
+            {!authLoading && !isLoggedIn && (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="px-2 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
+              >
+                登录
+              </button>
+            )}
             {!isProfileMode ? (
               <>
                 {messages.length > 1 && (
@@ -959,11 +1170,16 @@ export default function Home() {
             </button>
           </div>
         )}
-      </header>
+          </header>
 
-      {/* ===== 消息区域 ===== */}
-      <main className="flex-1 overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label="对话消息">
+          {/* ===== 消息区域 ===== */}
+          <main className="flex-1 overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label="对话消息">
         <div className="px-3 sm:px-5 lg:px-8 py-4 sm:py-6 space-y-1">
+          {isSessionLoading && (
+            <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+              正在加载会话内容...
+            </div>
+          )}
           {mode === 'chat' && (
             <PlanCard
               plans={plans}
@@ -1000,6 +1216,13 @@ export default function Home() {
             </div>
           )}
 
+          {mode === 'profile' && showProfileForm && (
+            <ProfileForm
+              initialValue={structuredProfile ?? undefined}
+              onSubmit={handleProfileFormSubmit}
+            />
+          )}
+
           {currentMessages.map((message, index) => (
             <ChatMessage
               key={`${mode}-${index}`}
@@ -1008,6 +1231,10 @@ export default function Home() {
               isCrisis={message.isCrisis}
             />
           ))}
+
+          {!reportContent && similarCases.length > 0 && (
+            <SimilarCasesCard cases={similarCases} />
+          )}
 
           {isLoading && <TypingIndicator />}
 
@@ -1051,17 +1278,36 @@ export default function Home() {
 
           <div ref={messagesEndRef} className="h-1" />
         </div>
-      </main>
+          </main>
 
-      {/* ===== 输入区域 ===== */}
-      <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-slate-200/60">
+          {/* ===== 输入区域 ===== */}
+          <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-slate-200/60">
         <div className="px-3 sm:px-5 lg:px-8 pt-3 pb-3">
           <ChatInput
             onSend={sendMessage}
-            disabled={isLoading || isRecapLoading || !!reportContent}
+            disabled={isLoading || isRecapLoading || !!reportContent || showProfileForm}
           />
         </div>
-      </footer>
-    </div>
+          </footer>
+        </div>
+      </div>
+      <LoginModal
+        open={showLoginModal}
+        loading={authLoading}
+        onClose={() => setShowLoginModal(false)}
+        onLogin={async (email, password) => {
+          const anonymousToken = await login(email, password);
+          await upgradeAnonymousSession(anonymousToken);
+          await loadSessions();
+        }}
+        onRegister={async (email, password, emailCode, nickname) => {
+          const anonymousToken = await register(email, password, emailCode, nickname);
+          await upgradeAnonymousSession(anonymousToken);
+          await loadSessions();
+        }}
+        onSendCode={sendRegisterCode}
+        onGithub={loginWithGithub}
+      />
+    </>
   );
 }

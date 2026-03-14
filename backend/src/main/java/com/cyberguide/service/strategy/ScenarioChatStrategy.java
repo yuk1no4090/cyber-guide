@@ -21,6 +21,7 @@ public class ScenarioChatStrategy implements ChatStrategy {
             : "";
         return "你是 Cyber Guide / 小舟，正在进行场景模拟对话。" +
             "请根据用户选择的场景，扮演相应角色，帮助用户练习应对。" +
+            "引用案例时请附上可点击的原文链接（使用 Markdown 链接格式）。" +
             scenarioContext + evidence;
     }
 

@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * JWT token provider — generates and validates stateless tokens.
- * Supports anonymous session tokens (no user login required).
+ * Supports both anonymous session tokens and logged-in user tokens.
  */
 @Component
 public class JwtTokenProvider {
@@ -54,18 +54,55 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    public String generateUserToken(String userId, String email) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .subject(userId)
+                .claim("type", "user")
+                .claim("email", email)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusMillis(expirationMs)))
+                .signWith(key)
+                .compact();
+    }
+
     /**
      * Extract session ID (subject) from token.
      * Returns null if token is invalid or expired.
      */
     public String getSessionId(String token) {
+        TokenIdentity identity = parseIdentity(token);
+        if (identity == null || !"anonymous".equals(identity.type())) {
+            return null;
+        }
+        return identity.subject();
+    }
+
+    public String getUserId(String token) {
+        TokenIdentity identity = parseIdentity(token);
+        if (identity == null || !"user".equals(identity.type())) {
+            return null;
+        }
+        return identity.subject();
+    }
+
+    public TokenIdentity parseIdentity(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return claims.getSubject();
+            String type = claims.get("type", String.class);
+            if (type == null || type.isBlank()) {
+                type = "anonymous";
+            }
+            return new TokenIdentity(
+                    claims.getSubject(),
+                    type,
+                    claims.get("email", String.class)
+            );
         } catch (JwtException | IllegalArgumentException e) {
             log.debug("Invalid JWT: {}", e.getMessage());
             return null;
@@ -76,6 +113,8 @@ public class JwtTokenProvider {
      * Validate a token — returns true if valid and not expired.
      */
     public boolean validateToken(String token) {
-        return getSessionId(token) != null;
+        return parseIdentity(token) != null;
     }
+
+    public record TokenIdentity(String subject, String type, String email) {}
 }

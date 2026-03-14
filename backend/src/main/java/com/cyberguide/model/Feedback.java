@@ -15,6 +15,9 @@ public class Feedback {
     @Column(name = "session_id", length = 128)
     private String sessionId;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(nullable = false)
     private int rating;
 
@@ -49,6 +52,8 @@ public class Feedback {
     public void setId(UUID id) { this.id = id; }
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
     public int getRating() { return rating; }
     public void setRating(int rating) { this.rating = rating; }
     public String getFeedbackRedacted() { return feedbackRedacted; }
