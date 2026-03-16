@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import DOMPurify from 'isomorphic-dompurify';
+import { sanitizeHTML } from '@/lib/sanitize';
 
 interface ProfileReportProps {
   content: string;
@@ -25,7 +25,7 @@ const ProfileReport = React.memo(function ProfileReport({ content, onClose, isOt
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
 
-    return DOMPurify.sanitize(formatted, {
+    return sanitizeHTML(formatted, {
       ALLOWED_TAGS: ['h3', 'div', 'span', 'strong', 'br'],
       ALLOWED_ATTR: ['class'],
     });

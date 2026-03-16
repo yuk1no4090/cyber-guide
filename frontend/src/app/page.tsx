@@ -61,6 +61,8 @@ type NDJSONLine = NDJSONDeltaLine | NDJSONMetaLine | NDJSONErrorLine;
 
 const STORAGE_KEY = 'cyber-guide-chat';
 const PROFILE_STORAGE_KEY = 'cyber-guide-profile';
+const THEME_STORAGE_KEY = 'cyber-guide-theme';
+const ACTIVE_SESSION_KEY = 'cyber-guide-active-session-id';
 const PROFILE_DATA_PREFIX = '[PROFILE_DATA]';
 
 const WELCOME_MESSAGE: Message = {
@@ -343,6 +345,7 @@ export default function Home() {
   const [scenarioCopied, setScenarioCopied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const [sessions, setSessions] = useState<SidebarSessionItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
@@ -361,10 +364,35 @@ export default function Home() {
     setSuggestions(getWelcomeSuggestions());
   }, []);
 
-  const loadSessions = async () => {
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'dark') {
+        setDarkMode(true);
+      } else if (saved === 'light') {
+        setDarkMode(false);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        setDarkMode(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('theme-dark', darkMode);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, darkMode ? 'dark' : 'light');
+    } catch {
+      // ignore
+    }
+  }, [darkMode]);
+
+  const loadSessions = async (): Promise<SidebarSessionItem[]> => {
     if (!sessionId || !isLoggedIn) {
       setSessions([]);
-      return;
+      return [];
     }
     try {
       const res = await authFetch(sessionId, '/api/sessions?page=0&size=30', { method: 'GET' }, 8_000);
@@ -372,11 +400,10 @@ export default function Home() {
       const payload = unwrapEnvelope<{ items: SidebarSessionItem[] }>(raw);
       const items = Array.isArray(payload?.items) ? payload.items : [];
       setSessions(items);
-      if (!selectedSessionId && items.length > 0) {
-        setSelectedSessionId(items[0].id);
-      }
+      return items;
     } catch {
       setSessions([]);
+      return [];
     }
   };
 
@@ -399,7 +426,7 @@ export default function Home() {
       }
       setMode('chat');
       setSelectedSessionId(id);
-      setSidebarOpen(false);
+      try { localStorage.setItem(ACTIVE_SESSION_KEY, id); } catch {}
     } catch {
       // keep current messages
     } finally {
@@ -420,6 +447,7 @@ export default function Home() {
         const next = payload.session;
         setSessions((prev) => [next, ...prev.filter((s) => s.id !== next.id)]);
         setSelectedSessionId(next.id);
+        try { localStorage.setItem(ACTIVE_SESSION_KEY, next.id); } catch {}
         return next.id;
       }
     } catch {
@@ -428,16 +456,55 @@ export default function Home() {
     return null;
   };
 
+  const renameSession = async (id: string, title: string) => {
+    if (!sessionId || !isLoggedIn) return;
+    await authFetch(sessionId, `/api/sessions/${id}/title`, {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    }, 8_000);
+    setSessions((prev) => prev.map((s) => s.id === id ? { ...s, title } : s));
+  };
+
+  const deleteSession = async (id: string) => {
+    if (!sessionId || !isLoggedIn) return;
+    await authFetch(sessionId, `/api/sessions/${id}`, { method: 'DELETE' }, 8_000);
+    const remaining = sessions.filter((s) => s.id !== id);
+    setSessions(remaining);
+    if (selectedSessionId === id) {
+      const fallback = remaining[0]?.id || null;
+      setSelectedSessionId(fallback);
+      if (fallback) {
+        try { localStorage.setItem(ACTIVE_SESSION_KEY, fallback); } catch {}
+        await loadSessionMessages(fallback);
+      } else {
+        try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
+        setMessages([WELCOME_MESSAGE]);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!sessionId) return;
     if (!isLoggedIn) {
       setSessions([]);
       setSelectedSessionId(null);
+      try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
       return;
     }
     void (async () => {
       await upgradeAnonymousSession();
-      await loadSessions();
+      const items = await loadSessions();
+      const savedActiveId = (() => {
+        try { return localStorage.getItem(ACTIVE_SESSION_KEY); } catch { return null; }
+      })();
+      const chosen = (savedActiveId && items.some((s) => s.id === savedActiveId))
+        ? savedActiveId
+        : items[0]?.id || null;
+      if (chosen) {
+        await loadSessionMessages(chosen);
+      } else {
+        setMessages([WELCOME_MESSAGE]);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, isLoggedIn]);
@@ -1050,26 +1117,41 @@ export default function Home() {
 
   return (
     <>
-      <div className="flex h-screen h-[100dvh]">
-        <Sidebar
-          open={sidebarOpen}
-          sessions={sessions}
-          selectedSessionId={selectedSessionId}
-          profile={structuredProfile}
-          todayPlan={todayPlan}
-          dataOptIn={dataOptIn}
-          user={user}
-          onCloseMobile={() => setSidebarOpen(false)}
-          onToggleDataOptIn={toggleDataOptIn}
-          onSelectSession={loadSessionMessages}
-          onNewSession={doResetChat}
-          onLoginClick={() => setShowLoginModal(true)}
-          onLogout={logout}
-        />
-        <div className="chat-container flex flex-col h-screen h-[100dvh] w-full max-w-3xl lg:max-w-4xl mx-auto relative">
+      <div className="flex h-screen h-[100dvh] overflow-hidden">
+        <aside
+          className={`overflow-hidden transition-all duration-200 ease-out ${
+            sidebarOpen ? 'flex-[1_1_0%] max-w-[300px]' : 'flex-[0_0_0px] max-w-0'
+          }`}
+        >
+          <Sidebar
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            darkMode={darkMode}
+            user={user}
+            onToggleDarkMode={() => setDarkMode((v) => !v)}
+            onSelectSession={loadSessionMessages}
+            onNewSession={doResetChat}
+            onRenameSession={renameSession}
+            onDeleteSession={deleteSession}
+            onLoginClick={() => setShowLoginModal(true)}
+            onLogout={logout}
+          />
+        </aside>
+        <div className="cg-chat-shell chat-container flex flex-col h-screen h-[100dvh] flex-[3_1_0%] min-w-0 relative">
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            className={`absolute left-3 top-3 z-30 rounded-lg border px-2 py-1.5 text-xs shadow-sm backdrop-blur ${
+              darkMode
+                ? 'border-slate-700 bg-slate-900/90 text-slate-200 hover:bg-slate-800'
+                : 'border-slate-300 bg-white/90 text-slate-700 hover:bg-slate-50'
+            }`}
+            aria-label="切换侧边栏"
+          >
+            ☰
+          </button>
           {/* ===== Header ===== */}
           <header className="glass safe-top sticky top-0 z-20 border-b border-slate-200/60">
-        <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="pl-12 pr-4 sm:pl-14 sm:pr-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-400 to-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
               <span className="text-base sm:text-lg">🛶</span>
@@ -1083,17 +1165,11 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors lg:hidden"
-            >
-              ☰
-            </button>
+          <div className="flex items-center gap-2 overflow-x-auto">
             {!authLoading && !isLoggedIn && (
               <button
                 onClick={() => setShowLoginModal(true)}
-                className="px-2 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
+                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
               >
                 登录
               </button>
@@ -1103,7 +1179,7 @@ export default function Home() {
                 {messages.length > 1 && (
                   <button
                     onClick={startNewChat}
-                    className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
+                    className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
                   >
                     ✨ 新对话
                   </button>
@@ -1112,21 +1188,21 @@ export default function Home() {
                   <button
                     onClick={generateRecap}
                     disabled={isRecapLoading}
-                    className="px-2 py-1.5 text-[12px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
+                    className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition-colors"
                   >
                     {isRecapLoading ? '生成中...' : '🧭 复盘卡'}
                   </button>
                 )}
                 <button
                   onClick={startProfile}
-                  className="px-2 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
+                  className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-sky-600 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors"
                 >
                   📋 画像
                 </button>
                 <button
                   onClick={toggleDataOptIn}
                   title={dataOptIn ? '已开启匿名指标记录（点击关闭）' : '已关闭匿名指标记录（点击开启）'}
-                  className={`px-2 py-1.5 text-[12px] rounded-lg border transition-colors ${
+                  className={`shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] rounded-lg border transition-colors ${
                     dataOptIn
                       ? 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
                       : 'text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100'
@@ -1148,7 +1224,7 @@ export default function Home() {
                 )}
                 <button
                   onClick={backToChat}
-                  className="px-2 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
+                  className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors"
                 >
                   返回聊天
                 </button>

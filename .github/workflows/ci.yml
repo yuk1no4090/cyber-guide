@@ -61,6 +61,10 @@ jobs:
           OPENAI_BASE_URL: https://example.com
           OPENAI_MODEL: test-model
 
+      - name: Generate JaCoCo report
+        run: ./mvnw jacoco:report -q
+        working-directory: backend
+
   frontend:
     name: Frontend (Next.js 15 + TypeScript)
     runs-on: ubuntu-latest
@@ -79,6 +83,10 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+        working-directory: frontend
+
+      - name: Run tests
+        run: npm run test
         working-directory: frontend
 
       - name: Build
@@ -108,3 +116,23 @@ jobs:
       - name: Compile check
         run: python -m compileall cyberguide_crawler
         working-directory: crawler
+
+      - name: Run tests
+        run: pytest tests/ -v
+        working-directory: crawler
+
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, crawler]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t cyber-guide-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t cyber-guide-frontend:ci ./frontend
+
+      - name: Build crawler image
+        run: docker build -t cyber-guide-crawler:ci ./crawler

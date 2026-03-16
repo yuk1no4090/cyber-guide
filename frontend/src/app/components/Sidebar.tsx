@@ -1,10 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PlanItem } from '../hooks/usePlan';
-import type { StructuredProfileData } from './ProfileForm';
 import type { AuthUser } from '../hooks/useAuth';
-import UserMenu from './UserMenu';
 
 export interface SidebarSessionItem {
   id: string;
@@ -14,137 +11,199 @@ export interface SidebarSessionItem {
 }
 
 interface SidebarProps {
-  open: boolean;
   sessions: SidebarSessionItem[];
   selectedSessionId: string | null;
-  profile: StructuredProfileData | null;
-  todayPlan: PlanItem | null;
-  dataOptIn: boolean;
+  darkMode: boolean;
   user: AuthUser | null;
-  onCloseMobile: () => void;
-  onToggleDataOptIn: () => void;
+  onToggleDarkMode: () => void;
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
+  onRenameSession: (id: string, title: string) => Promise<void>;
+  onDeleteSession: (id: string) => Promise<void>;
   onLoginClick: () => void;
   onLogout: () => void;
 }
 
 export default function Sidebar({
-  open,
   sessions,
   selectedSessionId,
-  profile,
-  todayPlan,
-  dataOptIn,
+  darkMode,
   user,
-  onCloseMobile,
-  onToggleDataOptIn,
+  onToggleDarkMode,
   onSelectSession,
   onNewSession,
+  onRenameSession,
+  onDeleteSession,
   onLoginClick,
   onLogout,
 }: SidebarProps) {
-  const [darkMode, setDarkMode] = useState(false);
-  const profileSummary = useMemo(() => {
-    if (!profile) return '未填写画像';
-    return `${profile.school} / ${profile.major} / ${profile.intent}`;
-  }, [profile]);
+  const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
+  const groupedSessions = useMemo(() => groupByDate(sessions), [sessions]);
+  const tone = {
+    container: darkMode
+      ? 'bg-slate-900 border-slate-800 text-slate-100'
+      : 'bg-slate-50 border-slate-200 text-slate-800',
+    sectionHint: darkMode ? 'text-slate-400' : 'text-slate-500',
+    actionBtn: darkMode
+      ? 'border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700'
+      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
+    itemIdle: darkMode
+      ? 'text-slate-300 hover:bg-slate-800'
+      : 'text-slate-600 hover:bg-slate-200',
+    itemActive: darkMode
+      ? 'bg-slate-700 text-white'
+      : 'bg-slate-300 text-slate-900',
+    menuBox: darkMode
+      ? 'border-slate-700 bg-slate-800'
+      : 'border-slate-200 bg-white',
+    menuItem: darkMode
+      ? 'text-slate-200 hover:bg-slate-700'
+      : 'text-slate-700 hover:bg-slate-100',
+  };
+
+  const handleRename = async (id: string, oldTitle: string) => {
+    const input = window.prompt('重命名会话', oldTitle || '未命名会话');
+    if (!input || input.trim() === oldTitle.trim()) {
+      setMenuSessionId(null);
+      return;
+    }
+    await onRenameSession(id, input.trim());
+    setMenuSessionId(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    const ok = window.confirm('确认删除该会话？删除后不可恢复。');
+    if (!ok) return;
+    await onDeleteSession(id);
+    setMenuSessionId(null);
+  };
 
   return (
-    <>
-      <div
-        className={`fixed inset-0 z-40 bg-slate-900/25 transition-opacity lg:hidden ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-        onClick={onCloseMobile}
-      />
-      <aside
-        className={[
-          'fixed z-50 lg:static top-0 left-0 h-full w-64 lg:w-72',
-          'border-r border-slate-200 bg-slate-50/95 backdrop-blur',
-          'transform transition-transform duration-200',
-          open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-          'flex flex-col',
-        ].join(' ')}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-          <div>
-            <p className="text-sm font-semibold text-slate-800">小舟 · 控制台</p>
-            <p className="text-xs text-slate-500">会话 / 画像 / 计划 / 设置</p>
-          </div>
-          <button onClick={onCloseMobile} className="lg:hidden text-slate-500">✕</button>
+    <aside className={`cg-gpt-sidebar h-full w-full border-r flex flex-col ${tone.container}`}>
+      <div className={`px-3 py-3 border-b ${darkMode ? 'border-slate-800/90' : 'border-slate-200'}`}>
+        <button
+          onClick={onNewSession}
+          className={`w-full rounded-lg border px-3 py-2 text-sm ${tone.actionBtn}`}
+        >
+          + 新建对话
+        </button>
+        <div className="mt-2 flex items-center justify-between">
+          <p className={`text-[11px] ${tone.sectionHint}`}>会话历史</p>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-slate-700">会话列表</h3>
-              <button
-                onClick={onNewSession}
-                className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] text-sky-700 hover:bg-sky-100"
-              >
-                + 新建
-              </button>
-            </div>
-            <div className="space-y-1 max-h-44 overflow-y-auto">
-              {sessions.length === 0 && <p className="text-xs text-slate-400">暂无历史会话</p>}
-              {sessions.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectSession(item.id)}
-                  className={`w-full truncate rounded-md px-2 py-1.5 text-left text-xs ${
-                    selectedSessionId === item.id
-                      ? 'bg-sky-100 text-sky-800'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {item.title || '未命名会话'}
-                </button>
+      <div className="flex-1 overflow-y-auto p-2">
+        {groupedSessions.length === 0 && (
+          <p className={`px-2 py-4 text-xs ${tone.sectionHint}`}>暂无历史会话</p>
+        )}
+        {groupedSessions.map((group) => (
+          <section key={group.label} className="mb-4">
+            <h3 className={`px-2 py-1 text-[11px] ${tone.sectionHint}`}>{group.label}</h3>
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <div key={item.id} className="group relative">
+                  <button
+                    onClick={() => onSelectSession(item.id)}
+                    className={`w-full truncate rounded-lg px-3 py-2 text-left text-[13px] ${
+                      selectedSessionId === item.id ? tone.itemActive : tone.itemIdle
+                    }`}
+                  >
+                    {item.title || '未命名会话'}
+                  </button>
+                  <button
+                    onClick={() => setMenuSessionId((prev) => prev === item.id ? null : item.id)}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 ${
+                      darkMode ? 'text-slate-400 hover:bg-slate-700 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+                    } ${menuSessionId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    aria-label="会话操作"
+                  >
+                    ⋯
+                  </button>
+                  {menuSessionId === item.id && (
+                    <div className={`absolute right-2 top-9 z-10 w-28 rounded-md border shadow-xl ${tone.menuBox}`}>
+                      <button
+                        onClick={() => void handleRename(item.id, item.title)}
+                        className={`block w-full px-3 py-2 text-left text-xs ${tone.menuItem}`}
+                      >
+                        重命名
+                      </button>
+                      <button
+                        onClick={() => void handleDelete(item.id)}
+                        className={`block w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${darkMode ? 'text-rose-300 hover:bg-slate-700' : 'text-rose-600 hover:bg-slate-100'}`}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </section>
+        ))}
+      </div>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <h3 className="text-xs font-semibold text-slate-700">我的画像</h3>
-            <p className="mt-1 text-xs text-slate-500 leading-relaxed">{profileSummary}</p>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <h3 className="text-xs font-semibold text-slate-700">7 天计划</h3>
-            {todayPlan ? (
-              <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                Day {todayPlan.day_index ?? todayPlan.dayIndex}: {todayPlan.task_text ?? todayPlan.taskText}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-slate-400">还没有生成计划</p>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <h3 className="text-xs font-semibold text-slate-700">设置</h3>
-            <div className="mt-2 space-y-2">
-              <label className="flex items-center justify-between text-xs text-slate-600">
-                <span>数据记录</span>
-                <button
-                  onClick={onToggleDataOptIn}
-                  className={`toggle-switch ${dataOptIn ? 'active' : ''}`}
-                  aria-label="切换数据记录"
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs text-slate-600">
-                <span>深色模式</span>
-                <button
-                  onClick={() => setDarkMode((v) => !v)}
-                  className={`toggle-switch ${darkMode ? 'active' : ''}`}
-                  aria-label="切换主题"
-                />
-              </label>
+      <div className={`border-t p-3 ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+        {user ? (
+          <div>
+            <p className={`truncate text-sm ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{user.nickname || '用户'}</p>
+            <p className={`truncate text-xs ${tone.sectionHint}`}>{user.email}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={onToggleDarkMode}
+                className={`rounded-md border px-2 py-1 text-[11px] ${tone.actionBtn}`}
+              >
+                {darkMode ? '浅色' : '深色'}
+              </button>
+              <button
+                onClick={onLogout}
+                className={`rounded-md border px-2 py-1 text-[11px] ${tone.actionBtn}`}
+              >
+                退出
+              </button>
             </div>
-          </section>
-        </div>
-
-        <div className="border-t border-slate-200 p-3">
-          <UserMenu user={user} onLoginClick={onLoginClick} onLogout={onLogout} />
-        </div>
-      </aside>
-    </>
+          </div>
+        ) : (
+          <button
+            onClick={onLoginClick}
+            className={`w-full rounded-lg border px-3 py-2 text-sm ${tone.actionBtn}`}
+          >
+            登录 / 注册
+          </button>
+        )}
+      </div>
+    </aside>
   );
+}
+
+function groupByDate(items: SidebarSessionItem[]): Array<{ label: string; items: SidebarSessionItem[] }> {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  const groups = new Map<string, SidebarSessionItem[]>();
+
+  const push = (label: string, item: SidebarSessionItem) => {
+    const list = groups.get(label) || [];
+    list.push(item);
+    groups.set(label, list);
+  };
+
+  for (const item of items) {
+    const ts = item.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+    const diff = startToday - new Date(ts).setHours(0, 0, 0, 0);
+    if (diff === 0) {
+      push('今天', item);
+    } else if (diff === oneDayMs) {
+      push('昨天', item);
+    } else if (diff > oneDayMs && diff <= 7 * oneDayMs) {
+      push('7 天内', item);
+    } else {
+      push('更早', item);
+    }
+  }
+
+  const order = ['今天', '昨天', '7 天内', '更早'];
+  return order
+    .filter((label) => groups.has(label))
+    .map((label) => ({ label, items: groups.get(label) || [] }));
 }

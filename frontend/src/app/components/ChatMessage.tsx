@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import DOMPurify from 'isomorphic-dompurify';
+import { sanitizeHTML } from '@/lib/sanitize';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -26,7 +26,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }:
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
 
-    return DOMPurify.sanitize(formatted, {
+    return sanitizeHTML(formatted, {
       ALLOWED_TAGS: ['div', 'span', 'strong', 'code', 'br'],
       ALLOWED_ATTR: ['class'],
     });

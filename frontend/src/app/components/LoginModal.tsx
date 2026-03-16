@@ -26,6 +26,7 @@ export default function LoginModal({
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [countdown, setCountdown] = useState(0);
@@ -63,11 +64,16 @@ export default function LoginModal({
       if (mode === 'login') {
         await onLogin(email, password);
       } else {
+        if (password !== confirmPassword) {
+          setError('两次输入的密码不一致');
+          return;
+        }
         await onRegister(email, password, emailCode, nickname || undefined);
       }
       onClose();
       setEmail('');
       setPassword('');
+      setConfirmPassword('');
       setNickname('');
       setEmailCode('');
       setCountdown(0);
@@ -77,8 +83,8 @@ export default function LoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="cg-modal w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="text-base font-semibold text-slate-800">登录 Cyber Guide</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
@@ -100,6 +106,15 @@ export default function LoginModal({
             </button>
           </div>
 
+          {mode === 'login' && (
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+              placeholder="邮箱"
+              type="email"
+            />
+          )}
           {mode === 'register' && (
             <>
               <input
@@ -107,6 +122,13 @@ export default function LoginModal({
                 onChange={(e) => setNickname(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                 placeholder="昵称（可选）"
+              />
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                placeholder="邮箱"
+                type="email"
               />
               <div className="flex gap-2">
                 <input
@@ -127,26 +149,33 @@ export default function LoginModal({
             </>
           )}
           <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-            placeholder="邮箱"
-            type="email"
-          />
-          <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
             placeholder="密码（至少 6 位）"
             type="password"
           />
+          {mode === 'register' && (
+            <input
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+              placeholder="确认密码"
+              type="password"
+            />
+          )}
 
           {error && <p className="text-sm text-rose-600">{error}</p>}
 
           <button
-            disabled={loading || !email || password.length < 6 || (mode === 'register' && emailCode.trim().length < 4)}
+            disabled={
+              loading ||
+              !email ||
+              password.length < 6 ||
+              (mode === 'register' && (emailCode.trim().length < 4 || confirmPassword.length < 6))
+            }
             onClick={submit}
-            className="w-full rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-50"
+            className="w-full rounded-lg bg-gradient-to-r from-sky-500 via-cyan-500 to-sky-600 px-3 py-2 text-sm font-medium text-white hover:brightness-105 disabled:opacity-50"
           >
             {loading ? '处理中...' : mode === 'login' ? '登录' : '注册'}
           </button>

@@ -21,6 +21,19 @@
   --safe-top: env(safe-area-inset-top, 0px);
 }
 
+html.theme-dark {
+  --color-primary: #38bdf8;
+  --color-primary-light: #7dd3fc;
+  --color-primary-dark: #0284c7;
+  --color-bg: #020617;
+  --color-bg-light: #0f172a;
+  --color-bg-lighter: #111827;
+  --color-bg-card: #0f172a;
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-border: rgba(148, 163, 184, 0.22);
+}
+
 /* ============= 基础重置 ============= */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -44,6 +57,10 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html.theme-dark body {
+  color: var(--color-text);
 }
 
 /* ============= 滚动条 ============= */
@@ -122,11 +139,23 @@ body {
     linear-gradient(180deg, #eef6ff 0%, #f0f7ff 50%, #f5f9ff 100%);
 }
 
+html.theme-dark .bg-gradient-mesh {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(56, 189, 248, 0.16) 0%, transparent 45%),
+    radial-gradient(ellipse at 85% 110%, rgba(30, 64, 175, 0.2) 0%, transparent 45%),
+    linear-gradient(180deg, #020617 0%, #0b1120 40%, #0f172a 100%);
+}
+
 /* ============= 玻璃态（与天蓝背景融合） ============= */
 .glass {
   background: rgba(240, 247, 255, 0.85);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
+}
+
+html.theme-dark .glass {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.2) !important;
 }
 
 .glass-light {
@@ -222,6 +251,68 @@ body {
 .disclaimer-bar {
   background: rgba(245, 158, 11, 0.06);
   border-bottom: 1px solid rgba(245, 158, 11, 0.1);
+}
+
+html.theme-dark .disclaimer-bar {
+  background: rgba(245, 158, 11, 0.08);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.18);
+}
+
+/* ============= GPT 风格侧边栏与弹窗 ============= */
+.cg-gpt-sidebar {
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+html.theme-dark .cg-gpt-sidebar {
+  background: #171717;
+  border-right: 1px solid #334155;
+  color: #f1f5f9;
+}
+
+.cg-modal {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.1), transparent 45%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.cg-chat-shell {
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+html.theme-dark .cg-modal {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.18), transparent 45%),
+    linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  border-color: rgba(148, 163, 184, 0.25) !important;
+}
+
+html.theme-dark .cg-modal h3,
+html.theme-dark .cg-modal p,
+html.theme-dark .cg-modal label,
+html.theme-dark .cg-modal button {
+  color: #e2e8f0;
+}
+
+html.theme-dark .cg-modal input,
+html.theme-dark .cg-modal .bg-slate-100,
+html.theme-dark .cg-modal .bg-slate-50,
+html.theme-dark .cg-modal .bg-white {
+  background: rgba(15, 23, 42, 0.85) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+
+html.theme-dark .cg-chat-shell {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 1023px) {
+  .cg-gpt-sidebar {
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
+  }
 }
 
 /* ============= 安全区域 ============= */
