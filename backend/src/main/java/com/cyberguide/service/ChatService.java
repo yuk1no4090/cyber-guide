@@ -6,6 +6,7 @@ import com.cyberguide.event.CrisisDetectedEvent;
 import com.cyberguide.rag.RagService;
 import com.cyberguide.service.pipeline.MessageContext;
 import com.cyberguide.service.pipeline.MessagePipeline;
+import com.cyberguide.service.strategy.ChatStrategy;
 import com.cyberguide.service.strategy.ChatStrategyFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +54,10 @@ public class ChatService {
 
     public record StreamResponse(
         Flux<String> stream,
-        List<Map<String, Object>> similarCases
+        List<Map<String, Object>> similarCases,
+        List<Map<String, Object>> evidence,
+        boolean presetCrisis,
+        List<String> presetSuggestions
     ) {}
 
     /**
@@ -96,28 +100,49 @@ public class ChatService {
      * RAG retrieval runs once and is reused by both system prompt and metadata output.
      */
     public StreamResponse chatStreamWithMeta(ChatRequest request) {
-        String lastUserMsg = getLastUserMessage(request.messages());
+        MessageContext ctx = new MessageContext();
+        ctx.setSessionId(request.sessionId());
+        ctx.setMode(request.mode());
+        ctx.setScenario(request.scenario());
+        ctx.setUserMessage(getLastUserMessage(request.messages()));
+        ctx.setMessages(truncateHistory(request.messages()));
 
-        // Quick crisis check
-        var modResult = ModerationService.check(lastUserMsg);
-        if (modResult.isCrisis()) {
-            eventPublisher.publishEvent(new CrisisDetectedEvent(this, request.sessionId(), modResult.keywordsFound()));
-            return new StreamResponse(Flux.just(ModerationService.CRISIS_RESPONSE), List.of());
+        // Pipeline front steps: Redact -> Moderation -> RAG (orders <= 30)
+        // RagEnrichHandler now stores profile + retrievalResults + metadata in ctx
+        pipeline.executeUpTo(ctx, 30);
+
+        if (ctx.isCrisis()) {
+            eventPublisher.publishEvent(new CrisisDetectedEvent(this, request.sessionId(), List.of()));
+            return new StreamResponse(
+                Flux.just(ctx.getProcessedMessage()),
+                List.of(),
+                List.of(),
+                true,
+                ctx.getSuggestions() == null ? List.of("我想聊聊", "谢谢关心") : ctx.getSuggestions()
+            );
         }
 
-        // Single-pass RAG retrieval + strategy
-        var profile = ragService.inferUserProfile(request.messages(), lastUserMsg);
-        var retrieved = ragService.retrieve(lastUserMsg, profile, 6);
-        List<RagService.RetrievalResult> promptEvidence = retrieved.stream().limit(2).toList();
+        // Reuse the single-pass RAG results from RagEnrichHandler
+        var retrieved = ctx.getRetrievalResults() != null ? ctx.getRetrievalResults() : List.<RagService.RetrievalResult>of();
+        var metadata = ctx.getRetrievalMetadata();
         List<Map<String, Object>> similarCases = ragService.buildSimilarCases(retrieved, 3);
+        List<Map<String, Object>> evidence = buildEvidenceMeta(
+            metadata != null ? metadata.topKResults() : retrieved, 5);
 
-        String evidenceText = ragService.formatEvidence(promptEvidence, profile);
         var strategy = strategyFactory.getStrategy(request.mode());
-        String systemPrompt = strategy.buildSystemPrompt(evidenceText, request.scenario());
+        String systemPrompt = strategy.buildSystemPrompt(ctx.getEvidence(), request.scenario());
 
-        List<Map<String, String>> userMessages = truncateHistory(request.messages());
-        Flux<String> stream = aiClient.chatStream(userMessages, systemPrompt, MAX_OUTPUT_TOKENS);
-        return new StreamResponse(stream, similarCases);
+        Flux<String> stream = aiClient.chatStream(ctx.getMessages(), systemPrompt, MAX_OUTPUT_TOKENS);
+        return new StreamResponse(stream, similarCases, evidence, false, List.of());
+    }
+
+    public ChatStrategy.ChatResult parseChatResult(String mode, String aiResponse) {
+        var strategy = strategyFactory.getStrategy(mode);
+        return strategy.process(aiResponse);
+    }
+
+    public void publishChatCompleted(String sessionId, String mode, long elapsedMs, boolean crisis) {
+        eventPublisher.publishEvent(new ChatCompletedEvent(this, sessionId, mode, elapsedMs, crisis));
     }
 
     private List<Map<String, String>> truncateHistory(List<Map<String, String>> messages) {
@@ -142,5 +167,23 @@ public class ChatService {
             }
         }
         return "";
+    }
+
+    private List<Map<String, Object>> buildEvidenceMeta(List<RagService.RetrievalResult> retrieved, int limit) {
+        if (retrieved == null || retrieved.isEmpty()) {
+            return List.of();
+        }
+        return retrieved.stream()
+            .limit(Math.max(1, limit))
+            .map(r -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("title", r.title());
+                item.put("source", r.source());
+                item.put("url", r.url());
+                item.put("score", r.score());
+                item.put("tier", r.relevanceTier());
+                return item;
+            })
+            .toList();
     }
 }

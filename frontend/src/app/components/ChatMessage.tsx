@@ -3,32 +3,52 @@
 import React, { useState, useMemo } from 'react';
 import { sanitizeHTML } from '@/lib/sanitize';
 
+export interface EvidenceItem {
+  title?: string;
+  source?: string;
+  url?: string;
+  score?: number;
+  tier?: string;
+}
+
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
   isCrisis?: boolean;
+  evidence?: EvidenceItem[];
+  animationDelayMs?: number;
 }
 
-const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }: ChatMessageProps) {
+const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, evidence, animationDelayMs = 0 }: ChatMessageProps) {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
 
   const formattedHtml = useMemo(() => {
     let formatted = content;
 
-    formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-slate-800 mt-2 mb-1">$1</div>');
-    formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-slate-800 mt-3 mb-1">$1</div>');
-    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>');
+    formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-slate-800 dark:text-slate-100 mt-2 mb-1">$1</div>');
+    formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-slate-800 dark:text-slate-100 mt-3 mb-1">$1</div>');
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-slate-50">$1</strong>');
     formatted = formatted.replace(/^(\d+)\.\s+(.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 font-medium min-w-[1.2em] text-right">$1.</span><span>$2</span></div>');
     formatted = formatted.replace(/^- (.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 mt-0.5">•</span><span>$1</span></div>');
-    formatted = formatted.replace(/([\d-]{7,})/g, '<span class="text-sky-600 font-medium">$1</span>');
-    formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-sky-50 rounded text-sky-700 text-[13px]">$1</code>');
+    formatted = formatted.replace(/([\d-]{7,})/g, '<span class="text-sky-600 dark:text-sky-300 font-medium">$1</span>');
+    formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-sky-50 dark:bg-sky-900/35 rounded text-sky-700 dark:text-sky-200 text-[13px]">$1</code>');
+    // Markdown links: [text](https://example.com)
+    formatted = formatted.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">$1</a>'
+    );
+    // Plain URLs
+    formatted = formatted.replace(
+      /(^|[\s(（])(https?:\/\/[^\s<)）]+)([)）.,!?，。；;:]?)/g,
+      '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">$2</a>$3'
+    );
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
 
     return sanitizeHTML(formatted, {
-      ALLOWED_TAGS: ['div', 'span', 'strong', 'code', 'br'],
-      ALLOWED_ATTR: ['class'],
+      ALLOWED_TAGS: ['div', 'span', 'strong', 'code', 'br', 'a'],
+      ALLOWED_ATTR: ['class', 'href', 'target', 'rel'],
     });
   }, [content]);
 
@@ -44,7 +64,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }:
 
   if (isUser) {
     return (
-      <div className="message-bubble flex justify-end mb-3">
+      <div className="message-bubble flex justify-end mb-3" style={{ animationDelay: `${animationDelayMs}ms` }}>
         <div className="user-bubble max-w-[82%] sm:max-w-[65%] rounded-2xl rounded-br-sm px-3.5 py-2.5 sm:px-4 sm:py-3 overflow-hidden">
           <div
             className="text-[14px] sm:text-[15px] leading-relaxed text-white/95 break-words overflow-wrap-anywhere"
@@ -56,7 +76,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }:
   }
 
   return (
-    <div className="message-bubble flex justify-start mb-3 group">
+    <div className="message-bubble flex justify-start mb-3 group" style={{ animationDelay: `${animationDelayMs}ms` }}>
       <div className={`
         max-w-[88%] sm:max-w-[72%] rounded-2xl rounded-bl-sm px-3.5 py-2.5 sm:px-4 sm:py-3 relative
         ${isCrisis ? 'crisis-message' : 'ai-bubble'}
@@ -77,7 +97,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }:
           {/* 复制按钮 */}
           <button
             onClick={handleCopy}
-            className="copy-btn opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+            className="copy-btn opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200"
             title="复制内容"
             aria-label="复制消息内容"
           >
@@ -96,9 +116,40 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis }:
 
         {/* 消息内容 */}
         <div
-          className="text-[14px] sm:text-[15px] leading-[1.7] text-slate-700 break-words overflow-wrap-anywhere"
+          className="text-[14px] sm:text-[15px] leading-[1.7] text-slate-700 dark:text-slate-200 break-words overflow-wrap-anywhere"
           dangerouslySetInnerHTML={{ __html: formattedHtml }}
         />
+        {Array.isArray(evidence) && evidence.length > 0 && (
+          <details className="mt-2.5 rounded-xl border border-sky-100/80 dark:border-sky-900/45 bg-gradient-to-br from-sky-50/80 to-indigo-50/70 dark:from-slate-900/70 dark:to-slate-800/70 px-2.5 py-2">
+            <summary className="cursor-pointer text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+              📎 回答依据（{evidence.length}）
+            </summary>
+            <div className="evidence-panel mt-1.5 space-y-1.5">
+              {evidence.slice(0, 5).map((item, idx) => (
+                <div key={`${item.url || item.title || 'e'}-${idx}`} className="rounded-lg border border-slate-200/70 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 p-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <div className="font-medium text-slate-700 dark:text-slate-100 truncate">
+                    {item.title || `证据 ${idx + 1}`}
+                  </div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                    {item.source && <span>来源: {item.source}</span>}
+                    {typeof item.score === 'number' && <span>相关度: {item.score.toFixed(1)}</span>}
+                    {item.tier && <span>层级: {item.tier}</span>}
+                  </div>
+                  {item.url && (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block mt-0.5 text-[10px] text-sky-600 dark:text-sky-300 hover:text-sky-700 dark:hover:text-sky-200 hover:underline"
+                    >
+                      查看原文
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );

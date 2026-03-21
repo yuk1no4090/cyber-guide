@@ -5,10 +5,12 @@
 
 const API_BASE = '';  // empty = same origin, Next.js rewrites /api/* to backend
 const TOKEN_KEY = 'cyber-guide-jwt';
+const TRACE_ID_HEADER = 'X-Trace-Id';
 
 // ─── Token management ───
 
 let tokenPromise: Promise<string> | null = null;
+let cachedTraceId: string | null = null;
 
 function getCachedToken(): string | null {
   try {
@@ -95,11 +97,15 @@ export function unwrapEnvelope<T extends Record<string, unknown>>(raw: unknown):
  * Build headers with JWT Authorization.
  */
 export function authHeaders(token: string, extra: Record<string, string> = {}): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
     ...extra,
   };
+  if (cachedTraceId) {
+    headers[TRACE_ID_HEADER] = cachedTraceId;
+  }
+  return headers;
 }
 
 export async function fetchWithTimeout(
@@ -137,6 +143,7 @@ export async function authFetch(
   };
 
   const res = await fetchWithTimeout(input, { ...init, headers }, timeoutMs);
+  cachedTraceId = res.headers.get(TRACE_ID_HEADER) || cachedTraceId;
 
   // If 401/403, clear token and retry once
   if (res.status === 401 || res.status === 403) {
@@ -146,7 +153,9 @@ export async function authFetch(
       ...authHeaders(newToken),
       ...(init.headers as Record<string, string> || {}),
     };
-    return fetchWithTimeout(input, { ...init, headers: retryHeaders }, timeoutMs);
+    const retryRes = await fetchWithTimeout(input, { ...init, headers: retryHeaders }, timeoutMs);
+    cachedTraceId = retryRes.headers.get(TRACE_ID_HEADER) || cachedTraceId;
+    return retryRes;
   }
 
   return res;

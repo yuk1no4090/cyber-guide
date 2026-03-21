@@ -10,6 +10,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,11 +24,14 @@ public class ChatPersistenceService {
 
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
+    private final ObjectMapper objectMapper;
 
     public ChatPersistenceService(ChatSessionRepository sessionRepository,
-                                  ChatMessageRepository messageRepository) {
+                                  ChatMessageRepository messageRepository,
+                                  ObjectMapper objectMapper) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Async
@@ -37,6 +43,20 @@ public class ChatPersistenceService {
                                     List<Map<String, String>> requestMessages,
                                     String assistantMessage,
                                     boolean isCrisis) {
+        persistConversation(anonymousSessionId, userId, mode, targetChatSessionId,
+                requestMessages, assistantMessage, isCrisis, null);
+    }
+
+    @Async
+    @Transactional
+    public void persistConversation(String anonymousSessionId,
+                                    UUID userId,
+                                    String mode,
+                                    UUID targetChatSessionId,
+                                    List<Map<String, String>> requestMessages,
+                                    String assistantMessage,
+                                    boolean isCrisis,
+                                    List<Map<String, Object>> evidence) {
         try {
             if (anonymousSessionId == null || anonymousSessionId.isBlank()) {
                 return;
@@ -69,6 +89,13 @@ public class ChatPersistenceService {
             assistantMsg.setContent(assistantMessage == null ? "" : assistantMessage);
             assistantMsg.setSeq(++seq);
             assistantMsg.setCrisis(isCrisis);
+            if (evidence != null && !evidence.isEmpty()) {
+                try {
+                    assistantMsg.setEvidenceJson(objectMapper.writeValueAsString(evidence));
+                } catch (JsonProcessingException e) {
+                    log.warn("failed to serialize evidence: sessionId={}", anonymousSessionId, e);
+                }
+            }
             messageRepository.save(assistantMsg);
         } catch (Exception e) {
             log.warn("persist conversation failed: sessionId={}", anonymousSessionId, e);

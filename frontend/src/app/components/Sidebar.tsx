@@ -45,10 +45,10 @@ export default function Sidebar({
       : 'bg-slate-50 border-slate-200 text-slate-800',
     sectionHint: darkMode ? 'text-slate-400' : 'text-slate-500',
     actionBtn: darkMode
-      ? 'border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700'
+      ? 'border-slate-600 bg-slate-700 text-slate-50 hover:bg-slate-600'
       : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
     itemIdle: darkMode
-      ? 'text-slate-300 hover:bg-slate-800'
+      ? 'text-slate-200 hover:bg-slate-800'
       : 'text-slate-600 hover:bg-slate-200',
     itemActive: darkMode
       ? 'bg-slate-700 text-white'
@@ -142,18 +142,18 @@ export default function Sidebar({
         ))}
       </div>
 
-      <div className={`border-t p-3 ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+      <div className={`border-t p-3 space-y-2 ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+        <button
+          onClick={onToggleDarkMode}
+          className={`w-full rounded-lg border px-3 py-2 text-sm ${tone.actionBtn}`}
+        >
+          {darkMode ? '☀️ 切到浅色' : '🌙 切到深色'}
+        </button>
         {user ? (
           <div>
             <p className={`truncate text-sm ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{user.nickname || '用户'}</p>
             <p className={`truncate text-xs ${tone.sectionHint}`}>{user.email}</p>
             <div className="mt-2 flex items-center gap-2">
-              <button
-                onClick={onToggleDarkMode}
-                className={`rounded-md border px-2 py-1 text-[11px] ${tone.actionBtn}`}
-              >
-                {darkMode ? '浅色' : '深色'}
-              </button>
               <button
                 onClick={onLogout}
                 className={`rounded-md border px-2 py-1 text-[11px] ${tone.actionBtn}`}

@@ -38,6 +38,9 @@ public class ChatMessageEntity {
     @Column(nullable = false)
     private int seq;
 
+    @Column(name = "evidence_json", columnDefinition = "TEXT")
+    private String evidenceJson;
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
@@ -92,6 +95,14 @@ public class ChatMessageEntity {
 
     public void setSeq(int seq) {
         this.seq = seq;
+    }
+
+    public String getEvidenceJson() {
+        return evidenceJson;
+    }
+
+    public void setEvidenceJson(String evidenceJson) {
+        this.evidenceJson = evidenceJson;
     }
 
     public Instant getCreatedAt() {

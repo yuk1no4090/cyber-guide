@@ -47,7 +47,11 @@ public class RagService {
     @Value("${rag.default-top-k:2}")
     private int defaultTopK;
 
+    @Value("${rag.university-data-path:../knowledge_base/china_universities.json}")
+    private String universityDataPath;
+
     private final List<KnowledgeChunk> chunks = new ArrayList<>();
+    private final Map<String, String> schoolToTier = new LinkedHashMap<>();
     private final CacheGuard cacheGuard;
     private final CareerCaseRepository caseRepo;
     private final CrawledArticleRepository articleRepo;
@@ -70,13 +74,24 @@ public class RagService {
         String relevanceTier,
         double score
     ) implements java.io.Serializable {}
+    public record RetrievalMetadata(
+        String queryHash,
+        int totalCandidates,
+        List<RetrievalResult> topKResults
+    ) implements java.io.Serializable {}
+    public record RetrievalBundle(
+        List<RetrievalResult> results,
+        RetrievalMetadata metadata
+    ) implements java.io.Serializable {}
     public enum UserIntent { POSTGRAD, JOB, UNKNOWN }
-    public enum TargetIntent { KAOYAN, BAOYAN, JOB, UNKNOWN }
+    public enum TargetIntent { KAOYAN, BAOYAN, STUDY_ABROAD, JOB, UNKNOWN }
+    public enum SchoolTier { C9, T985, T211, SYL, YIBEN, ERBEN, UNKNOWN }
     public record UserProfile(
         UserIntent intent,
         TargetIntent targetIntent,
         String stage,
         String school,
+        String schoolTier,
         String gpa,
         String highlights,
         List<String> keywords
@@ -97,6 +112,55 @@ public class RagService {
             log.error("Failed to load knowledge base", e);
         }
         log.info("RAG loaded {} chunks from knowledge base", chunks.size());
+
+        loadUniversityTiers();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadUniversityTiers() {
+        Path path = Paths.get(universityDataPath);
+        if (!Files.isRegularFile(path)) {
+            log.warn("University data file not found: {}", path.toAbsolutePath());
+            return;
+        }
+        try {
+            String json = Files.readString(path);
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> data = mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+
+            loadTierList(data, "c9", "C9");
+            loadTierList(data, "985", "985");
+            loadTierList(data, "211_non985", "211");
+            loadTierList(data, "syl_discipline_new", "双一流学科");
+            loadTierList(data, "known_strong_shuangfei", "双非强校");
+        } catch (Exception e) {
+            log.error("Failed to load university tiers", e);
+        }
+        log.info("Loaded {} university tier mappings", schoolToTier.size());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadTierList(Map<String, Object> data, String key, String tier) {
+        Object val = data.get(key);
+        if (val instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof String name) {
+                    schoolToTier.putIfAbsent(name, tier);
+                }
+            }
+        }
+    }
+
+    public String resolveSchoolTier(String school) {
+        if (school == null || school.isBlank()) return "未知";
+        String exact = schoolToTier.get(school);
+        if (exact != null) return exact;
+        for (Map.Entry<String, String> e : schoolToTier.entrySet()) {
+            if (school.contains(e.getKey()) || e.getKey().contains(school)) {
+                return e.getValue();
+            }
+        }
+        return "普通院校";
     }
 
     private void loadFile(Path file) {
@@ -167,7 +231,7 @@ public class RagService {
     public List<RetrievalResult> retrieve(String query, UserProfile profile, int topK) {
         UserProfile safeProfile = profile != null
             ? profile
-            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "", "", List.of());
+            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of());
         String cacheKey = CACHE_KEY_PREFIX + hashQuery(
             query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent() + "|" + safeProfile.stage() + "|" + safeProfile.school()
         ) + ":" + topK;
@@ -181,14 +245,52 @@ public class RagService {
         return cached != null ? cached : List.of();
     }
 
+    public RetrievalBundle retrieveWithMetadata(String query, UserProfile profile, int topK) {
+        long start = System.currentTimeMillis();
+        UserProfile safeProfile = profile != null
+            ? profile
+            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of());
+        RetrievalComputation computation = doRetrieveDetailed(query, safeProfile, topK);
+        List<RetrievalResult> topResults = computation.topResults();
+        RetrievalMetadata metadata = new RetrievalMetadata(
+            hashQuery(query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent() + "|" + safeProfile.stage() + "|" + safeProfile.school()),
+            computation.totalCandidates(),
+            topResults
+        );
+
+        Map<String, Long> sourceDistribution = topResults.stream()
+            .collect(java.util.stream.Collectors.groupingBy(
+                r -> normalizeSourceType(r.source()),
+                java.util.LinkedHashMap::new,
+                java.util.stream.Collectors.counting()
+            ));
+        double topScore = topResults.isEmpty() ? 0.0 : topResults.get(0).score();
+        log.info(
+            "rag.retrieve queryHash={} intent={} target={} resultCount={} totalCandidates={} topScore={} sourceDistribution={} latencyMs={}",
+            metadata.queryHash(),
+            safeProfile.intent(),
+            safeProfile.targetIntent(),
+            topResults.size(),
+            metadata.totalCandidates(),
+            String.format(Locale.ROOT, "%.2f", topScore),
+            sourceDistribution,
+            System.currentTimeMillis() - start
+        );
+        return new RetrievalBundle(topResults, metadata);
+    }
+
     /**
      * Merged retrieval: knowledge base (in-memory) + database (career_cases + crawled_articles).
      */
     private List<RetrievalResult> doRetrieve(String query, int topK) {
-        return doRetrieve(query, new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "", "", List.of()), topK);
+        return doRetrieve(query, new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of()), topK);
     }
 
     private List<RetrievalResult> doRetrieve(String query, UserProfile profile, int topK) {
+        return doRetrieveDetailed(query, profile, topK).topResults();
+    }
+
+    private RetrievalComputation doRetrieveDetailed(String query, UserProfile profile, int topK) {
         List<RetrievalResult> results = new ArrayList<>();
         String expandedQuery = expandQuery(query, profile);
 
@@ -203,7 +305,8 @@ public class RagService {
 
         // Sort by score descending, take top-K
         results.sort(Comparator.comparingDouble(RetrievalResult::score).reversed());
-        return results.stream().limit(Math.max(1, topK)).toList();
+        List<RetrievalResult> topResults = results.stream().limit(Math.max(1, topK)).toList();
+        return new RetrievalComputation(topResults, results.size());
     }
 
     private List<RetrievalResult> retrieveFromKnowledgeBase(String query, int topK) {
@@ -370,7 +473,11 @@ public class RagService {
                 sb.append("阶段=").append(profile.stage()).append("\n");
             }
             if (profile.school() != null && !profile.school().isBlank()) {
-                sb.append("学校=").append(profile.school()).append("\n");
+                sb.append("学校=").append(profile.school());
+                if (profile.schoolTier() != null && !profile.schoolTier().isBlank() && !"未知".equals(profile.schoolTier())) {
+                    sb.append("（").append(profile.schoolTier()).append("）");
+                }
+                sb.append("\n");
             }
             if (profile.gpa() != null && !profile.gpa().isBlank()) {
                 sb.append("GPA/绩点=").append(profile.gpa()).append("\n");
@@ -378,15 +485,23 @@ public class RagService {
             if (profile.highlights() != null && !profile.highlights().isBlank()) {
                 sb.append("背景要点=").append(profile.highlights()).append("\n");
             }
-            sb.append("回答要求：");
+            sb.append("回答要求：\n");
+            sb.append("1. **\u5fc5\u987b\u5f15\u7528\u5177\u4f53\u6848\u4f8b**\uff1a\u4e0d\u8981\u8bf4\u201c\u4e00\u822c\u6765\u8bf4\u201d\u3001\u201c\u901a\u5e38\u60c5\u51b5\u4e0b\u201d\u8fd9\u79cd\u5957\u8bdd\u3002\u5bf9\u4e8e\u4e0b\u9762\u7684\u6bcf\u6761 EVIDENCE\uff0c\u8bf7\u76f4\u63a5\u544a\u8bc9\u7528\u6237\u201c\u6709\u4e00\u4f4d\u548c\u4f60\u80cc\u666f\u76f8\u4f3c\u7684\u540c\u5b66\uff0cta \u7684\u60c5\u51b5\u662f\u2026\u201d\u5e76\u9644\u4e0a\u539f\u6587\u94fe\u63a5\uff08Markdown \u683c\u5f0f\uff09\u3002\n");
+            sb.append("2. **基于学校层次匹配**：用户的学校层次是「").append(
+                profile.schoolTier() != null && !"未知".equals(profile.schoolTier()) ? profile.schoolTier() : "待确认"
+            ).append("」，请优先引用同层次或相近层次学校的案例。\n");
             if (profile.intent() == UserIntent.POSTGRAD) {
-                sb.append("优先给出升学/保研/考研建议，并结合相近背景案例。");
+                if (profile.targetIntent() == TargetIntent.STUDY_ABROAD) {
+                    sb.append("3. 用户倾向出国留学，请结合相近背景的留学申请案例（GPA、学校层次、申请方向），告诉用户同类同学申请了哪些学校、拿到了什么结果。\n");
+                } else {
+                    sb.append("3. 用户倾向升学，请结合保研/考研案例，告诉用户同类背景的同学推免或考研去了哪些学校，并给出具体的准备建议。\n");
+                }
             } else if (profile.intent() == UserIntent.JOB) {
-                sb.append("优先给出就业/实习建议，并结合岗位与项目经历。");
+                sb.append("3. 用户倾向就业，请结合就业/实习案例，告诉用户同类背景的同学去了哪些公司/岗位，薪资水平和面试要点。\n");
             } else {
-                sb.append("在升学与就业两条路都给出可执行建议。");
+                sb.append("3. 用户还没想好方向，请分别给出升学和就业两条路的具体案例和数据支撑。\n");
             }
-            sb.append("\n\n");
+            sb.append("4. 每条建议都必须附上至少一个原文链接，让用户可以自己点击查看完整经验帖。\n\n");
         }
         for (int i = 0; i < results.size(); i++) {
             RetrievalResult r = results.get(i);
@@ -410,6 +525,17 @@ public class RagService {
         return Integer.toHexString(hash);
     }
 
+    private String normalizeSourceType(String source) {
+        if (source == null || source.isBlank()) {
+            return "unknown";
+        }
+        int idx = source.indexOf(':');
+        if (idx <= 0) {
+            return source.trim().toLowerCase(Locale.ROOT);
+        }
+        return source.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+    }
+
     public UserProfile inferUserProfile(List<Map<String, String>> messages, String latestQuery) {
         Map<String, String> structuredProfile = extractStructuredProfileData(messages);
         if (!structuredProfile.isEmpty()) {
@@ -419,7 +545,8 @@ public class RagService {
         String context = buildRecentUserContext(messages, latestQuery);
         String lower = context.toLowerCase();
 
-        int postgradHits = countHits(lower, List.of("考研", "保研", "推免", "夏令营", "读研", "研究生", "复试", "调剂"));
+        int postgradHits = countHits(lower, List.of("考研", "保研", "推免", "夏令营", "读研", "研究生", "复试", "调剂",
+                "留学", "出国", "申请", "选校", "gre", "toefl", "ielts", "雅思", "托福"));
         int jobHits = countHits(lower, List.of("实习", "找工作", "秋招", "春招", "校招", "简历", "面试", "offer", "求职", "就业"));
         UserIntent intent = postgradHits > jobHits ? UserIntent.POSTGRAD
             : (jobHits > postgradHits ? UserIntent.JOB : UserIntent.UNKNOWN);
@@ -446,12 +573,14 @@ public class RagService {
         if (intent == UserIntent.JOB) keywords.addAll(List.of("实习", "校招", "面试经验"));
         if (targetIntent == TargetIntent.BAOYAN) keywords.add("保研");
         if (targetIntent == TargetIntent.KAOYAN) keywords.add("考研");
+        if (targetIntent == TargetIntent.STUDY_ABROAD) keywords.addAll(List.of("留学", "申请", "选校"));
         if (targetIntent == TargetIntent.JOB) keywords.add("就业");
         if (containsAny(context, List.of("计算机", "cs", "软件", "人工智能", "电子", "通信"))) {
             keywords.add("计算机");
         }
 
-        return new UserProfile(intent, targetIntent, stage, school, gpa, profileHighlights, keywords.stream().distinct().toList());
+        String tier = resolveSchoolTier(school);
+        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, profileHighlights, keywords.stream().distinct().toList());
     }
 
     private Map<String, String> extractStructuredProfileData(List<Map<String, String>> messages) {
@@ -505,16 +634,19 @@ public class RagService {
         if (!gpa.isBlank()) keywords.add("GPA " + gpa);
         if (targetIntent == TargetIntent.BAOYAN) keywords.addAll(List.of("保研", "推免", "夏令营"));
         if (targetIntent == TargetIntent.KAOYAN) keywords.addAll(List.of("考研", "复试", "备考"));
+        if (targetIntent == TargetIntent.STUDY_ABROAD) keywords.addAll(List.of("留学", "申请", "选校", "出国"));
         if (targetIntent == TargetIntent.JOB) keywords.addAll(List.of("就业", "实习", "校招"));
         if (latestQuery != null && !latestQuery.isBlank()) {
             keywords.addAll(List.of(latestQuery.split("\\s+")));
         }
-        return new UserProfile(intent, targetIntent, stage, school, gpa, profileHighlights, keywords.stream().filter(s -> s != null && !s.isBlank()).distinct().toList());
+        String tier = resolveSchoolTier(school);
+        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, profileHighlights, keywords.stream().filter(s -> s != null && !s.isBlank()).distinct().toList());
     }
 
     private TargetIntent inferTargetIntent(String lowerText) {
         if (containsAny(lowerText, List.of("保研", "推免", "夏令营"))) return TargetIntent.BAOYAN;
         if (containsAny(lowerText, List.of("考研", "复试", "调剂"))) return TargetIntent.KAOYAN;
+        if (containsAny(lowerText, List.of("留学", "出国", "申请", "选校", "gre", "toefl", "ielts", "雅思", "托福"))) return TargetIntent.STUDY_ABROAD;
         if (containsAny(lowerText, List.of("就业", "实习", "秋招", "校招", "面试", "求职"))) return TargetIntent.JOB;
         return TargetIntent.UNKNOWN;
     }
@@ -523,12 +655,14 @@ public class RagService {
         String normalized = intentRaw == null ? "" : intentRaw.trim().toLowerCase();
         if (normalized.contains("保研") || normalized.contains("推免")) return TargetIntent.BAOYAN;
         if (normalized.contains("考研")) return TargetIntent.KAOYAN;
+        if (normalized.contains("留学") || normalized.contains("出国")) return TargetIntent.STUDY_ABROAD;
         if (normalized.contains("就业") || normalized.contains("实习") || normalized.contains("工作")) return TargetIntent.JOB;
         return TargetIntent.UNKNOWN;
     }
 
     private UserIntent mapUserIntent(TargetIntent targetIntent, String rawIntent) {
-        if (targetIntent == TargetIntent.BAOYAN || targetIntent == TargetIntent.KAOYAN) {
+        if (targetIntent == TargetIntent.BAOYAN || targetIntent == TargetIntent.KAOYAN
+                || targetIntent == TargetIntent.STUDY_ABROAD) {
             return UserIntent.POSTGRAD;
         }
         if (targetIntent == TargetIntent.JOB) {
@@ -586,7 +720,7 @@ public class RagService {
 
     private double intentBoost(String category, UserIntent intent) {
         String c = normalizeCategory(category);
-        if (intent == UserIntent.POSTGRAD && (c.contains("kaoyan") || c.contains("baoyan"))) return 3.0;
+        if (intent == UserIntent.POSTGRAD && (c.contains("kaoyan") || c.contains("baoyan") || c.contains("study_abroad"))) return 3.0;
         if (intent == UserIntent.JOB && c.contains("job")) return 3.0;
         return 0.0;
     }
@@ -595,6 +729,7 @@ public class RagService {
         String c = normalizeCategory(category);
         if (targetIntent == TargetIntent.KAOYAN && c.contains("kaoyan")) return 4.0;
         if (targetIntent == TargetIntent.BAOYAN && c.contains("baoyan")) return 4.0;
+        if (targetIntent == TargetIntent.STUDY_ABROAD && c.contains("study_abroad")) return 4.0;
         if (targetIntent == TargetIntent.JOB && c.contains("job")) return 4.0;
         return 0.0;
     }
@@ -607,8 +742,9 @@ public class RagService {
         if (profile == null) return Set.of();
         if (profile.targetIntent() == TargetIntent.BAOYAN) return Set.of("baoyan");
         if (profile.targetIntent() == TargetIntent.KAOYAN) return Set.of("kaoyan");
+        if (profile.targetIntent() == TargetIntent.STUDY_ABROAD) return Set.of("study_abroad");
         if (profile.targetIntent() == TargetIntent.JOB) return Set.of("job");
-        if (profile.intent() == UserIntent.POSTGRAD) return Set.of("baoyan", "kaoyan");
+        if (profile.intent() == UserIntent.POSTGRAD) return Set.of("baoyan", "kaoyan", "study_abroad");
         if (profile.intent() == UserIntent.JOB) return Set.of("job");
         return Set.of();
     }
@@ -637,10 +773,24 @@ public class RagService {
     }
 
     private double schoolBonus(UserProfile profile, String searchable) {
-        if (profile == null || profile.school() == null || profile.school().isBlank()) {
-            return 0.0;
+        if (profile == null) return 0.0;
+        double bonus = 0.0;
+        if (profile.school() != null && !profile.school().isBlank()
+                && searchable.contains(profile.school().toLowerCase())) {
+            bonus += 5.0;
         }
-        return searchable.contains(profile.school().toLowerCase()) ? 5.0 : 0.0;
+        if (profile.schoolTier() != null && !"未知".equals(profile.schoolTier()) && !"普通院校".equals(profile.schoolTier())) {
+            String tier = profile.schoolTier().toLowerCase();
+            if (searchable.contains(tier)) bonus += 3.0;
+            if ("985".equals(tier) || "c9".equals(tier)) {
+                if (searchable.contains("985") || searchable.contains("c9")) bonus += 2.0;
+            } else if ("211".equals(tier)) {
+                if (searchable.contains("211")) bonus += 2.0;
+            } else if (tier.contains("双非") || tier.contains("双一流学科")) {
+                if (searchable.contains("双非") || searchable.contains("非985")) bonus += 2.0;
+            }
+        }
+        return bonus;
     }
 
     private double keywordBonus(UserProfile profile, String searchable) {
@@ -695,4 +845,6 @@ public class RagService {
         }
         return false;
     }
+
+    private record RetrievalComputation(List<RetrievalResult> topResults, int totalCandidates) {}
 }

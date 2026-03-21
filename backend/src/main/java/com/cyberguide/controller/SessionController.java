@@ -13,6 +13,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,11 +28,14 @@ public class SessionController {
 
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ObjectMapper objectMapper;
 
     public SessionController(ChatSessionRepository chatSessionRepository,
-                             ChatMessageRepository chatMessageRepository) {
+                             ChatMessageRepository chatMessageRepository,
+                             ObjectMapper objectMapper) {
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -126,7 +133,19 @@ public class SessionController {
         item.put("isCrisis", message.isCrisis());
         item.put("seq", message.getSeq());
         item.put("createdAt", message.getCreatedAt());
+        item.put("evidence", parseEvidenceJson(message.getEvidenceJson()));
         return item;
+    }
+
+    private List<Map<String, Object>> parseEvidenceJson(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     public record RenameBody(String title) {}

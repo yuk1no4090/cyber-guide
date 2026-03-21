@@ -26,6 +26,7 @@ AD_KEYWORDS = [
 SOURCE_WEIGHT = {
     'eeban': 10,
     'kaoyan': 10,
+    'zhihu': 8,
     'juejin': 5,
     'v2ex': 0,
     'csdn': 0,
@@ -34,6 +35,7 @@ SOURCE_WEIGHT = {
 SOURCE_CATEGORY_MAP = {
     'eeban': 'baoyan',
     'kaoyan': 'kaoyan',
+    'zhihu': '',
     'juejin': 'job',
     'v2ex': 'job',
     'csdn': 'job',
@@ -75,7 +77,7 @@ def compute_quality_score(title: str, content: str, source_name: str) -> float:
 
 def compute_relevance_tier(category: str, score: float) -> str:
     c = (category or '').lower()
-    if c in {'baoyan', 'kaoyan', 'job'} and score >= 20:
+    if c in {'baoyan', 'kaoyan', 'job', 'study_abroad'} and score >= 20:
         return 'high'
     if score >= 10:
         return 'medium'

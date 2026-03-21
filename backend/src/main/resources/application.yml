@@ -110,6 +110,14 @@ concurrency:
   stream:
     max-inflight: ${STREAM_MAX_INFLIGHT:20}
 
+debug:
+  chat-log:
+    enabled: ${DEBUG_CHAT_LOG_ENABLED:false}
+    max-chars: ${DEBUG_CHAT_LOG_MAX_CHARS:1200}
+    allowed-profiles: ${DEBUG_CHAT_LOG_ALLOWED_PROFILES:local,dev,test}
+    session-id: ${DEBUG_CHAT_LOG_SESSION_ID:}
+    sample-rate: ${DEBUG_CHAT_LOG_SAMPLE_RATE:1.0}
+
 # Actuator
 management:
   endpoints:
@@ -121,6 +129,8 @@ management:
       enabled: true
     redis:
       enabled: true
+    mail:
+      enabled: false
 
 # SpringDoc
 springdoc:

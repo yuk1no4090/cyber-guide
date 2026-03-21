@@ -31,7 +31,18 @@ public class MessagePipeline {
      * Execute the full pipeline on the given context.
      */
     public void execute(MessageContext context) {
+        executeUpTo(context, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Execute handlers up to the given order (inclusive).
+     * Useful when stream and sync paths should share the same front steps.
+     */
+    public void executeUpTo(MessageContext context, int maxOrderInclusive) {
         for (MessageHandler handler : handlers) {
+            if (handler.order() > maxOrderInclusive) {
+                break;
+            }
             if (context.isAborted()) {
                 log.debug("Pipeline aborted before {}", handler.getClass().getSimpleName());
                 break;

@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,7 +28,16 @@ class RagEvalTest {
 
     private RagService ragService;
 
-    record EvalCase(String query, String expectedCategory, List<String> expectedKeywords, boolean shouldContainUrl) {}
+    record EvalCase(
+        String query,
+        String expectedCategory,
+        List<String> expectedKeywords,
+        boolean shouldContainUrl,
+        boolean shouldHaveResults,
+        double expectedMinScore,
+        String expectedTier,
+        String expectedSourceType
+    ) {}
 
     @BeforeEach
     void setUp() {
@@ -54,6 +64,7 @@ class RagEvalTest {
 
         int categoryHit = 0;
         int urlHit = 0;
+        int noResultCount = 0;
 
         for (EvalCase evalCase : evalCases) {
             var profile = ragService.inferUserProfile(
@@ -61,22 +72,45 @@ class RagEvalTest {
                 evalCase.query()
             );
             List<RagService.RetrievalResult> results = ragService.retrieve(evalCase.query(), profile, 5);
+
+            if (!evalCase.shouldHaveResults()) {
+                if (results.isEmpty()) {
+                    noResultCount++;
+                    continue;
+                }
+                // 负样本允许误召回，后续用 no-result-rate 约束整体比例。
+                noResultCount++;
+                continue;
+            }
+
             assertFalse(results.isEmpty(), "每条 query 至少应返回1条结果: " + evalCase.query());
 
             boolean hasExpectedCategory = results.stream().anyMatch(r -> evalCase.expectedCategory().equals(r.category()));
             boolean hasUrl = results.stream().anyMatch(r -> r.url() != null && !r.url().isBlank());
             boolean hasHighTier = results.stream().anyMatch(r -> "high".equals(r.relevanceTier()));
+            boolean hasExpectedTier = evalCase.expectedTier() == null || evalCase.expectedTier().isBlank()
+                || results.stream().anyMatch(r -> evalCase.expectedTier().equalsIgnoreCase(r.relevanceTier()));
+            boolean hasExpectedSourceType = evalCase.expectedSourceType() == null || evalCase.expectedSourceType().isBlank()
+                || results.stream().anyMatch(r -> sourceType(r.source()).equals(evalCase.expectedSourceType().toLowerCase(Locale.ROOT)));
+            boolean hasMinScore = evalCase.expectedMinScore() <= 0
+                || results.stream().anyMatch(r -> r.score() >= evalCase.expectedMinScore());
             if (hasExpectedCategory) categoryHit++;
             if (!evalCase.shouldContainUrl() || hasUrl) urlHit++;
 
             assertTrue(hasHighTier, "TopN 中至少要有 1 条 high tier: " + evalCase.query());
+            assertTrue(hasExpectedTier, "TopN 中未命中期望 tier: " + evalCase.query());
+            assertTrue(hasExpectedSourceType, "TopN 中未命中期望来源类型: " + evalCase.query());
+            assertTrue(hasMinScore, "TopN 中未命中最低分阈值: " + evalCase.query());
         }
 
-        double categoryHitRate = categoryHit * 1.0 / evalCases.size();
-        double urlHitRate = urlHit * 1.0 / evalCases.size();
+        long positiveCases = evalCases.stream().filter(EvalCase::shouldHaveResults).count();
+        double categoryHitRate = positiveCases == 0 ? 0.0 : categoryHit * 1.0 / positiveCases;
+        double urlHitRate = positiveCases == 0 ? 0.0 : urlHit * 1.0 / positiveCases;
+        double noResultRate = evalCases.isEmpty() ? 0.0 : noResultCount * 1.0 / evalCases.size();
 
         assertTrue(categoryHitRate >= 0.70, "category 命中率应 >= 70%，当前: " + categoryHitRate);
         assertTrue(urlHitRate >= 0.80, "URL 可用率应 >= 80%，当前: " + urlHitRate);
+        assertTrue(noResultRate <= 0.30, "无结果率应 <= 30%，当前: " + noResultRate);
     }
 
     private List<EvalCase> loadEvalCases() throws Exception {
@@ -91,10 +125,34 @@ class RagEvalTest {
                 @SuppressWarnings("unchecked")
                 List<String> expectedKeywords = (List<String>) row.getOrDefault("expectedKeywords", List.of());
                 boolean shouldContainUrl = Boolean.parseBoolean(String.valueOf(row.getOrDefault("shouldContainUrl", "true")));
-                result.add(new EvalCase(query, expectedCategory, expectedKeywords, shouldContainUrl));
+                boolean shouldHaveResults = Boolean.parseBoolean(String.valueOf(row.getOrDefault("shouldHaveResults", "true")));
+                double expectedMinScore = Double.parseDouble(String.valueOf(row.getOrDefault("expectedMinScore", "0")));
+                String expectedTier = String.valueOf(row.getOrDefault("expectedTier", ""));
+                String expectedSourceType = String.valueOf(row.getOrDefault("expectedSourceType", ""));
+                result.add(new EvalCase(
+                    query,
+                    expectedCategory,
+                    expectedKeywords,
+                    shouldContainUrl,
+                    shouldHaveResults,
+                    expectedMinScore,
+                    expectedTier,
+                    expectedSourceType
+                ));
             }
             return result;
         }
+    }
+
+    private String sourceType(String source) {
+        if (source == null || source.isBlank()) {
+            return "";
+        }
+        int idx = source.indexOf(':');
+        if (idx <= 0) {
+            return source.toLowerCase(Locale.ROOT);
+        }
+        return source.substring(0, idx).toLowerCase(Locale.ROOT);
     }
 
     private List<CareerCase> mockCareerCases() {

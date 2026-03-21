@@ -31,18 +31,20 @@ export default function SuggestionChips({ suggestions, onSelect, disabled }: Sug
           aria-label={`发送：${displayText(text)}`}
           className="
             suggestion-chip
+            chip-fade-in
             px-3 py-1.5 sm:px-3.5 sm:py-2
             text-[12px] sm:text-[13px]
-            text-sky-600
-            bg-sky-50
-            border border-sky-200
+            text-sky-700 dark:text-sky-200
+            bg-sky-50/70 dark:bg-sky-950/40
+            border border-sky-200 dark:border-sky-800
             rounded-full
-            hover:bg-sky-100 hover:border-sky-300 hover:text-sky-700
+            hover:bg-sky-100 dark:hover:bg-sky-900/60 hover:border-sky-300 dark:hover:border-sky-700 hover:text-sky-700 dark:hover:text-sky-100
             active:scale-95
             disabled:opacity-30 disabled:cursor-not-allowed
             transition-all duration-200
             whitespace-nowrap
           "
+          style={{ animationDelay: `${Math.min(index * 45, 240)}ms` }}
         >
           {displayText(text)}
         </button>

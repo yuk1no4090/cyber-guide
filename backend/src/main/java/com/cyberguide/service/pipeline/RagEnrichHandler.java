@@ -24,11 +24,17 @@ public class RagEnrichHandler implements MessageHandler {
     @Override
     public void handle(MessageContext context) {
         var profile = ragService.inferUserProfile(context.getMessages(), context.getUserMessage());
-        var evidence = ragService.retrieve(context.getUserMessage(), profile, 2);
-        String formatted = ragService.formatEvidence(evidence, profile);
+        context.setUserProfile(profile);
+
+        var bundle = ragService.retrieveWithMetadata(context.getUserMessage(), profile, 6);
+        context.setRetrievalResults(bundle.results());
+        context.setRetrievalMetadata(bundle.metadata());
+
+        var promptEvidence = bundle.results().stream().limit(2).toList();
+        String formatted = ragService.formatEvidence(promptEvidence, profile);
         context.setEvidence(formatted);
-        if (!evidence.isEmpty()) {
-            log.debug("RAG enriched: {} chunks for session={}", evidence.size(), context.getSessionId());
+        if (!bundle.results().isEmpty()) {
+            log.debug("RAG enriched: {} chunks for session={}", bundle.results().size(), context.getSessionId());
         }
     }
 }

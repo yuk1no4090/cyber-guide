@@ -83,23 +83,28 @@ export default function LoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="cg-modal w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-800">登录 Cyber Guide</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
+    <div
+      className="modal-mask-enter fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="登录或注册"
+    >
+      <div className="modal-panel-enter cg-modal w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">登录 Cyber Guide</h3>
+          <button onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">✕</button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="flex rounded-lg bg-slate-100 p-1">
+          <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
             <button
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${mode === 'login' ? 'bg-white text-slate-800 shadow' : 'text-slate-500'}`}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${mode === 'login' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow' : 'text-slate-500 dark:text-slate-400'}`}
               onClick={() => setMode('login')}
             >
               登录
             </button>
             <button
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${mode === 'register' ? 'bg-white text-slate-800 shadow' : 'text-slate-500'}`}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${mode === 'register' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow' : 'text-slate-500 dark:text-slate-400'}`}
               onClick={() => setMode('register')}
             >
               注册
@@ -110,7 +115,7 @@ export default function LoginModal({
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
               placeholder="邮箱"
               type="email"
             />
@@ -120,13 +125,13 @@ export default function LoginModal({
               <input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                 placeholder="昵称（可选）"
               />
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                 placeholder="邮箱"
                 type="email"
               />
@@ -134,14 +139,14 @@ export default function LoginModal({
                 <input
                   value={emailCode}
                   onChange={(e) => setEmailCode(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                   placeholder="邮箱验证码"
                 />
                 <button
                   type="button"
                   onClick={sendCode}
                   disabled={sendingCode || countdown > 0}
-                  className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                  className="shrink-0 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/45 px-3 py-2 text-xs text-sky-700 dark:text-sky-100 hover:bg-sky-100 dark:hover:bg-sky-900/70 disabled:opacity-50"
                 >
                   {sendingCode ? '发送中...' : countdown > 0 ? `${countdown}s` : '发送验证码'}
                 </button>
@@ -151,7 +156,7 @@ export default function LoginModal({
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
             placeholder="密码（至少 6 位）"
             type="password"
           />
@@ -159,13 +164,13 @@ export default function LoginModal({
             <input
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
               placeholder="确认密码"
               type="password"
             />
           )}
 
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          {error && <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
 
           <button
             disabled={
@@ -182,7 +187,7 @@ export default function LoginModal({
 
           <button
             onClick={onGithub}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
           >
             使用 GitHub 登录
           </button>

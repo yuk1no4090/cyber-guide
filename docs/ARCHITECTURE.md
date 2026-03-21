@@ -60,7 +60,7 @@ com.cyberguide/
 │   └── shared/      ErrorCode, BizException
 │
 ├── service/                            # Application layer — orchestration
-│   ├── ChatService                     # Uses MessagePipeline for sync, direct AI for stream
+│   ├── ChatService                     # Sync + stream both reuse pipeline pre-stage
 │   ├── PlanService                     # Cache-Aside with CacheGuard
 │   ├── FeedbackService                 # Publishes FeedbackReceivedEvent
 │   ├── ModerationService               # Crisis keyword detection
@@ -128,6 +128,58 @@ Implemented via `CacheGuard` with three protections: penetration (null sentinel)
 ## Request flow (chat)
 
 ```
+
+## Request flow (stream chat)
+
+```
+Browser
+  → POST /api/chat/stream (NDJSON)
+  → TraceIdFilter / JwtAuthenticationFilter
+  → ChatController.chatStream()
+    → RedisRateLimiter.allowChat()
+    → ChatService.chatStreamWithMeta()
+      → MessagePipeline.executeUpTo(order<=30)
+        → RedactHandler
+        → ModerationHandler
+        → RagEnrichHandler (produces evidence + similarCases)
+      → Strategy prompt + aiClient.streamChat()
+      → emit NDJSON lines:
+          {"t":"delta","c":"..."}*
+          {"t":"meta","message":"...","suggestions":[...],"isCrisis":false,"evidence":[...],"similarCases":[...]}
+      → success only:
+          ChatPersistenceService.persistConversation(..., evidence)
+          publish ChatCompletedEvent
+```
+
+## Evidence persistence
+
+- Stream/sync assistant messages can carry retrieval evidence (`title/source/url/score/tier`).
+- `ChatPersistenceService` serializes assistant evidence into `ChatMessageEntity.evidenceJson`.
+- `SessionController.messages` parses `evidenceJson` and returns it to frontend so historical sessions still show evidence cards.
+
+## Frontend hooks architecture
+
+```
+HomeContent (layout + wiring only)
+├── useChatFlow
+│   ├── chat state (messages/suggestions/loading/recap)
+│   ├── sendMessageAction()      # stream NDJSON parse + assistant upsert
+│   └── generateRecapAction()    # recap request lifecycle
+├── useProfileFlow
+│   ├── profile/report state
+│   ├── generateReportAction()   # profile report generation
+│   └── handleProfileFormSubmitAction()
+├── useSidebarSessions
+├── useTheme
+├── useAuth
+└── usePlan
+```
+
+## TraceId propagation
+
+- Backend sets `X-Trace-Id` in each response (`TraceIdFilter`).
+- Frontend `authFetch` caches response `X-Trace-Id` and injects it into subsequent request headers.
+- Result: one user session can be correlated across frontend network traces and backend logs.
 Browser
   → POST /api/chat (JWT in Authorization header)
   → TraceIdFilter (assigns traceId to MDC)

@@ -30,8 +30,8 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
       <div className="message-bubble flex justify-start mb-3">
         <div className="ai-bubble max-w-[88%] sm:max-w-[72%] rounded-2xl rounded-bl-sm px-4 py-4 text-center">
           <div className="text-2xl mb-2">🛶 ✨</div>
-          <p className="text-[14px] text-slate-700">谢谢你的反馈！小舟会变得更好的</p>
-          <p className="text-[12px] text-slate-400 mt-1">水再深，小舟也能飘过去</p>
+          <p className="text-[14px] text-slate-700 dark:text-slate-200">谢谢你的反馈！小舟会变得更好的</p>
+          <p className="text-[12px] text-slate-400 dark:text-slate-400 mt-1">水再深，小舟也能飘过去</p>
         </div>
       </div>
     );
@@ -41,11 +41,11 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
 
   return (
     <div className="message-bubble flex justify-start mb-3">
-      <div className="max-w-[92%] sm:max-w-[80%] rounded-2xl rounded-bl-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-sky-50 via-blue-50 to-sky-50 border border-sky-200 rounded-t-2xl px-4 py-3">
+      <div className="polish-card max-w-[92%] sm:max-w-[80%] rounded-2xl rounded-bl-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-sky-50 via-blue-50 to-sky-50 dark:from-slate-900 dark:via-sky-950/40 dark:to-slate-900 border border-sky-200 dark:border-sky-900/50 rounded-t-2xl px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🛶</span>
-            <span className="text-[14px] font-semibold text-sky-700">这次聊天对你有帮助吗？</span>
+            <span className="text-[14px] font-semibold text-sky-700 dark:text-sky-200">这次聊天对你有帮助吗？</span>
           </div>
         </div>
 
@@ -61,8 +61,8 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
                   className={`
                     w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[12px] sm:text-[13px] font-medium transition-all duration-150
                     ${rating === n
-                      ? 'bg-sky-100 text-sky-700 border border-sky-300 scale-110'
-                      : 'bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100'
+                      ? 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-100 border border-sky-300 dark:border-sky-700 scale-110'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }
                   `}
                 >
@@ -71,7 +71,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
               ))}
             </div>
             {rating > 0 && (
-              <p className="text-center text-[13px] text-slate-600 mt-2">
+              <p className="text-center text-[13px] text-slate-600 dark:text-slate-300 mt-2">
                 {ratingEmojis[rating - 1]} {rating <= 3 ? '小舟会努力改进的' : rating <= 6 ? '还行，继续加油' : rating <= 8 ? '谢谢认可！' : '太开心了！'}
               </p>
             )}
@@ -83,7 +83,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
             onChange={e => setFeedback(e.target.value)}
             placeholder="一句话反馈（选填）"
             aria-label="一句话反馈（选填）"
-            className="w-full px-3 py-2 bg-slate-50 text-slate-700 text-[13px] border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:border-sky-300"
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[13px] border border-slate-200 dark:border-slate-700 rounded-xl placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-sky-300"
             maxLength={200}
           />
 
@@ -94,7 +94,7 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
               onChange={e => setSaveChat(e.target.checked)}
               className="w-4 h-4 rounded accent-sky-500"
             />
-            <span className="text-[12px] text-slate-500">
+            <span className="text-[12px] text-slate-500 dark:text-slate-300">
               愿意匿名保存完整对话用于改进（会自动脱敏）
             </span>
           </label>
@@ -103,13 +103,13 @@ export default function FeedbackCard({ onSubmit, onSkip }: FeedbackCardProps) {
             <button
               onClick={handleSubmit}
               disabled={rating === 0 || isSubmitting}
-              className="flex-1 py-2 text-[13px] font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-xl hover:bg-sky-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 py-2 text-[13px] font-medium text-sky-700 dark:text-sky-100 bg-sky-50 dark:bg-sky-900/45 border border-sky-200 dark:border-sky-800 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/70 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? '提交中...' : '提交'}
             </button>
             <button
               onClick={onSkip}
-              className="px-4 py-2 text-[13px] text-slate-400 hover:text-slate-600 transition-colors"
+              className="px-4 py-2 text-[13px] text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
             >
               跳过
             </button>

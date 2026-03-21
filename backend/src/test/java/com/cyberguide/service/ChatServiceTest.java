@@ -116,6 +116,7 @@ class ChatServiceTest {
             RagService.TargetIntent.UNKNOWN,
             "",
             "",
+            "未知",
             "",
             "",
             List.of()
@@ -135,10 +136,15 @@ class ChatServiceTest {
             Map.of("title", "case-1", "url", "https://example.com/case")
         );
 
-        when(ragService.inferUserProfile(messages, "hello")).thenReturn(profile);
-        when(ragService.retrieve("hello", profile, 6)).thenReturn(retrieved);
+        doAnswer(invocation -> {
+            MessageContext ctx = invocation.getArgument(0);
+            ctx.setUserProfile(profile);
+            ctx.setRetrievalResults(retrieved);
+            ctx.setRetrievalMetadata(new RagService.RetrievalMetadata("q1", retrieved.size(), retrieved));
+            ctx.setEvidence("evidence");
+            return null;
+        }).when(pipeline).executeUpTo(any(MessageContext.class), eq(30));
         when(ragService.buildSimilarCases(retrieved, 3)).thenReturn(similarCases);
-        when(ragService.formatEvidence(retrieved.stream().limit(2).toList(), profile)).thenReturn("evidence");
         when(strategy.buildSystemPrompt("evidence", null)).thenReturn("system-prompt");
         when(aiClient.chatStream(any(), eq("system-prompt"), eq(800))).thenReturn(Flux.just("A", "B"));
 
@@ -149,7 +155,38 @@ class ChatServiceTest {
 
         assertEquals(List.of("A", "B"), tokens);
         assertEquals(similarCases, streamResponse.similarCases());
+        assertFalse(streamResponse.presetCrisis());
         verify(aiClient).chatStream(any(), eq("system-prompt"), eq(800));
+    }
+
+    @Test
+    void chatStreamWithMetaDoesNotCallRagDirectly() {
+        List<Map<String, String>> messages = List.of(
+            Map.of("role", "user", "content", "hello")
+        );
+        RagService.UserProfile profile = new RagService.UserProfile(
+            RagService.UserIntent.UNKNOWN, RagService.TargetIntent.UNKNOWN,
+            "", "", "未知", "", "", List.of()
+        );
+        List<RagService.RetrievalResult> retrieved = List.of(
+            new RagService.RetrievalResult("t", "c", "case:x", "https://x.com", "job", "high", 5.0)
+        );
+        doAnswer(invocation -> {
+            MessageContext ctx = invocation.getArgument(0);
+            ctx.setUserProfile(profile);
+            ctx.setRetrievalResults(retrieved);
+            ctx.setRetrievalMetadata(new RagService.RetrievalMetadata("q", 1, retrieved));
+            ctx.setEvidence("e");
+            return null;
+        }).when(pipeline).executeUpTo(any(MessageContext.class), eq(30));
+        when(ragService.buildSimilarCases(retrieved, 3)).thenReturn(List.of());
+        when(strategy.buildSystemPrompt("e", null)).thenReturn("sp");
+        when(aiClient.chatStream(any(), eq("sp"), eq(800))).thenReturn(Flux.just("X"));
+
+        chatService.chatStreamWithMeta(new ChatService.ChatRequest(messages, "chat", null, "s-rag"));
+
+        verify(ragService, never()).inferUserProfile(any(), any());
+        verify(ragService, never()).retrieveWithMetadata(any(), any(), any(Integer.class));
     }
 
     @Test
@@ -157,6 +194,14 @@ class ChatServiceTest {
         List<Map<String, String>> messages = List.of(
             Map.of("role", "user", "content", "我想自杀")
         );
+        doAnswer(invocation -> {
+            MessageContext ctx = invocation.getArgument(0);
+            ctx.setCrisis(true);
+            ctx.setProcessedMessage(ModerationService.CRISIS_RESPONSE);
+            ctx.setSuggestions(List.of("我想聊聊", "谢谢关心"));
+            ctx.setAborted(true);
+            return null;
+        }).when(pipeline).executeUpTo(any(MessageContext.class), eq(30));
 
         ChatService.StreamResponse response = chatService.chatStreamWithMeta(
             new ChatService.ChatRequest(messages, "chat", null, "s-4")
@@ -165,6 +210,8 @@ class ChatServiceTest {
 
         assertEquals(1, tokens.size());
         assertEquals(0, response.similarCases().size());
+        assertTrue(response.presetCrisis());
+        assertEquals(List.of("我想聊聊", "谢谢关心"), response.presetSuggestions());
         verify(aiClient, never()).chatStream(any(), any(), any(Integer.class));
         verify(eventPublisher).publishEvent(any(CrisisDetectedEvent.class));
     }

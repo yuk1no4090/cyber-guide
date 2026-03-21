@@ -1,22 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import { Nunito, Lexend } from 'next/font/google';
 import ErrorBoundary from './components/ErrorBoundary';
 import './globals.css';
-
-const nunito = Nunito({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  style: ['normal', 'italic'],
-  display: 'swap',
-  variable: '--font-nunito',
-});
-
-const lexend = Lexend({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-  variable: '--font-lexend',
-});
 
 export const metadata: Metadata = {
   title: '小舟 · Cyber Guide',
@@ -43,8 +27,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" className={`${nunito.variable} ${lexend.variable}`}>
-      <body className="bg-gradient-mesh antialiased h-screen overflow-hidden">
+    <html lang="zh-CN">
+      <head>
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Nunito:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="font-sans bg-gradient-mesh antialiased h-screen overflow-hidden">
         <ErrorBoundary>
           {children}
         </ErrorBoundary>

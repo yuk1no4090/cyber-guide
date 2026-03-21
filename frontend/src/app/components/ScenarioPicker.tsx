@@ -32,7 +32,7 @@ export default function ScenarioPicker({
 
   return (
     <section className={`message-bubble mt-2 mb-1 ${className}`.trim()}>
-      <p className="text-[12px] sm:text-[13px] text-slate-500 mb-1.5" id="scenario-picker-label">
+      <p className="text-[12px] sm:text-[13px] text-slate-500 dark:text-slate-300 mb-1.5" id="scenario-picker-label">
         关系场景模板（可切换）
       </p>
 
@@ -48,8 +48,8 @@ export default function ScenarioPicker({
               text-[12px] sm:text-[13px]
               rounded-full border transition-all duration-200
               ${value === null
-                ? 'text-sky-700 bg-sky-100 border-sky-300'
-                : 'text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300'}
+                ? 'text-sky-700 dark:text-sky-50 bg-sky-100 dark:bg-sky-800/70 border-sky-300 dark:border-sky-600'
+                : 'text-slate-500 dark:text-slate-100 bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500'}
               disabled:opacity-30 disabled:cursor-not-allowed
             `}
           >
@@ -69,8 +69,8 @@ export default function ScenarioPicker({
               text-[12px] sm:text-[13px]
               rounded-full border transition-all duration-200
               ${value === option.id
-                ? 'text-sky-700 bg-sky-100 border-sky-300'
-                : 'text-sky-600 bg-sky-50 border-sky-200 hover:bg-sky-100 hover:border-sky-300'}
+                ? 'text-sky-700 dark:text-sky-50 bg-sky-100 dark:bg-sky-800/70 border-sky-300 dark:border-sky-600'
+                : 'text-sky-600 dark:text-sky-50 bg-sky-50 dark:bg-sky-700/70 border-sky-200 dark:border-sky-600 hover:bg-sky-100 dark:hover:bg-sky-600/80 hover:border-sky-300 dark:hover:border-sky-500'}
               disabled:opacity-30 disabled:cursor-not-allowed
             `}
             title={option.description}
