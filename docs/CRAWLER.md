@@ -2,105 +2,98 @@
 
 ## Overview
 
-The crawler collects public study/career planning content from Chinese tech forums and writes structured data into PostgreSQL. It uses **Scrapy 2.x** as the framework, with a 4-stage pipeline: Clean → Dedup → AI Extract → Database.
+The crawler collects public study/career planning content from Chinese forums and platforms and writes structured data into PostgreSQL. It uses **Scrapy 2.x** as the framework, with a 4-stage pipeline: Clean → Dedup → AI Extract → Database.
+
+Some spiders call **external HTTP clients** (`requests` or the `xhs` library) inside a Scrapy callback so that request headers/signatures match what the target site expects (Zhihu `x-zse-96`, Xiaohongshu `x-s` / `x-t`).
 
 ## Architecture
 
 ```
 crawler/
-├── run.py                       # CLI entry: --once / --spider NAME / scheduled
-├── scrapy.cfg                   # Scrapy project config
-├── requirements.txt             # Python dependencies (scrapy, psycopg2, etc.)
+├── run.py                       # CLI: --once / --spider NAME / scheduled
+├── scrapy.cfg
+├── requirements.txt             # scrapy, psycopg2, requests, xhs (optional), etc.
 ├── Dockerfile
 └── cyberguide_crawler/
-    ├── settings.py              # Scrapy settings (concurrency, pipelines, DB, AI)
+    ├── settings.py
     ├── items.py                 # ArticleItem + CareerCaseItem
     ├── spiders/
     │   ├── eeban.py             # 保研论坛 (eeban.com)
     │   ├── kaoyan.py            # 考研论坛 (bbs.kaoyan.com)
     │   ├── juejin.py            # 掘金 search API
     │   ├── csdn.py              # CSDN hot-rank API
-    │   └── v2ex.py              # V2EX career node
+    │   ├── v2ex.py              # V2EX career node
+    │   ├── zhihu.py             # 知乎 search_v3 API + x-zse-96 (requests, ZHIHU_COOKIE)
+    │   └── xiaohongshu.py       # 小红书关键词搜索 (xhs + XHS_COOKIE + sign)
     ├── pipelines/
-    │   ├── cleaner.py           # Text cleaning, quality scoring, relevance tiering, ad filtering
-    │   ├── dedup.py             # DB-level dedupe_hash check
-    │   ├── extractor.py         # AI-powered structured info extraction (glm-4-flash)
-    │   └── database.py          # Batch PostgreSQL writer + stale article downgrade
+    │   ├── cleaner.py           # Quality score, relevance_tier, ad filter, source weights
+    │   ├── dedup.py
+    │   ├── extractor.py         # AI extraction (glm-4-flash)
+    │   └── database.py
     ├── middlewares/
-    │   ├── useragent.py         # Random User-Agent rotation
-    │   └── stats_log.py         # Spider close stats logging
+    │   ├── useragent.py
+    │   └── stats_log.py
     └── utils/
-        └── __init__.py
 ```
 
 ## Data Sources
 
-| Spider   | Source             | Category    | Method           |
-|----------|--------------------|-------------|------------------|
-| `eeban`  | eeban.com          | baoyan      | HTML scraping    |
-| `kaoyan` | bbs.kaoyan.com     | kaoyan      | HTML scraping    |
-| `juejin` | api.juejin.cn      | job         | JSON search API  |
-| `csdn`   | blog.csdn.net      | job         | JSON hot-rank API|
-| `v2ex`   | v2ex.com           | job         | HTML scraping    |
+| Spider         | Source              | Typical category | Method |
+|----------------|---------------------|------------------|--------|
+| `eeban`        | eeban.com           | baoyan           | HTML   |
+| `kaoyan`       | bbs.kaoyan.com      | kaoyan           | HTML   |
+| `juejin`       | api.juejin.cn       | job              | JSON API |
+| `csdn`         | blog.csdn.net       | job              | JSON API |
+| `v2ex`         | v2ex.com            | job              | HTML   |
+| `zhihu`        | www.zhihu.com       | mixed (classified) | JSON API + signed headers |
+| `xiaohongshu`  | edith.xiaohongshu.com | mixed (classified) | `xhs` client + cookie |
+
+**Zhihu**: requires a logged-in browser **`ZHIHU_COOKIE`**; signing uses cookie `d_c0` and path `/api/v4/search_v3?...` for `x-zse-96`. Optional comma-separated **`ZHIHU_EXTRA_QUERIES`** appends more search keywords.
+
+**Xiaohongshu**: requires **`XHS_COOKIE`** and dependency **`xhs`**; the client must be constructed with `sign` from `xhs.help` (wrapped in spider). Optional **`XHS_EXTRA_QUERIES`**, **`XHS_MAX_PER_QUERY`**. Platform may return "登录已过期" or risk-control errors when the cookie is stale or the account is restricted.
 
 ## Pipeline Chain (order matters)
 
-| Order | Pipeline            | Function |
-|-------|---------------------|----------|
-| 100   | `CleanerPipeline`   | Text normalization, truncation, `dedupe_hash`, `quality_score`, `relevance_tier`, category auto-fill, ad filtering |
-| 200   | `DedupPipeline`     | Check `dedupe_hash` against DB, `DropItem` on duplicate |
-| 300   | `ExtractorPipeline` | For high-quality articles, call AI to extract `background`/`result`/`tags`; attach `_career_case` to item; lower score on extraction failure |
-| 400   | `DatabasePipeline`  | Batch write `crawled_articles` + `career_cases` to PostgreSQL; downgrade articles older than 180 days to `low` tier |
+| Order | Pipeline             | Function |
+|-------|----------------------|----------|
+| 100   | `CleanerPipeline`    | Text normalization, `dedupe_hash`, `quality_score`, `relevance_tier`, category, ad filtering |
+| 200   | `DedupPipeline`      | DB `dedupe_hash` check, `DropItem` on duplicate |
+| 300   | `ExtractorPipeline`  | High-quality items → AI `background` / `result` / `tags` → `career_cases` |
+| 400   | `DatabasePipeline`   | Batch write `crawled_articles` + `career_cases`; stale downgrade |
 
-## Quality Scoring
+## Quality Scoring (cleaner)
 
-`quality_score` is computed from:
-- **Keyword hits**: +5 per planning keyword match (保研/考研/实习/面试/etc.)
-- **Source weight**: eeban/kaoyan +10, juejin +5, csdn/v2ex +0
-- **Content length**: 200-500 → +5, 500-1500 → +10, 1500-3000 → +8, >3000 → +3
-- **Max**: capped at 100
-
-`relevance_tier` is derived from category + score:
-- **high**: category in {baoyan, kaoyan, job} AND score >= 20
-- **medium**: score >= 10
-- **low**: everything else
-
-## Ad Filtering
-
-Titles/content containing promotional keywords (加微信, 辅导班, 代写, etc.) are dropped before reaching the database.
+- **Keyword hits**: planning-related terms (保研, 考研, 秋招, …)
+- **Source weight** (examples): eeban/kaoyan +10, zhihu +8, juejin +5, xiaohongshu +4, csdn/v2ex +0
+- **Length bands**: short/medium/long bonuses, capped at 100
+- **`relevance_tier`**: high / medium / low from category + score
 
 ## Running
 
 ```bash
-# One-shot run (all spiders)
-cd crawler && python run.py --once
-
-# Single spider
-python run.py --once --spider eeban
-
-# Scheduled (APScheduler, default 6h interval)
-python run.py
+cd crawler && python run.py --once              # all spiders
+python run.py --once --spider zhihu             # single spider
+python run.py                                   # APScheduler (interval from env)
 ```
+
+Load env from repo root: copy `.env.example` → `.env` (or export variables). Crawler reads the same `POSTGRES_*` and AI keys as the backend when extracting.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_HOST` | localhost | Database host |
-| `POSTGRES_PORT` | 5432 | Database port |
-| `POSTGRES_DB` | cyber_guide | Database name |
-| `POSTGRES_USER` | cyber_guide | Database user |
-| `POSTGRES_PASSWORD` | changeme | Database password |
-| `CRAWLER_MAX_PAGES_PER_SOURCE` | 10 | Max pages per forum/API |
-| `AI_EXTRACT_ENABLED` | true | Enable AI structured extraction |
-| `OPENAI_API_KEY` | (required) | API key for AI extraction |
-| `OPENAI_BASE_URL` | https://open.bigmodel.cn/api/paas/v4 | AI API endpoint |
-| `OPENAI_MODEL` | glm-4-flash | Model for extraction |
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_*` | DB connection (see `.env.example`) |
+| `CRAWLER_MAX_PAGES_PER_SOURCE` | Max pages per HTML/API spider where applicable |
+| `CRAWLER_INTERVAL_MINUTES` | Scheduler interval when running `run.py` without `--once` |
+| `AI_EXTRACT_ENABLED` | Enable AI structured extraction |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | Used by extractor pipeline |
+| `ZHIHU_COOKIE` | Full `Cookie` header string for zhihu spider |
+| `ZHIHU_EXTRA_QUERIES` | Comma-separated extra search queries |
+| `XHS_COOKIE` | Full cookie string for xiaohongshu spider |
+| `XHS_MAX_PER_QUERY` | Max notes per keyword (default ~20) |
+| `XHS_EXTRA_QUERIES` | Comma-separated extra keywords |
 
 ## Database Tables
 
-### `crawled_articles`
-Raw articles with `quality_score`, `relevance_tier`, `category`, `dedupe_hash`.
-
-### `career_cases`
-AI-extracted structured cases with `background`, `result`, `tags` — used by backend RAG for similar-case retrieval.
+- **`crawled_articles`**: raw + `quality_score`, `relevance_tier`, `category`, `dedupe_hash`
+- **`career_cases`**: structured cases for similar-case RAG in the backend

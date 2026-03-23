@@ -19,7 +19,7 @@ logger = logging.getLogger('crawler')
 
 
 def get_all_spider_names():
-    return ['eeban', 'kaoyan', 'juejin', 'csdn', 'v2ex']
+    return ['eeban', 'kaoyan', 'juejin', 'csdn', 'v2ex', 'zhihu', 'xiaohongshu']
 
 
 def run_scrapy(spider_names=None):

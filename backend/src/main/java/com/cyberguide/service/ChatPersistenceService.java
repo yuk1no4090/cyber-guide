@@ -119,10 +119,8 @@ public class ChatPersistenceService {
                 }
             }
         }
-        if (session == null) {
-            session = userId != null
-                ? sessionRepository.findTopByAnonymousSessionIdAndUserIdOrderByUpdatedAtDesc(anonymousSessionId, userId).orElse(null)
-                : sessionRepository.findTopByAnonymousSessionIdAndUserIdIsNullOrderByUpdatedAtDesc(anonymousSessionId).orElse(null);
+        if (session == null && userId != null) {
+            session = sessionRepository.findTopByAnonymousSessionIdAndUserIdOrderByUpdatedAtDesc(anonymousSessionId, userId).orElse(null);
         }
         if (session != null) {
             if (session.getTitle() == null || session.getTitle().isBlank()) {

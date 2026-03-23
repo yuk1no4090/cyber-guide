@@ -64,8 +64,8 @@ ai:
 # RAG configuration
 rag:
   knowledge-base-path: ${RAG_KNOWLEDGE_BASE_PATH:../knowledge_base/skills}
-  max-evidence-chunk-length: 480
-  default-top-k: 2
+  max-evidence-chunk-length: 800
+  default-top-k: 4
 
 # JWT Security
 security:

@@ -9,13 +9,14 @@ from scrapy.exceptions import DropItem
 
 
 PLANNING_KEYWORDS = [
-    '保研', '推免', '夏令营', '预推免', '直博', '考研', '复试', '调剂', '上岸', '备考',
-    '留学', '申请', 'GPA', 'GRE', 'TOEFL', 'IELTS', 'offer', '录取', '拒信',
-    '秋招', '春招', '校招', '社招', '实习', '面试', '面经', '简历', '求职',
-    '转正', '薪资', '公司', '岗位',
-    '职业规划', '学习路线', '转行', '方向选择', '迷茫', '焦虑', '项目经验',
+    '保研', '推免', '夏令营', '预推免', '直博', '考研', '复试', '调剂', '上岸', '备考', '408',
+    '留学', '申请', 'GPA', 'GRE', 'TOEFL', 'IELTS', 'offer', '录取', '拒信', '选校',
+    '秋招', '春招', '校招', '社招', '实习', '面试', '面经', '简历', '求职', '转正',
+    '薪资', '公司', '岗位', '国企', '央企', '银行科技',
+    '职业规划', '学习路线', '转行', '转码', '方向选择', '迷茫', '焦虑', '项目经验',
     'CS', '计算机', '软件工程', '后端', '前端', '全栈', '算法', '刷题', '技术栈',
-    '985', '211', '双非',
+    '985', '211', '双非', '跨考', 'PhD',
+    'gap', 'gap year', '间隔年', '延毕', '二战',
 ]
 
 AD_KEYWORDS = [
@@ -27,6 +28,7 @@ SOURCE_WEIGHT = {
     'eeban': 10,
     'kaoyan': 10,
     'zhihu': 8,
+    'xiaohongshu': 4,
     'juejin': 5,
     'v2ex': 0,
     'csdn': 0,
@@ -36,6 +38,7 @@ SOURCE_CATEGORY_MAP = {
     'eeban': 'baoyan',
     'kaoyan': 'kaoyan',
     'zhihu': '',
+    'xiaohongshu': '',
     'juejin': 'job',
     'v2ex': 'job',
     'csdn': 'job',
@@ -77,7 +80,7 @@ def compute_quality_score(title: str, content: str, source_name: str) -> float:
 
 def compute_relevance_tier(category: str, score: float) -> str:
     c = (category or '').lower()
-    if c in {'baoyan', 'kaoyan', 'job', 'study_abroad'} and score >= 20:
+    if c in {'baoyan', 'kaoyan', 'job', 'study_abroad', 'gap'} and score >= 20:
         return 'high'
     if score >= 10:
         return 'medium'

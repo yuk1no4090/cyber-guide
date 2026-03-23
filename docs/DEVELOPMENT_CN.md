@@ -3,9 +3,9 @@
 ## 环境要求
 
 - Java 21（OpenJDK 或 GraalVM）
-- Node.js 18+ 及 npm
+- Node.js 20+ 及 npm（与前端 `@types/node` 一致）
 - Docker（用于 PostgreSQL 和 Redis）
-- Python 3.10+（用于爬虫，可选）
+- Python 3.10+（爬虫可选；本地可用 3.13）
 
 ## 快速开始
 
@@ -45,6 +45,10 @@ npm run dev
 | `REDIS_HOST` | 否 | `localhost` | Redis 主机地址 |
 | `REDIS_PORT` | 否 | `6379` | Redis 端口 |
 | `JWT_SECRET` | 否 | 内置默认值 | JWT 签名密钥（生产环境请务必修改） |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | 否 | — | GitHub OAuth（见 `.env.example`） |
+| `EMAIL_CODE_*` | 否 | 开发可仅打日志 | 注册邮箱验证码（Redis + 可选邮件） |
+| `ZHIHU_COOKIE` / `XHS_COOKIE` 等 | 否 | — | 爬虫可选配置（见 [CRAWLER.md](CRAWLER.md)） |
+| `DEBUG_CHAT_LOG_ENABLED` | 否 | `false` | 后端对话调试日志（**勿在生产开启**） |
 
 ## 后端开发
 

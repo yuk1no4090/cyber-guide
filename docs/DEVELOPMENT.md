@@ -3,9 +3,9 @@
 ## Prerequisites
 
 - Java 21 (OpenJDK or GraalVM)
-- Node.js 18+ and npm
+- Node.js 20+ and npm (matches `@types/node` in frontend)
 - Docker (for PostgreSQL and Redis)
-- Python 3.10+ (for crawler, optional)
+- Python 3.10+ (for crawler; 3.13 used in CI/local is fine)
 
 ## Quick start
 
@@ -45,6 +45,10 @@ Copy `.env.example` to `.env` and fill in:
 | `REDIS_HOST` | no | `localhost` | Redis host |
 | `REDIS_PORT` | no | `6379` | Redis port |
 | `JWT_SECRET` | no | built-in default | JWT signing secret (change in production) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | no | — | GitHub OAuth (see `.env.example`) |
+| `EMAIL_CODE_*` | no | dev log only | Email OTP for registration |
+| `ZHIHU_COOKIE` / `XHS_COOKIE` | no | — | Optional crawler cookies ([CRAWLER.md](CRAWLER.md)) |
+| `DEBUG_CHAT_LOG_ENABLED` | no | `false` | Backend-only chat debug logging (never in prod) |
 
 ## Backend development
 

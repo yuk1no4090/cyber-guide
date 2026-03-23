@@ -82,22 +82,26 @@ com.cyberguide/
 │       └── ResponseParseHandler (order 50)
 │
 ├── controller/                         # Interface layer — REST controllers
-│   ├── ChatController                  # @RateLimiter via RedisRateLimiter
+│   ├── ChatController                  # sync + stream chat, optional debug chat logging
 │   ├── PlanController
 │   ├── FeedbackController
+│   ├── SessionController               # list/load chat sessions + messages (evidenceJson)
+│   ├── AuthController                  # register/login, GitHub OAuth, email OTP
 │   ├── CrawlerController               # @Cacheable("articles")
 │   └── ApiResponse                     # Unified response envelope
 │
 ├── model/                              # JPA entities
-│   ├── PlanDay, Feedback, CrawledArticle
+│   ├── User, ChatSession, ChatMessageEntity, PlanDay, Feedback
+│   ├── CrawledArticle, CareerCase
 │
 ├── repository/                         # Spring Data JPA
-│   ├── PlanDayRepository, FeedbackRepository, CrawledArticleRepository
+│   ├── UserRepository, ChatSessionRepository, ChatMessageRepository
+│   ├── PlanDayRepository, FeedbackRepository, CrawledArticleRepository, CareerCaseRepository
 │
 ├── ai/              AiClient           # @CircuitBreaker + @Retry + fallback model
 ├── rag/             RagService         # CacheGuard-backed retrieval
 ├── config/          AiProperties, WebConfig
-├── security/        JwtTokenProvider, JwtAuthenticationFilter, SecurityConfig, AuthController
+├── security/        JwtTokenProvider, JwtAuthenticationFilter, SecurityConfig (JWT + OAuth2 login)
 ├── filter/          TraceIdFilter      # MDC traceId + X-Trace-Id header
 ├── exception/       ErrorCode, BizException, AiServiceException, RateLimitException, GlobalExceptionHandler
 ├── event/           ChatCompletedEvent, FeedbackReceivedEvent, CrisisDetectedEvent, EventListeners
@@ -125,8 +129,19 @@ Read path: check Redis -> miss -> load from DB/compute -> write Redis with jitte
 Write path: update DB -> evict Redis cache.
 Implemented via `CacheGuard` with three protections: penetration (null sentinel), avalanche (TTL jitter ±20%), breakdown (local lock + double-check).
 
-## Request flow (chat)
+## Request flow (sync chat)
 
+```
+Browser
+  → POST /api/chat (optional JWT in Authorization)
+  → TraceIdFilter (MDC traceId)
+  → JwtAuthenticationFilter
+  → ChatController
+    → RedisRateLimiter.allowChat()
+    → ChatService.chat()
+      → MessagePipeline.execute()  # full chain through ResponseParseHandler
+      → persist + ChatCompletedEvent
+  → JSON ChatResponse + X-Trace-Id
 ```
 
 ## Request flow (stream chat)
@@ -139,76 +154,56 @@ Browser
     → RedisRateLimiter.allowChat()
     → ChatService.chatStreamWithMeta()
       → MessagePipeline.executeUpTo(order<=30)
-        → RedactHandler
-        → ModerationHandler
-        → RagEnrichHandler (produces evidence + similarCases)
-      → Strategy prompt + aiClient.streamChat()
-      → emit NDJSON lines:
-          {"t":"delta","c":"..."}*
-          {"t":"meta","message":"...","suggestions":[...],"isCrisis":false,"evidence":[...],"similarCases":[...]}
-      → success only:
-          ChatPersistenceService.persistConversation(..., evidence)
-          publish ChatCompletedEvent
+        → RedactHandler, ModerationHandler, RagEnrichHandler (evidence + similarCases)
+      → strategy prompt + aiClient.streamChat()
+      → NDJSON: {"t":"delta","c":"..."}* then {"t":"meta",...,"evidence":[...],"similarCases":[...]}
+      → on success: ChatPersistenceService.persistConversation(..., evidence); ChatCompletedEvent
 ```
 
 ## Evidence persistence
 
-- Stream/sync assistant messages can carry retrieval evidence (`title/source/url/score/tier`).
-- `ChatPersistenceService` serializes assistant evidence into `ChatMessageEntity.evidenceJson`.
-- `SessionController.messages` parses `evidenceJson` and returns it to frontend so historical sessions still show evidence cards.
+- Assistant messages can carry RAG evidence (`title` / `source` / `url` / `score` / `tier`).
+- `ChatPersistenceService` stores JSON in `chat_messages.evidence_json`.
+- `SessionController` returns parsed evidence for history so the UI can show verifiable links/cards.
 
 ## Frontend hooks architecture
 
 ```
 HomeContent (layout + wiring only)
-├── useChatFlow
-│   ├── chat state (messages/suggestions/loading/recap)
-│   ├── sendMessageAction()      # stream NDJSON parse + assistant upsert
-│   └── generateRecapAction()    # recap request lifecycle
-├── useProfileFlow
-│   ├── profile/report state
-│   ├── generateReportAction()   # profile report generation
-│   └── handleProfileFormSubmitAction()
-├── useSidebarSessions
-├── useTheme
-├── useAuth
-└── usePlan
+├── useChatFlow        # stream NDJSON, recap, feedback
+├── useProfileFlow     # profile form, report, similar cases path
+├── useSidebarSessions # collapsible sidebar, new chat, session load
+├── useTheme           # light/dark (html.theme-dark)
+├── useAuth            # JWT, login modal, GitHub redirect
+└── usePlan            # 7-day plan state
 ```
 
 ## TraceId propagation
 
-- Backend sets `X-Trace-Id` in each response (`TraceIdFilter`).
-- Frontend `authFetch` caches response `X-Trace-Id` and injects it into subsequent request headers.
-- Result: one user session can be correlated across frontend network traces and backend logs.
-Browser
-  → POST /api/chat (JWT in Authorization header)
-  → TraceIdFilter (assigns traceId to MDC)
-  → JwtAuthenticationFilter (validates token, sets SecurityContext)
-  → ChatController
-    → RedisRateLimiter.allowChat() — distributed rate check
-    → ChatService.chat()
-      → MessagePipeline.execute()
-        → RedactHandler: PII redaction
-        → ModerationHandler: crisis keyword check (may abort)
-        → RagEnrichHandler: Redis-cached knowledge retrieval
-        → AiCompletionHandler: strategy.buildSystemPrompt() + aiClient.chat()
-          → @CircuitBreaker + @Retry (fallback to backup model)
-        → ResponseParseHandler: strategy.process()
-      → publish ChatCompletedEvent (async)
-    → return ChatResponse
-  → GlobalExceptionHandler (catches any BizException/unexpected error)
-  → JSON response with X-Trace-Id header
-```
+- Backend: `TraceIdFilter` sets MDC and echoes `X-Trace-Id` on responses.
+- Frontend: `authFetch` in `src/lib/api.ts` keeps the last `X-Trace-Id` and sends it on subsequent calls for log correlation.
+
+## Optional debug chat logging
+
+- Config: `debug.chat-log.enabled` (and related keys in `application.yml`).
+- When enabled, `ChatController` logs truncated user input and assistant output for local tuning — **disable in production** (privacy).
+
+## Authentication
+
+- **Email + password**: BCrypt hashes; registration may require email OTP (Redis-backed codes; mail optional — dev can log codes only).
+- **GitHub OAuth**: Spring Security OAuth2 client; links or creates `users` row, issues JWT for the SPA.
+- **Anonymous**: chat works without login; persistence rules differ (new anonymous session should not reuse prior server-side history — see `ChatPersistenceService`).
 
 ## Data stores
 
 | Store | Purpose | TTL / retention |
 |---|---|---|
-| PostgreSQL | plan_days, feedback, crawled_articles | permanent |
+| PostgreSQL | users, chat_sessions, chat_messages, plan_days, feedback, crawled_articles, career_cases | permanent |
 | Redis `rag-evidence` | RAG retrieval results | 30 min |
 | Redis `plan-session` | plan fetch results | 10 min |
 | Redis `articles` | crawler article lists | 60 min |
 | Redis `rate:chat:*` | distributed rate limit counters | 60 sec |
+| Redis (email OTP) | registration verification codes | short TTL |
 
 ## Resilience
 

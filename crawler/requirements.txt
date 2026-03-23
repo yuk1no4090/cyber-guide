@@ -4,4 +4,5 @@ psycopg2-binary>=2.9.9
 apscheduler>=3.10.0
 python-dotenv>=1.0.0
 requests>=2.31.0
+xhs>=0.2.13
 pytest>=8.0.0

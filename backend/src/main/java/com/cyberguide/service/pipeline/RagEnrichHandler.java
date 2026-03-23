@@ -30,7 +30,7 @@ public class RagEnrichHandler implements MessageHandler {
         context.setRetrievalResults(bundle.results());
         context.setRetrievalMetadata(bundle.metadata());
 
-        var promptEvidence = bundle.results().stream().limit(2).toList();
+        var promptEvidence = bundle.results().stream().limit(4).toList();
         String formatted = ragService.formatEvidence(promptEvidence, profile);
         context.setEvidence(formatted);
         if (!bundle.results().isEmpty()) {

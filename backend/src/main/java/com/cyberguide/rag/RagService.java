@@ -426,7 +426,9 @@ public class RagService {
                 .limit(limit)
                 .map(pair -> {
                     CrawledArticle a = (CrawledArticle) pair[0];
-                    String content = a.getSummary() != null ? a.getSummary() : a.getTitle();
+                    String content = a.getContentSnippet() != null && !a.getContentSnippet().isBlank()
+                        ? a.getContentSnippet()
+                        : (a.getSummary() != null ? a.getSummary() : a.getTitle());
                     return new RetrievalResult(
                         a.getTitle(),
                         truncate(content, maxEvidenceChunkLength),
