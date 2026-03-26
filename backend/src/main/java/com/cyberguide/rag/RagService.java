@@ -36,6 +36,7 @@ public class RagService {
     private static final String PROFILE_DATA_PREFIX = "[PROFILE_DATA]";
     private static final Pattern SCHOOL_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z]{2,20}(大学|学院))");
     private static final Pattern GPA_PATTERN = Pattern.compile("(GPA|gpa|绩点)\\s*[:：]?\\s*([0-9](?:\\.[0-9]{1,2})?)");
+    private static final Pattern RANK_PATTERN = Pattern.compile("(前\\s*[0-9]{1,2}(?:\\.[0-9])?%?|rank\\s*[:：]?\\s*[0-9]{1,2}(?:\\.[0-9])?%?)");
     private static final Pattern STAGE_PATTERN = Pattern.compile("(大一|大二|大三|大四|研一|研二|已工作)");
 
     @Value("${rag.knowledge-base-path:../knowledge_base/skills}")
@@ -51,7 +52,8 @@ public class RagService {
     private String universityDataPath;
 
     private final List<KnowledgeChunk> chunks = new ArrayList<>();
-    private final Map<String, String> schoolToTier = new LinkedHashMap<>();
+    private final Map<String, SchoolInfo> schoolInfoByName = new LinkedHashMap<>();
+    private final Map<String, SchoolInfo> schoolInfoByAlias = new LinkedHashMap<>();
     private final CacheGuard cacheGuard;
     private final CareerCaseRepository caseRepo;
     private final CrawledArticleRepository articleRepo;
@@ -72,7 +74,13 @@ public class RagService {
         String url,
         String category,
         String relevanceTier,
-        double score
+        double score,
+        String school,
+        String schoolTier,
+        String gpa,
+        String rankPct,
+        String outcome,
+        String destSchool
     ) implements java.io.Serializable {}
     public record RetrievalMetadata(
         String queryHash,
@@ -86,6 +94,14 @@ public class RagService {
     public enum UserIntent { POSTGRAD, JOB, UNKNOWN }
     public enum TargetIntent { KAOYAN, BAOYAN, STUDY_ABROAD, JOB, UNKNOWN }
     public enum SchoolTier { C9, T985, T211, SYL, YIBEN, ERBEN, UNKNOWN }
+    public record SchoolInfo(
+        String name,
+        String tier,
+        Integer rank,
+        Integer qsRank,
+        String region,
+        List<String> aliases
+    ) implements java.io.Serializable {}
     public record UserProfile(
         UserIntent intent,
         TargetIntent targetIntent,
@@ -93,6 +109,7 @@ public class RagService {
         String school,
         String schoolTier,
         String gpa,
+        String rankPct,
         String highlights,
         List<String> keywords
     )
@@ -113,11 +130,11 @@ public class RagService {
         }
         log.info("RAG loaded {} chunks from knowledge base", chunks.size());
 
-        loadUniversityTiers();
+        loadUniversityData();
     }
 
     @SuppressWarnings("unchecked")
-    private void loadUniversityTiers() {
+    private void loadUniversityData() {
         Path path = Paths.get(universityDataPath);
         if (!Files.isRegularFile(path)) {
             log.warn("University data file not found: {}", path.toAbsolutePath());
@@ -127,7 +144,12 @@ public class RagService {
             String json = Files.readString(path);
             var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Map<String, Object> data = mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            schoolInfoByName.clear();
+            schoolInfoByAlias.clear();
+            loadSchoolObjectList(data, "domestic");
+            loadSchoolObjectList(data, "international");
 
+            // Backward compatibility with old tier-array format.
             loadTierList(data, "c9", "C9");
             loadTierList(data, "985", "985");
             loadTierList(data, "211_non985", "211");
@@ -136,7 +158,10 @@ public class RagService {
         } catch (Exception e) {
             log.error("Failed to load university tiers", e);
         }
-        log.info("Loaded {} university tier mappings", schoolToTier.size());
+        log.info("Loaded {} school mappings (name={}, alias={})",
+            schoolInfoByName.size() + schoolInfoByAlias.size(),
+            schoolInfoByName.size(),
+            schoolInfoByAlias.size());
     }
 
     @SuppressWarnings("unchecked")
@@ -145,22 +170,98 @@ public class RagService {
         if (val instanceof List<?> list) {
             for (Object item : list) {
                 if (item instanceof String name) {
-                    schoolToTier.putIfAbsent(name, tier);
+                    SchoolInfo info = new SchoolInfo(name, tier, null, null, "CN", List.of());
+                    registerSchoolInfo(info);
                 }
             }
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void loadSchoolObjectList(Map<String, Object> data, String key) {
+        Object val = data.get(key);
+        if (!(val instanceof List<?> list)) return;
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> row)) continue;
+            String name = asString(row.get("name"));
+            if (name == null || name.isBlank()) continue;
+            String tier = asString(row.get("tier"));
+            Integer rank = asInt(row.get("rank"));
+            Integer qsRank = asInt(row.get("qs_rank"));
+            String region = Optional.ofNullable(asString(row.get("region"))).orElse("CN");
+            List<String> aliases = asStringList(row.get("aliases"));
+            SchoolInfo info = new SchoolInfo(name, tier, rank, qsRank, region, aliases);
+            registerSchoolInfo(info);
+        }
+    }
+
+    private void registerSchoolInfo(SchoolInfo info) {
+        if (info == null || info.name() == null || info.name().isBlank()) return;
+        String nameKey = normalizeSchoolKey(info.name());
+        schoolInfoByName.putIfAbsent(nameKey, info);
+        if (info.aliases() != null) {
+            for (String alias : info.aliases()) {
+                if (alias == null || alias.isBlank()) continue;
+                schoolInfoByAlias.putIfAbsent(normalizeSchoolKey(alias), info);
+            }
+        }
+    }
+
+    private String normalizeSchoolKey(String raw) {
+        return raw == null ? "" : raw.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+    }
+
+    private String asString(Object v) {
+        return v == null ? null : String.valueOf(v).trim();
+    }
+
+    private Integer asInt(Object v) {
+        if (v == null) return null;
+        if (v instanceof Number n) return n.intValue();
+        try {
+            return Integer.parseInt(String.valueOf(v).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> asStringList(Object v) {
+        if (!(v instanceof List<?> list)) return List.of();
+        List<String> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item != null) {
+                String s = String.valueOf(item).trim();
+                if (!s.isBlank()) result.add(s);
+            }
+        }
+        return result;
+    }
+
     public String resolveSchoolTier(String school) {
-        if (school == null || school.isBlank()) return "未知";
-        String exact = schoolToTier.get(school);
+        SchoolInfo info = resolveSchool(school);
+        return info == null || info.tier() == null || info.tier().isBlank() ? "普通院校" : info.tier();
+    }
+
+    public SchoolInfo resolveSchool(String school) {
+        if (school == null || school.isBlank()) return null;
+        String key = normalizeSchoolKey(school);
+        SchoolInfo exact = schoolInfoByName.get(key);
         if (exact != null) return exact;
-        for (Map.Entry<String, String> e : schoolToTier.entrySet()) {
-            if (school.contains(e.getKey()) || e.getKey().contains(school)) {
+        SchoolInfo alias = schoolInfoByAlias.get(key);
+        if (alias != null) return alias;
+
+        for (Map.Entry<String, SchoolInfo> e : schoolInfoByName.entrySet()) {
+            if (key.contains(e.getKey()) || e.getKey().contains(key)) {
                 return e.getValue();
             }
         }
-        return "普通院校";
+        for (Map.Entry<String, SchoolInfo> e : schoolInfoByAlias.entrySet()) {
+            if (key.contains(e.getKey()) || e.getKey().contains(key)) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     private void loadFile(Path file) {
@@ -231,7 +332,7 @@ public class RagService {
     public List<RetrievalResult> retrieve(String query, UserProfile profile, int topK) {
         UserProfile safeProfile = profile != null
             ? profile
-            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of());
+            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of());
         String cacheKey = CACHE_KEY_PREFIX + hashQuery(
             query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent() + "|" + safeProfile.stage() + "|" + safeProfile.school()
         ) + ":" + topK;
@@ -249,7 +350,7 @@ public class RagService {
         long start = System.currentTimeMillis();
         UserProfile safeProfile = profile != null
             ? profile
-            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of());
+            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of());
         RetrievalComputation computation = doRetrieveDetailed(query, safeProfile, topK);
         List<RetrievalResult> topResults = computation.topResults();
         RetrievalMetadata metadata = new RetrievalMetadata(
@@ -283,7 +384,7 @@ public class RagService {
      * Merged retrieval: knowledge base (in-memory) + database (career_cases + crawled_articles).
      */
     private List<RetrievalResult> doRetrieve(String query, int topK) {
-        return doRetrieve(query, new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", List.of()), topK);
+        return doRetrieve(query, new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of()), topK);
     }
 
     private List<RetrievalResult> doRetrieve(String query, UserProfile profile, int topK) {
@@ -336,7 +437,13 @@ public class RagService {
               null,
               "kb",
               "medium",
-              s.score
+              s.score,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
           )).toList();
     }
 
@@ -383,7 +490,13 @@ public class RagService {
                         c.getUrl(),
                         category,
                         computeCaseTier(category, c.getQualityScore()),
-                        (double) pair[1]
+                        (double) pair[1],
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
                     );
                 }).toList();
         } catch (Exception e) {
@@ -417,6 +530,7 @@ public class RagService {
                     }
                     score += schoolBonus(profile, searchable);
                     score += keywordBonus(profile, searchable);
+                    score += profileSimilarityBonus(profile, a);
                     score += Math.min(a.getQualityScore() / 10.0, 8.0);
                     score += relevanceTierBonus(a.getRelevanceTier());
                     return new Object[]{a, score};
@@ -436,7 +550,13 @@ public class RagService {
                         a.getUrl(),
                         normalizeCategory(a.getCategory()),
                         normalizeTier(a.getRelevanceTier()),
-                        (double) pair[1]
+                        (double) pair[1],
+                        a.getExtractedSchool(),
+                        a.getExtractedSchoolTier(),
+                        a.getExtractedGpa(),
+                        a.getExtractedRankPct(),
+                        a.getExtractedOutcome(),
+                        a.getExtractedDestSchool()
                     );
                 }).toList();
         } catch (Exception e) {
@@ -484,6 +604,9 @@ public class RagService {
             if (profile.gpa() != null && !profile.gpa().isBlank()) {
                 sb.append("GPA/绩点=").append(profile.gpa()).append("\n");
             }
+            if (profile.rankPct() != null && !profile.rankPct().isBlank()) {
+                sb.append("排名信息=").append(profile.rankPct()).append("\n");
+            }
             if (profile.highlights() != null && !profile.highlights().isBlank()) {
                 sb.append("背景要点=").append(profile.highlights()).append("\n");
             }
@@ -508,6 +631,16 @@ public class RagService {
         for (int i = 0; i < results.size(); i++) {
             RetrievalResult r = results.get(i);
             sb.append("[EVIDENCE ").append(i + 1).append("] (来源: ").append(r.source()).append(")\n");
+            if (r.school() != null || r.schoolTier() != null || r.gpa() != null || r.rankPct() != null || r.outcome() != null || r.destSchool() != null) {
+                sb.append("结构化信息：");
+                if (r.school() != null && !r.school().isBlank()) sb.append("学校=").append(r.school()).append("；");
+                if (r.schoolTier() != null && !r.schoolTier().isBlank()) sb.append("层次=").append(r.schoolTier()).append("；");
+                if (r.gpa() != null && !r.gpa().isBlank()) sb.append("GPA=").append(r.gpa()).append("；");
+                if (r.rankPct() != null && !r.rankPct().isBlank()) sb.append("排名=").append(r.rankPct()).append("；");
+                if (r.outcome() != null && !r.outcome().isBlank()) sb.append("去向类型=").append(r.outcome()).append("；");
+                if (r.destSchool() != null && !r.destSchool().isBlank()) sb.append("去向学校=").append(r.destSchool()).append("；");
+                sb.append("\n");
+            }
             sb.append(r.content()).append("\n\n");
             if (r.url() != null && !r.url().isBlank()) {
                 sb.append("原文链接：[").append(r.url()).append("](").append(r.url()).append(")\n\n");
@@ -559,6 +692,8 @@ public class RagService {
 
         Matcher gpaMatcher = GPA_PATTERN.matcher(context);
         String gpa = gpaMatcher.find() ? gpaMatcher.group(2) : "";
+        Matcher rankMatcher = RANK_PATTERN.matcher(context);
+        String rankPct = rankMatcher.find() ? rankMatcher.group(1).replace("rank", "").trim() : "";
         Matcher stageMatcher = STAGE_PATTERN.matcher(context);
         String stage = stageMatcher.find() ? stageMatcher.group(1) : "";
 
@@ -582,7 +717,7 @@ public class RagService {
         }
 
         String tier = resolveSchoolTier(school);
-        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, profileHighlights, keywords.stream().distinct().toList());
+        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, rankPct, profileHighlights, keywords.stream().distinct().toList());
     }
 
     private Map<String, String> extractStructuredProfileData(List<Map<String, String>> messages) {
@@ -622,6 +757,7 @@ public class RagService {
 
         String school = data.getOrDefault("school", "");
         String gpa = data.getOrDefault("gpa", "");
+        String rankPct = data.getOrDefault("rank", data.getOrDefault("rank_pct", ""));
         String stage = data.getOrDefault("stage", "");
 
         List<String> highlights = new ArrayList<>();
@@ -642,7 +778,7 @@ public class RagService {
             keywords.addAll(List.of(latestQuery.split("\\s+")));
         }
         String tier = resolveSchoolTier(school);
-        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, profileHighlights, keywords.stream().filter(s -> s != null && !s.isBlank()).distinct().toList());
+        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, rankPct, profileHighlights, keywords.stream().filter(s -> s != null && !s.isBlank()).distinct().toList());
     }
 
     private TargetIntent inferTargetIntent(String lowerText) {
@@ -793,6 +929,99 @@ public class RagService {
             }
         }
         return bonus;
+    }
+
+    private double profileSimilarityBonus(UserProfile profile, CrawledArticle article) {
+        if (profile == null || article == null) return 0.0;
+        double bonus = 0.0;
+        bonus += tierSimilarityBonus(profile.schoolTier(), article.getExtractedSchoolTier());
+        bonus += gpaSimilarityBonus(profile.gpa(), article.getExtractedGpa());
+        bonus += rankPctSimilarityBonus(profile, article);
+        bonus += outcomeMatchBonus(profile.targetIntent(), article.getExtractedOutcome());
+        return bonus;
+    }
+
+    private double tierSimilarityBonus(String userTier, String articleTier) {
+        if (userTier == null || userTier.isBlank() || articleTier == null || articleTier.isBlank()) return 0.0;
+        int d = Math.abs(tierLevel(userTier) - tierLevel(articleTier));
+        if (d == 0) return 6.0;
+        if (d == 1) return 3.0;
+        if (d == 2) return 1.0;
+        return 0.0;
+    }
+
+    private int tierLevel(String tier) {
+        String t = tier == null ? "" : tier.toLowerCase(Locale.ROOT);
+        if (t.contains("c9")) return 0;
+        if (t.contains("985")) return 1;
+        if (t.contains("211")) return 2;
+        if (t.contains("双一流")) return 3;
+        if (t.contains("双非") || t.contains("一本")) return 4;
+        if (t.contains("二本")) return 5;
+        return 6;
+    }
+
+    private double gpaSimilarityBonus(String userGpaRaw, String articleGpaRaw) {
+        Double ug = parseGpa(userGpaRaw);
+        Double ag = parseGpa(articleGpaRaw);
+        if (ug == null || ag == null) return 0.0;
+        double diff = Math.abs(ug - ag);
+        if (diff <= 0.3) return 8.0;
+        if (diff <= 0.6) return 4.0;
+        if (diff <= 1.0) return 1.0;
+        return 0.0;
+    }
+
+    private double rankPctSimilarityBonus(UserProfile profile, CrawledArticle article) {
+        Double userRank = parseRankPct(profile == null ? null : profile.rankPct());
+        Double articleRank = parseRankPct(article == null ? null : article.getExtractedRankPct());
+        if (userRank == null || articleRank == null) return 0.0;
+        double diff = Math.abs(userRank - articleRank);
+        if (diff <= 3.0) return 5.0;
+        if (diff <= 8.0) return 2.0;
+        return 0.0;
+    }
+
+    private double outcomeMatchBonus(TargetIntent targetIntent, String outcomeRaw) {
+        if (targetIntent == null || targetIntent == TargetIntent.UNKNOWN || outcomeRaw == null || outcomeRaw.isBlank()) return 0.0;
+        String o = outcomeRaw.toLowerCase(Locale.ROOT);
+        if (targetIntent == TargetIntent.BAOYAN && (o.contains("保研") || o.contains("推免"))) return 4.0;
+        if (targetIntent == TargetIntent.KAOYAN && o.contains("考研")) return 4.0;
+        if (targetIntent == TargetIntent.STUDY_ABROAD && (o.contains("留学") || o.contains("出国"))) return 4.0;
+        if (targetIntent == TargetIntent.JOB && (o.contains("就业") || o.contains("工作") || o.contains("实习"))) return 4.0;
+        return 0.0;
+    }
+
+    private Double parseGpa(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        Matcher m = Pattern.compile("([0-4](?:\\.[0-9]{1,2})?)").matcher(raw);
+        if (!m.find()) return null;
+        try {
+            return Double.parseDouble(m.group(1));
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Double parseRankPct(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        Matcher m = Pattern.compile("([0-9]{1,2}(?:\\.[0-9])?)\\s*%").matcher(raw);
+        if (m.find()) {
+            try {
+                return Double.parseDouble(m.group(1));
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        Matcher pctPhrase = Pattern.compile("前\\s*([0-9]{1,2}(?:\\.[0-9])?)").matcher(raw);
+        if (pctPhrase.find()) {
+            try {
+                return Double.parseDouble(pctPhrase.group(1));
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private double keywordBonus(UserProfile profile, String searchable) {

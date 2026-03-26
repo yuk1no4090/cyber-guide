@@ -182,6 +182,12 @@ public class ChatService {
                 item.put("url", r.url());
                 item.put("score", r.score());
                 item.put("tier", r.relevanceTier());
+                item.put("school", r.school());
+                item.put("schoolTier", r.schoolTier());
+                item.put("gpa", r.gpa());
+                item.put("rankPct", r.rankPct());
+                item.put("outcome", r.outcome());
+                item.put("destSchool", r.destSchool());
                 return item;
             })
             .toList();

@@ -51,6 +51,24 @@ public class CrawledArticle {
     @Column(name = "dedupe_hash", nullable = false, length = 64)
     private String dedupeHash;
 
+    @Column(name = "extracted_school", length = 128)
+    private String extractedSchool;
+
+    @Column(name = "extracted_school_tier", length = 32)
+    private String extractedSchoolTier;
+
+    @Column(name = "extracted_gpa", length = 16)
+    private String extractedGpa;
+
+    @Column(name = "extracted_rank_pct", length = 16)
+    private String extractedRankPct;
+
+    @Column(name = "extracted_outcome", length = 32)
+    private String extractedOutcome;
+
+    @Column(name = "extracted_dest_school", length = 128)
+    private String extractedDestSchool;
+
     @PrePersist
     void onCreate() {
         if (crawlTime == null) crawlTime = Instant.now();
@@ -82,4 +100,16 @@ public class CrawledArticle {
     public void setRelevanceTier(String relevanceTier) { this.relevanceTier = relevanceTier; }
     public String getDedupeHash() { return dedupeHash; }
     public void setDedupeHash(String dedupeHash) { this.dedupeHash = dedupeHash; }
+    public String getExtractedSchool() { return extractedSchool; }
+    public void setExtractedSchool(String extractedSchool) { this.extractedSchool = extractedSchool; }
+    public String getExtractedSchoolTier() { return extractedSchoolTier; }
+    public void setExtractedSchoolTier(String extractedSchoolTier) { this.extractedSchoolTier = extractedSchoolTier; }
+    public String getExtractedGpa() { return extractedGpa; }
+    public void setExtractedGpa(String extractedGpa) { this.extractedGpa = extractedGpa; }
+    public String getExtractedRankPct() { return extractedRankPct; }
+    public void setExtractedRankPct(String extractedRankPct) { this.extractedRankPct = extractedRankPct; }
+    public String getExtractedOutcome() { return extractedOutcome; }
+    public void setExtractedOutcome(String extractedOutcome) { this.extractedOutcome = extractedOutcome; }
+    public String getExtractedDestSchool() { return extractedDestSchool; }
+    public void setExtractedDestSchool(String extractedDestSchool) { this.extractedDestSchool = extractedDestSchool; }
 }

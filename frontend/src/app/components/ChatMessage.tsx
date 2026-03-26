@@ -9,6 +9,12 @@ export interface EvidenceItem {
   url?: string;
   score?: number;
   tier?: string;
+  school?: string;
+  schoolTier?: string;
+  gpa?: string;
+  rankPct?: string;
+  outcome?: string;
+  destSchool?: string;
 }
 
 interface ChatMessageProps {
@@ -135,6 +141,31 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
                     {typeof item.score === 'number' && <span>相关度: {item.score.toFixed(1)}</span>}
                     {item.tier && <span>层级: {item.tier}</span>}
                   </div>
+                  {(item.schoolTier || item.gpa || item.rankPct || item.outcome || item.destSchool) && (
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      {item.schoolTier && (
+                        <span className="rounded-full border border-indigo-200/80 dark:border-indigo-700/70 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-indigo-700 dark:text-indigo-200">
+                          {item.schoolTier}
+                        </span>
+                      )}
+                      {item.gpa && (
+                        <span className="rounded-full border border-sky-200/80 dark:border-sky-700/70 bg-sky-50 dark:bg-sky-900/30 px-1.5 py-0.5 text-sky-700 dark:text-sky-200">
+                          GPA {item.gpa}
+                        </span>
+                      )}
+                      {item.rankPct && (
+                        <span className="rounded-full border border-teal-200/80 dark:border-teal-700/70 bg-teal-50 dark:bg-teal-900/30 px-1.5 py-0.5 text-teal-700 dark:text-teal-200">
+                          排名 {item.rankPct}
+                        </span>
+                      )}
+                      {item.outcome && (
+                        <span className="rounded-full border border-amber-200/80 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 text-amber-700 dark:text-amber-200">
+                          {item.outcome}
+                          {item.destSchool ? ` → ${item.destSchool}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {item.url && (
                     <a
                       href={item.url}
