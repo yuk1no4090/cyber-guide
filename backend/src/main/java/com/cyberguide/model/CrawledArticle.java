@@ -69,6 +69,15 @@ public class CrawledArticle {
     @Column(name = "extracted_dest_school", length = 128)
     private String extractedDestSchool;
 
+    @Column(name = "extracted_has_internship")
+    private Boolean extractedHasInternship;
+
+    @Column(name = "extracted_has_research")
+    private Boolean extractedHasResearch;
+
+    @Column(name = "extracted_has_competition")
+    private Boolean extractedHasCompetition;
+
     @PrePersist
     void onCreate() {
         if (crawlTime == null) crawlTime = Instant.now();
@@ -112,4 +121,10 @@ public class CrawledArticle {
     public void setExtractedOutcome(String extractedOutcome) { this.extractedOutcome = extractedOutcome; }
     public String getExtractedDestSchool() { return extractedDestSchool; }
     public void setExtractedDestSchool(String extractedDestSchool) { this.extractedDestSchool = extractedDestSchool; }
+    public Boolean getExtractedHasInternship() { return extractedHasInternship; }
+    public void setExtractedHasInternship(Boolean v) { this.extractedHasInternship = v; }
+    public Boolean getExtractedHasResearch() { return extractedHasResearch; }
+    public void setExtractedHasResearch(Boolean v) { this.extractedHasResearch = v; }
+    public Boolean getExtractedHasCompetition() { return extractedHasCompetition; }
+    public void setExtractedHasCompetition(Boolean v) { this.extractedHasCompetition = v; }
 }

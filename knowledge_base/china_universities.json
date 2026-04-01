@@ -1869,6 +1869,445 @@
       "tier": "双非强校",
       "rank": 107,
       "region": "CN"
+    },
+    {
+      "name": "宝鸡文理学院",
+      "aliases": [
+        "宝文理"
+      ],
+      "tier": "二本",
+      "rank": 400,
+      "region": "CN"
+    },
+    {
+      "name": "温州大学",
+      "aliases": [
+        "温大"
+      ],
+      "tier": "普通一本",
+      "rank": 170,
+      "region": "CN"
+    },
+    {
+      "name": "湖北大学",
+      "aliases": [
+        "湖大武汉"
+      ],
+      "tier": "普通一本",
+      "rank": 171,
+      "region": "CN"
+    },
+    {
+      "name": "河南师范大学",
+      "aliases": [
+        "河师大"
+      ],
+      "tier": "普通一本",
+      "rank": 172,
+      "region": "CN"
+    },
+    {
+      "name": "曲阜师范大学",
+      "aliases": [
+        "曲师大"
+      ],
+      "tier": "普通一本",
+      "rank": 173,
+      "region": "CN"
+    },
+    {
+      "name": "湖南科技大学",
+      "aliases": [
+        "湖科大"
+      ],
+      "tier": "普通一本",
+      "rank": 174,
+      "region": "CN"
+    },
+    {
+      "name": "山东师范大学",
+      "aliases": [
+        "山师"
+      ],
+      "tier": "普通一本",
+      "rank": 175,
+      "region": "CN"
+    },
+    {
+      "name": "安徽师范大学",
+      "aliases": [
+        "安师大"
+      ],
+      "tier": "普通一本",
+      "rank": 176,
+      "region": "CN"
+    },
+    {
+      "name": "江西师范大学",
+      "aliases": [
+        "江师大"
+      ],
+      "tier": "普通一本",
+      "rank": 177,
+      "region": "CN"
+    },
+    {
+      "name": "河北师范大学",
+      "aliases": [
+        "河师大河北"
+      ],
+      "tier": "普通一本",
+      "rank": 178,
+      "region": "CN"
+    },
+    {
+      "name": "四川师范大学",
+      "aliases": [
+        "川师"
+      ],
+      "tier": "普通一本",
+      "rank": 179,
+      "region": "CN"
+    },
+    {
+      "name": "重庆师范大学",
+      "aliases": [
+        "重师"
+      ],
+      "tier": "普通一本",
+      "rank": 180,
+      "region": "CN"
+    },
+    {
+      "name": "云南师范大学",
+      "aliases": [
+        "云师大"
+      ],
+      "tier": "普通一本",
+      "rank": 181,
+      "region": "CN"
+    },
+    {
+      "name": "天津师范大学",
+      "aliases": [
+        "天师大"
+      ],
+      "tier": "普通一本",
+      "rank": 182,
+      "region": "CN"
+    },
+    {
+      "name": "辽宁师范大学",
+      "aliases": [
+        "辽师大"
+      ],
+      "tier": "普通一本",
+      "rank": 183,
+      "region": "CN"
+    },
+    {
+      "name": "哈尔滨师范大学",
+      "aliases": [
+        "哈师大"
+      ],
+      "tier": "普通一本",
+      "rank": 184,
+      "region": "CN"
+    },
+    {
+      "name": "南京工程学院",
+      "aliases": [
+        "南工程"
+      ],
+      "tier": "普通一本",
+      "rank": 190,
+      "region": "CN"
+    },
+    {
+      "name": "武汉纺织大学",
+      "aliases": [
+        "纺大"
+      ],
+      "tier": "普通一本",
+      "rank": 192,
+      "region": "CN"
+    },
+    {
+      "name": "三峡大学",
+      "aliases": [
+        "三峡"
+      ],
+      "tier": "普通一本",
+      "rank": 193,
+      "region": "CN"
+    },
+    {
+      "name": "湖北经济学院",
+      "aliases": [
+        "湖经"
+      ],
+      "tier": "普通一本",
+      "rank": 194,
+      "region": "CN"
+    },
+    {
+      "name": "西安石油大学",
+      "aliases": [
+        "西石大"
+      ],
+      "tier": "普通一本",
+      "rank": 195,
+      "region": "CN"
+    },
+    {
+      "name": "陕西科技大学",
+      "aliases": [
+        "陕科大"
+      ],
+      "tier": "普通一本",
+      "rank": 196,
+      "region": "CN"
+    },
+    {
+      "name": "西安文理学院",
+      "aliases": [
+        "西安文理"
+      ],
+      "tier": "二本",
+      "rank": 380,
+      "region": "CN"
+    },
+    {
+      "name": "华北水利水电大学",
+      "aliases": [
+        "华水"
+      ],
+      "tier": "普通一本",
+      "rank": 197,
+      "region": "CN"
+    },
+    {
+      "name": "东北石油大学",
+      "aliases": [
+        "东油"
+      ],
+      "tier": "普通一本",
+      "rank": 198,
+      "region": "CN"
+    },
+    {
+      "name": "兰州理工大学",
+      "aliases": [
+        "兰理工"
+      ],
+      "tier": "普通一本",
+      "rank": 199,
+      "region": "CN"
+    },
+    {
+      "name": "沈阳航空航天大学",
+      "aliases": [
+        "沈航"
+      ],
+      "tier": "普通一本",
+      "rank": 200,
+      "region": "CN"
+    },
+    {
+      "name": "南昌工程学院",
+      "aliases": [
+        "南工院"
+      ],
+      "tier": "普通一本",
+      "rank": 201,
+      "region": "CN"
+    },
+    {
+      "name": "中原工学院",
+      "aliases": [
+        "中原工"
+      ],
+      "tier": "普通一本",
+      "rank": 202,
+      "region": "CN"
+    },
+    {
+      "name": "湖南工业大学",
+      "aliases": [
+        "湖工大"
+      ],
+      "tier": "普通一本",
+      "rank": 204,
+      "region": "CN"
+    },
+    {
+      "name": "重庆交通大学",
+      "aliases": [
+        "重交"
+      ],
+      "tier": "普通一本",
+      "rank": 205,
+      "region": "CN"
+    },
+    {
+      "name": "重庆工商大学",
+      "aliases": [
+        "重工商"
+      ],
+      "tier": "普通一本",
+      "rank": 206,
+      "region": "CN"
+    },
+    {
+      "name": "四川轻化工大学",
+      "aliases": [
+        "川轻化"
+      ],
+      "tier": "普通一本",
+      "rank": 207,
+      "region": "CN"
+    },
+    {
+      "name": "西南科技大学",
+      "aliases": [
+        "西南科大"
+      ],
+      "tier": "普通一本",
+      "rank": 208,
+      "region": "CN"
+    },
+    {
+      "name": "东北财经大学",
+      "aliases": [
+        "东财",
+        "DUFE"
+      ],
+      "tier": "双非强校",
+      "rank": 108,
+      "region": "CN"
+    },
+    {
+      "name": "江西财经大学",
+      "aliases": [
+        "江财",
+        "JXUFE"
+      ],
+      "tier": "双非强校",
+      "rank": 109,
+      "region": "CN"
+    },
+    {
+      "name": "浙江财经大学",
+      "aliases": [
+        "浙财"
+      ],
+      "tier": "普通一本",
+      "rank": 210,
+      "region": "CN"
+    },
+    {
+      "name": "天津财经大学",
+      "aliases": [
+        "天财"
+      ],
+      "tier": "普通一本",
+      "rank": 211,
+      "region": "CN"
+    },
+    {
+      "name": "山东财经大学",
+      "aliases": [
+        "山财"
+      ],
+      "tier": "普通一本",
+      "rank": 212,
+      "region": "CN"
+    },
+    {
+      "name": "安徽财经大学",
+      "aliases": [
+        "安财"
+      ],
+      "tier": "普通一本",
+      "rank": 213,
+      "region": "CN"
+    },
+    {
+      "name": "南京审计大学",
+      "aliases": [
+        "南审",
+        "NAUDIT"
+      ],
+      "tier": "普通一本",
+      "rank": 214,
+      "region": "CN"
+    },
+    {
+      "name": "南京财经大学",
+      "aliases": [
+        "南财"
+      ],
+      "tier": "普通一本",
+      "rank": 215,
+      "region": "CN"
+    },
+    {
+      "name": "河北经贸大学",
+      "aliases": [
+        "河北经贸"
+      ],
+      "tier": "普通一本",
+      "rank": 216,
+      "region": "CN"
+    },
+    {
+      "name": "广东财经大学",
+      "aliases": [
+        "广财"
+      ],
+      "tier": "普通一本",
+      "rank": 217,
+      "region": "CN"
+    },
+    {
+      "name": "西交利物浦大学",
+      "aliases": [
+        "西浦",
+        "XJTLU"
+      ],
+      "tier": "双非强校",
+      "rank": 110,
+      "region": "CN"
+    },
+    {
+      "name": "上海纽约大学",
+      "aliases": [
+        "上纽",
+        "NYU Shanghai"
+      ],
+      "tier": "双非强校",
+      "rank": 111,
+      "region": "CN"
+    },
+    {
+      "name": "昆山杜克大学",
+      "aliases": [
+        "昆杜",
+        "DKU"
+      ],
+      "tier": "双非强校",
+      "rank": 112,
+      "region": "CN"
+    },
+    {
+      "name": "香港中文大学（深圳）",
+      "aliases": [
+        "港中深",
+        "CUHK-SZ"
+      ],
+      "tier": "双非强校",
+      "rank": 60,
+      "region": "CN"
     }
   ],
   "international": [
@@ -1935,7 +2374,8 @@
       "name": "National University of Singapore",
       "aliases": [
         "NUS",
-        "新加坡国立"
+        "新加坡国立",
+        "新国立"
       ],
       "qs_rank": 8,
       "region": "SG"
@@ -1971,7 +2411,9 @@
       "name": "University of California, Berkeley",
       "aliases": [
         "伯克利",
-        "UCB"
+        "UCB",
+        "UC Berkeley",
+        "Berkeley"
       ],
       "qs_rank": 12,
       "region": "US"
@@ -1979,7 +2421,10 @@
     {
       "name": "The University of Melbourne",
       "aliases": [
-        "墨尔本大学"
+        "墨尔本大学",
+        "University of Melbourne",
+        "Melbourne Uni",
+        "UniMelb"
       ],
       "qs_rank": 13,
       "region": "AU"
@@ -1997,7 +2442,9 @@
       "name": "Nanyang Technological University",
       "aliases": [
         "NTU",
-        "南洋理工"
+        "南洋理工",
+        "NTU Singapore",
+        "南大新加坡"
       ],
       "qs_rank": 15,
       "region": "SG"
@@ -2006,7 +2453,8 @@
       "name": "The University of New South Wales",
       "aliases": [
         "UNSW",
-        "新南威尔士大学"
+        "新南威尔士大学",
+        "University of New South Wales"
       ],
       "qs_rank": 16,
       "region": "AU"
@@ -2023,7 +2471,10 @@
     {
       "name": "The University of Sydney",
       "aliases": [
-        "悉尼大学"
+        "悉尼大学",
+        "University of Sydney",
+        "Sydney Uni",
+        "USYD"
       ],
       "qs_rank": 18,
       "region": "AU"
@@ -2083,7 +2534,8 @@
     {
       "name": "University of California, Los Angeles",
       "aliases": [
-        "UCLA"
+        "UCLA",
+        "UC Los Angeles"
       ],
       "qs_rank": 25,
       "region": "US"
@@ -2144,7 +2596,8 @@
       "name": "The Hong Kong University of Science and Technology",
       "aliases": [
         "HKUST",
-        "港科大"
+        "港科大",
+        "Hong Kong University of Science and Technology"
       ],
       "qs_rank": 32,
       "region": "HK"
@@ -2185,7 +2638,9 @@
     {
       "name": "The University of Queensland",
       "aliases": [
-        "昆士兰大学"
+        "昆士兰大学",
+        "University of Queensland",
+        "UQ"
       ],
       "qs_rank": 37,
       "region": "AU"
@@ -2203,7 +2658,9 @@
       "name": "Carnegie Mellon University",
       "aliases": [
         "CMU",
-        "卡耐基梅隆"
+        "卡耐基梅隆",
+        "卡梅",
+        "卡内基梅隆"
       ],
       "qs_rank": 39,
       "region": "US"
@@ -2299,7 +2756,9 @@
     {
       "name": "University of Illinois Urbana-Champaign",
       "aliases": [
-        "UIUC"
+        "UIUC",
+        "UIUC Illinois",
+        "伊利诺伊大学"
       ],
       "qs_rank": 64,
       "region": "US"
@@ -2315,7 +2774,9 @@
     {
       "name": "University of Washington",
       "aliases": [
-        "华盛顿大学西雅图"
+        "华盛顿大学西雅图",
+        "UW Seattle",
+        "华大西雅图"
       ],
       "qs_rank": 63,
       "region": "US"
@@ -2324,7 +2785,8 @@
       "name": "University of Southern California",
       "aliases": [
         "USC",
-        "南加州大学"
+        "南加州大学",
+        "南加大"
       ],
       "qs_rank": 116,
       "region": "US"
@@ -2333,7 +2795,8 @@
       "name": "New York University",
       "aliases": [
         "NYU",
-        "纽约大学"
+        "纽约大学",
+        "纽大"
       ],
       "qs_rank": 38,
       "region": "US"
@@ -2341,7 +2804,8 @@
     {
       "name": "Columbia University",
       "aliases": [
-        "哥伦比亚大学"
+        "哥伦比亚大学",
+        "哥大"
       ],
       "qs_rank": 34,
       "region": "US"
@@ -2349,7 +2813,8 @@
     {
       "name": "Cornell University",
       "aliases": [
-        "康奈尔大学"
+        "康奈尔大学",
+        "康奈尔"
       ],
       "qs_rank": 13,
       "region": "US"
@@ -2357,7 +2822,8 @@
     {
       "name": "Princeton University",
       "aliases": [
-        "普林斯顿大学"
+        "普林斯顿大学",
+        "普林斯顿"
       ],
       "qs_rank": 17,
       "region": "US"
@@ -2365,7 +2831,8 @@
     {
       "name": "Yale University",
       "aliases": [
-        "耶鲁大学"
+        "耶鲁大学",
+        "耶鲁"
       ],
       "qs_rank": 16,
       "region": "US"
@@ -2373,7 +2840,8 @@
     {
       "name": "Duke University",
       "aliases": [
-        "杜克大学"
+        "杜克大学",
+        "杜克"
       ],
       "qs_rank": 57,
       "region": "US"
@@ -2381,7 +2849,8 @@
     {
       "name": "Brown University",
       "aliases": [
-        "布朗大学"
+        "布朗大学",
+        "布朗"
       ],
       "qs_rank": 73,
       "region": "US"
@@ -2389,7 +2858,8 @@
     {
       "name": "University of California, San Diego",
       "aliases": [
-        "UCSD"
+        "UCSD",
+        "UC San Diego"
       ],
       "qs_rank": 62,
       "region": "US"
@@ -2406,7 +2876,8 @@
       "name": "Georgia Institute of Technology",
       "aliases": [
         "Gatech",
-        "佐治亚理工"
+        "佐治亚理工",
+        "Georgia Tech"
       ],
       "qs_rank": 97,
       "region": "US"
@@ -2438,7 +2909,9 @@
     {
       "name": "University of Texas at Austin",
       "aliases": [
-        "UT Austin"
+        "UT Austin",
+        "UT-Austin",
+        "德克萨斯大学奥斯汀"
       ],
       "qs_rank": 58,
       "region": "US"
@@ -2447,7 +2920,8 @@
       "name": "The Australian National University",
       "aliases": [
         "ANU",
-        "澳国立"
+        "澳国立",
+        "Australian National University"
       ],
       "qs_rank": 30,
       "region": "AU"
@@ -2455,7 +2929,9 @@
     {
       "name": "The University of Adelaide",
       "aliases": [
-        "阿德莱德大学"
+        "阿德莱德大学",
+        "University of Adelaide",
+        "Adelaide Uni"
       ],
       "qs_rank": 89,
       "region": "AU"
@@ -2463,7 +2939,9 @@
     {
       "name": "The University of Western Australia",
       "aliases": [
-        "西澳大学"
+        "西澳大学",
+        "University of Western Australia",
+        "UWA"
       ],
       "qs_rank": 72,
       "region": "AU"
@@ -2855,10 +3333,403 @@
       "name": "The Hong Kong Polytechnic University",
       "aliases": [
         "港理工",
-        "PolyU"
+        "PolyU",
+        "Hong Kong Polytechnic University",
+        "PolyU HK"
       ],
       "qs_rank": 65,
       "region": "HK"
+    },
+    {
+      "name": "University of Waterloo",
+      "aliases": [
+        "滑铁卢大学",
+        "UWaterloo",
+        "Waterloo"
+      ],
+      "qs_rank": 112,
+      "region": "CA"
+    },
+    {
+      "name": "University of Alberta",
+      "aliases": [
+        "阿尔伯塔大学",
+        "UAlberta"
+      ],
+      "qs_rank": 111,
+      "region": "CA"
+    },
+    {
+      "name": "University of Ottawa",
+      "aliases": [
+        "渥太华大学",
+        "uOttawa"
+      ],
+      "qs_rank": 203,
+      "region": "CA"
+    },
+    {
+      "name": "Simon Fraser University",
+      "aliases": [
+        "SFU",
+        "西蒙弗雷泽大学"
+      ],
+      "qs_rank": 275,
+      "region": "CA"
+    },
+    {
+      "name": "Western University",
+      "aliases": [
+        "西安大略大学",
+        "Western Ontario"
+      ],
+      "qs_rank": 188,
+      "region": "CA"
+    },
+    {
+      "name": "Queen's University",
+      "aliases": [
+        "女王大学"
+      ],
+      "qs_rank": 176,
+      "region": "CA"
+    },
+    {
+      "name": "University of Bath",
+      "aliases": [
+        "巴斯大学"
+      ],
+      "qs_rank": 148,
+      "region": "UK"
+    },
+    {
+      "name": "University of Exeter",
+      "aliases": [
+        "埃克塞特大学"
+      ],
+      "qs_rank": 153,
+      "region": "UK"
+    },
+    {
+      "name": "Lancaster University",
+      "aliases": [
+        "兰卡斯特大学"
+      ],
+      "qs_rank": 141,
+      "region": "UK"
+    },
+    {
+      "name": "University of York",
+      "aliases": [
+        "约克大学"
+      ],
+      "qs_rank": 174,
+      "region": "UK"
+    },
+    {
+      "name": "Newcastle University",
+      "aliases": [
+        "纽卡斯尔大学"
+      ],
+      "qs_rank": 129,
+      "region": "UK"
+    },
+    {
+      "name": "Queen Mary University of London",
+      "aliases": [
+        "QMUL",
+        "伦敦玛丽女王大学"
+      ],
+      "qs_rank": 145,
+      "region": "UK"
+    },
+    {
+      "name": "University of Liverpool",
+      "aliases": [
+        "利物浦大学"
+      ],
+      "qs_rank": 176,
+      "region": "UK"
+    },
+    {
+      "name": "University of Sussex",
+      "aliases": [
+        "萨塞克斯大学"
+      ],
+      "qs_rank": 218,
+      "region": "UK"
+    },
+    {
+      "name": "Loughborough University",
+      "aliases": [
+        "拉夫堡大学"
+      ],
+      "qs_rank": 212,
+      "region": "UK"
+    },
+    {
+      "name": "University of Reading",
+      "aliases": [
+        "雷丁大学"
+      ],
+      "qs_rank": 225,
+      "region": "UK"
+    },
+    {
+      "name": "Deakin University",
+      "aliases": [
+        "迪肯大学"
+      ],
+      "qs_rank": 233,
+      "region": "AU"
+    },
+    {
+      "name": "RMIT University",
+      "aliases": [
+        "RMIT",
+        "皇家墨尔本理工大学"
+      ],
+      "qs_rank": 123,
+      "region": "AU"
+    },
+    {
+      "name": "University of Wollongong",
+      "aliases": [
+        "卧龙岗大学"
+      ],
+      "qs_rank": 175,
+      "region": "AU"
+    },
+    {
+      "name": "Curtin University",
+      "aliases": [
+        "科廷大学"
+      ],
+      "qs_rank": 176,
+      "region": "AU"
+    },
+    {
+      "name": "Queensland University of Technology",
+      "aliases": [
+        "QUT",
+        "昆士兰科技大学"
+      ],
+      "qs_rank": 189,
+      "region": "AU"
+    },
+    {
+      "name": "Kyushu University",
+      "aliases": [
+        "九州大学"
+      ],
+      "qs_rank": 164,
+      "region": "JP"
+    },
+    {
+      "name": "Hokkaido University",
+      "aliases": [
+        "北海道大学"
+      ],
+      "qs_rank": 173,
+      "region": "JP"
+    },
+    {
+      "name": "University of Tsukuba",
+      "aliases": [
+        "筑波大学"
+      ],
+      "qs_rank": 355,
+      "region": "JP"
+    },
+    {
+      "name": "Sungkyunkwan University",
+      "aliases": [
+        "成均馆大学",
+        "SKKU"
+      ],
+      "qs_rank": 100,
+      "region": "KR"
+    },
+    {
+      "name": "Kyung Hee University",
+      "aliases": [
+        "庆熙大学"
+      ],
+      "qs_rank": 332,
+      "region": "KR"
+    },
+    {
+      "name": "Sogang University",
+      "aliases": [
+        "西江大学"
+      ],
+      "qs_rank": 482,
+      "region": "KR"
+    },
+    {
+      "name": "Lingnan University",
+      "aliases": [
+        "岭南大学"
+      ],
+      "qs_rank": 711,
+      "region": "HK"
+    },
+    {
+      "name": "Hong Kong Baptist University",
+      "aliases": [
+        "浸会大学",
+        "HKBU"
+      ],
+      "qs_rank": 279,
+      "region": "HK"
+    },
+    {
+      "name": "Education University of Hong Kong",
+      "aliases": [
+        "教育大学",
+        "EdUHK"
+      ],
+      "qs_rank": 604,
+      "region": "HK"
+    },
+    {
+      "name": "National Cheng Kung University",
+      "aliases": [
+        "成功大学",
+        "NCKU"
+      ],
+      "qs_rank": 234,
+      "region": "TW"
+    },
+    {
+      "name": "National Taiwan University of Science and Technology",
+      "aliases": [
+        "台科大"
+      ],
+      "qs_rank": 351,
+      "region": "TW"
+    },
+    {
+      "name": "Wageningen University",
+      "aliases": [
+        "瓦格宁根大学"
+      ],
+      "qs_rank": 151,
+      "region": "NL"
+    },
+    {
+      "name": "University of Geneva",
+      "aliases": [
+        "日内瓦大学"
+      ],
+      "qs_rank": 128,
+      "region": "CH"
+    },
+    {
+      "name": "University of Bern",
+      "aliases": [
+        "伯尔尼大学"
+      ],
+      "qs_rank": 112,
+      "region": "CH"
+    },
+    {
+      "name": "Technical University of Berlin",
+      "aliases": [
+        "TU Berlin",
+        "柏林工业大学"
+      ],
+      "qs_rank": 154,
+      "region": "DE"
+    },
+    {
+      "name": "University of Stuttgart",
+      "aliases": [
+        "斯图加特大学"
+      ],
+      "qs_rank": 285,
+      "region": "DE"
+    },
+    {
+      "name": "TU Dresden",
+      "aliases": [
+        "德累斯顿工大"
+      ],
+      "qs_rank": 173,
+      "region": "DE"
+    },
+    {
+      "name": "Humboldt University of Berlin",
+      "aliases": [
+        "柏林洪堡大学"
+      ],
+      "qs_rank": 120,
+      "region": "DE"
+    },
+    {
+      "name": "Free University of Berlin",
+      "aliases": [
+        "柏林自由大学"
+      ],
+      "qs_rank": 98,
+      "region": "DE"
+    },
+    {
+      "name": "University of Bologna",
+      "aliases": [
+        "博洛尼亚大学"
+      ],
+      "qs_rank": 133,
+      "region": "IT"
+    },
+    {
+      "name": "University of Padua",
+      "aliases": [
+        "帕多瓦大学"
+      ],
+      "qs_rank": 219,
+      "region": "IT"
+    },
+    {
+      "name": "Uppsala University",
+      "aliases": [
+        "乌普萨拉大学"
+      ],
+      "qs_rank": 105,
+      "region": "SE"
+    },
+    {
+      "name": "Chalmers University of Technology",
+      "aliases": [
+        "查尔姆斯理工大学"
+      ],
+      "qs_rank": 139,
+      "region": "SE"
+    },
+    {
+      "name": "NTNU",
+      "aliases": [
+        "挪威科技大学",
+        "Norwegian University of Science and Technology"
+      ],
+      "qs_rank": 122,
+      "region": "NO"
+    },
+    {
+      "name": "University of Vienna",
+      "aliases": [
+        "维也纳大学"
+      ],
+      "qs_rank": 130,
+      "region": "AT"
+    },
+    {
+      "name": "TU Wien",
+      "aliases": [
+        "维也纳工业大学"
+      ],
+      "qs_rank": 191,
+      "region": "AT"
     }
   ],
   "c9": [

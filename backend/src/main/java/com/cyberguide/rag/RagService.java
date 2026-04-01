@@ -717,7 +717,20 @@ public class RagService {
         }
 
         String tier = resolveSchoolTier(school);
+        if ("普通院校".equals(tier)) {
+            tier = inferTierFromContext(lower);
+        }
         return new UserProfile(intent, targetIntent, stage, school, tier, gpa, rankPct, profileHighlights, keywords.stream().distinct().toList());
+    }
+
+    private String inferTierFromContext(String lowerContext) {
+        if (containsAny(lowerContext, List.of("c9"))) return "C9";
+        if (containsAny(lowerContext, List.of("985"))) return "985";
+        if (containsAny(lowerContext, List.of("211"))) return "211";
+        if (containsAny(lowerContext, List.of("双一流"))) return "双一流";
+        if (containsAny(lowerContext, List.of("一本"))) return "普通一本";
+        if (containsAny(lowerContext, List.of("双非", "二本", "四非", "非985", "非211"))) return "双非";
+        return "普通院校";
     }
 
     private Map<String, String> extractStructuredProfileData(List<Map<String, String>> messages) {
@@ -934,16 +947,85 @@ public class RagService {
     private double profileSimilarityBonus(UserProfile profile, CrawledArticle article) {
         if (profile == null || article == null) return 0.0;
         double bonus = 0.0;
-        bonus += tierSimilarityBonus(profile.schoolTier(), article.getExtractedSchoolTier());
+        String articleTier = article.getExtractedSchoolTier();
+        if (articleTier == null || articleTier.isBlank() || "未知".equals(articleTier)) {
+            String fuzzy = resolveFuzzySchoolTier(article.getExtractedSchool());
+            if (fuzzy != null) articleTier = fuzzy;
+        }
+        bonus += tierSimilarityBonus(profile.schoolTier(), articleTier);
         bonus += gpaSimilarityBonus(profile.gpa(), article.getExtractedGpa());
         bonus += rankPctSimilarityBonus(profile, article);
         bonus += outcomeMatchBonus(profile.targetIntent(), article.getExtractedOutcome());
+        bonus += schoolRankProximityBonus(profile.school(), article.getExtractedSchool());
+        bonus += experienceSimilarityBonus(profile.highlights(), article);
         return bonus;
     }
 
+    private double experienceSimilarityBonus(String userHighlights, CrawledArticle article) {
+        if (userHighlights == null || userHighlights.isBlank()) return 0.0;
+        double bonus = 0.0;
+        String h = userHighlights.toLowerCase();
+        if (h.contains("实习") && Boolean.TRUE.equals(article.getExtractedHasInternship())) bonus += 3.0;
+        if ((h.contains("科研") || h.contains("论文") || h.contains("项目")) && Boolean.TRUE.equals(article.getExtractedHasResearch())) bonus += 3.0;
+        if (h.contains("竞赛") && Boolean.TRUE.equals(article.getExtractedHasCompetition())) bonus += 3.0;
+        return bonus;
+    }
+
+    private double schoolRankProximityBonus(String userSchool, String articleSchool) {
+        if (userSchool == null || userSchool.isBlank() || articleSchool == null || articleSchool.isBlank()) return 0.0;
+        SchoolInfo userInfo = resolveSchool(userSchool);
+        SchoolInfo articleInfo = resolveSchool(articleSchool);
+        if (userInfo == null || articleInfo == null) return 0.0;
+
+        Integer uRank = userInfo.rank() != null ? userInfo.rank() : userInfo.qsRank();
+        Integer aRank = articleInfo.rank() != null ? articleInfo.rank() : articleInfo.qsRank();
+        if (uRank == null || aRank == null) return 0.0;
+
+        int diff = Math.abs(uRank - aRank);
+        if (diff <= 10) return 8.0;
+        if (diff <= 30) return 5.0;
+        if (diff <= 60) return 2.0;
+        return 0.0;
+    }
+
+    private static final Map<String, String> FUZZY_SCHOOL_TIER_MAP = Map.ofEntries(
+        Map.entry("华五", "C9"), Map.entry("top2", "C9"), Map.entry("清北", "C9"),
+        Map.entry("双九", "C9"), Map.entry("中九", "C9"), Map.entry("末九", "985"),
+        Map.entry("中9", "C9"),
+        Map.entry("某985", "985"), Map.entry("末流985", "985"), Map.entry("中流985", "985"),
+        Map.entry("末985", "985"), Map.entry("top985", "985"),
+        Map.entry("某211", "211"), Map.entry("末流211", "211"), Map.entry("中流211", "211"),
+        Map.entry("双非一本", "双非"), Map.entry("双非本科", "双非"), Map.entry("双非本", "双非"),
+        Map.entry("普通双非", "双非"), Map.entry("某双非", "双非"),
+        Map.entry("四非", "双非"), Map.entry("四非院校", "双非"),
+        Map.entry("普通一本", "普通一本"), Map.entry("省属一本", "普通一本"),
+        Map.entry("二本", "二本"), Map.entry("某二本", "二本"), Map.entry("普通二本", "二本")
+    );
+
+    public String resolveFuzzySchoolTier(String schoolDescription) {
+        if (schoolDescription == null || schoolDescription.isBlank()) return null;
+        String key = schoolDescription.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> e : FUZZY_SCHOOL_TIER_MAP.entrySet()) {
+            if (key.equals(e.getKey()) || key.startsWith(e.getKey())) {
+                return e.getValue();
+            }
+        }
+        if (key.contains("985")) return "985";
+        if (key.contains("211")) return "211";
+        if (key.contains("双非") || key.contains("四非") || key.contains("非985") || key.contains("非211")) return "双非";
+        if (key.contains("一本")) return "普通一本";
+        if (key.contains("二本")) return "二本";
+        if (key.contains("c9")) return "C9";
+        return null;
+    }
+
     private double tierSimilarityBonus(String userTier, String articleTier) {
-        if (userTier == null || userTier.isBlank() || articleTier == null || articleTier.isBlank()) return 0.0;
-        int d = Math.abs(tierLevel(userTier) - tierLevel(articleTier));
+        String resolvedArticleTier = articleTier;
+        if ((resolvedArticleTier == null || resolvedArticleTier.isBlank() || "未知".equals(resolvedArticleTier))) {
+            return 0.0;
+        }
+        if (userTier == null || userTier.isBlank()) return 0.0;
+        int d = Math.abs(tierLevel(userTier) - tierLevel(resolvedArticleTier));
         if (d == 0) return 6.0;
         if (d == 1) return 3.0;
         if (d == 2) return 1.0;
@@ -1056,6 +1138,12 @@ public class RagService {
                 m.put("snippet", snippet);
                 m.put("source", r.source());
                 m.put("category", r.category());
+                m.put("school", r.school());
+                m.put("schoolTier", r.schoolTier());
+                m.put("gpa", r.gpa());
+                m.put("rankPct", r.rankPct());
+                m.put("outcome", r.outcome());
+                m.put("destSchool", r.destSchool());
                 return m;
             })
             .toList();

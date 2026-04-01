@@ -305,23 +305,37 @@ export async function sendMessageAction({
       nextSimilarCases = Array.isArray(data.similarCases)
         ? data.similarCases
             .filter((item) => item && typeof item.url === 'string' && item.url.length > 0)
-            .map((item) => ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((item: any) => ({
               title: item.title || '相似案例',
               url: item.url,
               snippet: item.snippet,
               source: item.source,
               category: item.category,
+              school: item.school ?? undefined,
+              schoolTier: item.schoolTier ?? undefined,
+              gpa: item.gpa ?? undefined,
+              rankPct: item.rankPct ?? undefined,
+              outcome: item.outcome ?? undefined,
+              destSchool: item.destSchool ?? undefined,
             }))
         : [];
       nextEvidence = Array.isArray(data.evidence)
         ? data.evidence
             .filter((item) => item && typeof item === 'object')
-            .map((item) => ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((item: any) => ({
               title: item.title,
               source: item.source,
               url: item.url,
               score: typeof item.score === 'number' ? item.score : undefined,
               tier: item.tier,
+              school: item.school ?? undefined,
+              schoolTier: item.schoolTier ?? undefined,
+              gpa: item.gpa ?? undefined,
+              rankPct: item.rankPct ?? undefined,
+              outcome: item.outcome ?? undefined,
+              destSchool: item.destSchool ?? undefined,
             }))
         : [];
       if (!response.ok || !finalMessage) throw new Error('API request failed');

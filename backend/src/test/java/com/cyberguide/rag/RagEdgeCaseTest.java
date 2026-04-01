@@ -140,7 +140,7 @@ class RagEdgeCaseTest {
     @Test
     void formatEvidenceWithNullProfile() {
         var results = List.of(
-            new RagService.RetrievalResult("Title", "Content", "kb:test", null, "kb", "medium", 5.0)
+            new RagService.RetrievalResult("Title", "Content", "kb:test", null, "kb", "medium", 5.0, null, null, null, null, null, null)
         );
         String formatted = ragService.formatEvidence(results, null);
         assertTrue(formatted.contains("Content"));
@@ -155,11 +155,12 @@ class RagEdgeCaseTest {
             "清华大学",
             "C9",
             "3.9",
+            "前5%",
             "有科研经历",
             List.of("保研", "清华大学")
         );
         var results = List.of(
-            new RagService.RetrievalResult("Case", "Body", "case:src", "http://url", "baoyan", "high", 10.0)
+            new RagService.RetrievalResult("Case", "Body", "case:src", "http://url", "baoyan", "high", 10.0, null, null, null, null, null, null)
         );
         String formatted = ragService.formatEvidence(results, profile);
         assertTrue(formatted.contains("INTENT=POSTGRAD"));
@@ -174,8 +175,8 @@ class RagEdgeCaseTest {
     @Test
     void buildSimilarCasesSkipsNullUrls() {
         var results = List.of(
-            new RagService.RetrievalResult("t", "c", "kb:test", null, "kb", "medium", 5.0),
-            new RagService.RetrievalResult("t2", "c2", "case:x", "http://url", "job", "high", 8.0)
+            new RagService.RetrievalResult("t", "c", "kb:test", null, "kb", "medium", 5.0, null, null, null, null, null, null),
+            new RagService.RetrievalResult("t2", "c2", "case:x", "http://url", "job", "high", 8.0, null, null, null, null, null, null)
         );
         var cases = ragService.buildSimilarCases(results, 5);
         assertEquals(1, cases.size());
@@ -192,7 +193,7 @@ class RagEdgeCaseTest {
     void buildSimilarCasesTruncatesLongSnippet() {
         String longContent = "a".repeat(200);
         var results = List.of(
-            new RagService.RetrievalResult("title", longContent, "case:x", "http://url", "job", "high", 8.0)
+            new RagService.RetrievalResult("title", longContent, "case:x", "http://url", "job", "high", 8.0, null, null, null, null, null, null)
         );
         var cases = ragService.buildSimilarCases(results, 3);
         String snippet = (String) cases.get(0).get("snippet");

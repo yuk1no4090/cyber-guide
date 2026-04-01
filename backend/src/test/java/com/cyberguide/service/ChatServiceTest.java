@@ -119,6 +119,7 @@ class ChatServiceTest {
             "未知",
             "",
             "",
+            "",
             List.of()
         );
         List<RagService.RetrievalResult> retrieved = List.of(
@@ -129,7 +130,8 @@ class ChatServiceTest {
                 "https://example.com/case",
                 "job",
                 "high",
-                8.0
+                8.0,
+                null, null, null, null, null, null
             )
         );
         List<Map<String, Object>> similarCases = List.of(
@@ -166,10 +168,10 @@ class ChatServiceTest {
         );
         RagService.UserProfile profile = new RagService.UserProfile(
             RagService.UserIntent.UNKNOWN, RagService.TargetIntent.UNKNOWN,
-            "", "", "未知", "", "", List.of()
+            "", "", "未知", "", "", "", List.of()
         );
         List<RagService.RetrievalResult> retrieved = List.of(
-            new RagService.RetrievalResult("t", "c", "case:x", "https://x.com", "job", "high", 5.0)
+            new RagService.RetrievalResult("t", "c", "case:x", "https://x.com", "job", "high", 5.0, null, null, null, null, null, null)
         );
         doAnswer(invocation -> {
             MessageContext ctx = invocation.getArgument(0);

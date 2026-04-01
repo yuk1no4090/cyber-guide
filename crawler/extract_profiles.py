@@ -88,9 +88,38 @@ def call_extract(title: str, content: str) -> dict[str, str] | None:
     })
 
 
+FUZZY_SCHOOL_TO_TIER = {
+    "c9": "C9", "华五": "C9", "top2": "C9", "清北": "C9",
+    "双九": "C9", "中九": "C9", "末九": "985",
+    "某985": "985", "末流985": "985", "中流985": "985", "985a+": "985",
+    "末985": "985", "京区某985": "985", "top985": "985",
+    "某211": "211", "末流211": "211", "中流211": "211",
+    "双非一本": "双非", "双非本": "双非", "双非本科": "双非",
+    "普通双非": "双非", "某双非": "双非", "四非": "双非", "四非院校": "双非",
+    "末流双非": "双非", "成都某双非": "双非",
+    "普通一本": "普通一本", "省属一本": "普通一本",
+    "二本": "二本", "某二本": "二本", "普通二本": "二本",
+    "未知": "", "空": "", "xx大学": "",
+}
+
+
+def normalize_fuzzy_school(school: str, tier: str) -> tuple[str, str]:
+    """If school is a fuzzy description, clear it and infer tier from it."""
+    s = (school or "").strip()
+    sl = s.lower().replace(" ", "")
+    for pattern, mapped_tier in FUZZY_SCHOOL_TO_TIER.items():
+        if sl == pattern or sl.startswith(pattern):
+            inferred_tier = mapped_tier or tier
+            return "", inferred_tier if inferred_tier else tier
+    if re.match(r"^(某|末流|中流|顶尖|京区|帝都)", s):
+        return "", tier
+    return s, tier
+
+
 def sanitize_fields(data: dict[str, str]) -> dict[str, str]:
     school = (data.get("school") or "").strip()[:128]
-    school_tier = (data.get("school_tier") or "").strip()[:32]
+    school_tier = normalize_school_tier(data.get("school_tier") or "")
+    school, school_tier = normalize_fuzzy_school(school, school_tier)
     gpa = normalize_gpa(data.get("gpa") or "")
     rank_pct = normalize_rank_pct(data.get("rank_pct") or "")
     outcome = normalize_outcome(data.get("outcome") or "")
@@ -103,6 +132,31 @@ def sanitize_fields(data: dict[str, str]) -> dict[str, str]:
         "outcome": outcome[:32],
         "dest_school": dest_school,
     }
+
+
+VALID_TIERS = {"C9", "985", "211", "双一流", "双非", "普通一本", "二本", "未知"}
+
+
+def normalize_school_tier(raw: str) -> str:
+    t = (raw or "").strip()
+    if t in VALID_TIERS:
+        return t
+    tl = t.lower()
+    if "c9" in tl:
+        return "C9"
+    if "985" in tl:
+        return "985"
+    if "211" in tl:
+        return "211"
+    if "双一流" in tl:
+        return "双一流"
+    if "一本" in tl:
+        return "普通一本"
+    if "二本" in tl or "三本" in tl:
+        return "二本"
+    if "双非" in tl or "四非" in tl or "非985" in tl or "非211" in tl:
+        return "双非"
+    return "未知"
 
 
 def normalize_gpa(raw: str) -> str:
