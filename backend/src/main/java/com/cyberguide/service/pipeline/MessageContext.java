@@ -19,7 +19,7 @@ public class MessageContext {
     private String scenario;
     private java.util.List<java.util.Map<String, String>> messages;
 
-    private com.cyberguide.rag.RagService.UserProfile userProfile;
+    private com.cyberguide.rag.UserProfileInferrer.UserProfile userProfile;
     private java.util.List<com.cyberguide.rag.RagService.RetrievalResult> retrievalResults;
     private com.cyberguide.rag.RagService.RetrievalMetadata retrievalMetadata;
 
@@ -60,8 +60,8 @@ public class MessageContext {
     public java.util.List<java.util.Map<String, String>> getMessages() { return messages; }
     public void setMessages(java.util.List<java.util.Map<String, String>> messages) { this.messages = messages; }
 
-    public com.cyberguide.rag.RagService.UserProfile getUserProfile() { return userProfile; }
-    public void setUserProfile(com.cyberguide.rag.RagService.UserProfile userProfile) { this.userProfile = userProfile; }
+    public com.cyberguide.rag.UserProfileInferrer.UserProfile getUserProfile() { return userProfile; }
+    public void setUserProfile(com.cyberguide.rag.UserProfileInferrer.UserProfile userProfile) { this.userProfile = userProfile; }
 
     public java.util.List<com.cyberguide.rag.RagService.RetrievalResult> getRetrievalResults() { return retrievalResults; }
     public void setRetrievalResults(java.util.List<com.cyberguide.rag.RagService.RetrievalResult> retrievalResults) { this.retrievalResults = retrievalResults; }

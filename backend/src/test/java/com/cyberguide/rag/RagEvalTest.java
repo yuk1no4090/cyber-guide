@@ -54,7 +54,11 @@ class RagEvalTest {
         when(caseRepository.findCases(any(), any(Pageable.class))).thenReturn(mockCareerCases());
         when(articleRepository.findArticles(any(), any(Pageable.class))).thenReturn(mockArticles());
 
-        ragService = new RagService(cacheGuard, caseRepository, articleRepository);
+        var universityResolver = new UniversityResolver();
+        var profileInferrer = new UserProfileInferrer(universityResolver);
+        var scorer = new RetrievalScorer(universityResolver);
+
+        ragService = new RagService(cacheGuard, caseRepository, articleRepository, universityResolver, profileInferrer, scorer);
     }
 
     @Test

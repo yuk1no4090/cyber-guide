@@ -7,6 +7,8 @@ import com.cyberguide.model.ChatSession;
 import com.cyberguide.repository.ChatMessageRepository;
 import com.cyberguide.repository.ChatSessionRepository;
 import com.cyberguide.security.SecurityUtils;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +26,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/sessions")
+@Tag(name = "Sessions", description = "Chat session CRUD — list, create, rename, delete")
 public class SessionController {
 
     private final ChatSessionRepository chatSessionRepository;
@@ -39,6 +42,7 @@ public class SessionController {
     }
 
     @GetMapping
+    @Operation(summary = "List chat sessions for the current user")
     public ResponseEntity<?> list(@RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "20") int size) {
         UUID userId = SecurityUtils.currentUserId()
@@ -58,6 +62,7 @@ public class SessionController {
     }
 
     @PostMapping
+    @Operation(summary = "Create a new chat session")
     public ResponseEntity<?> create(@RequestBody(required = false) CreateBody body) {
         UUID userId = SecurityUtils.currentUserId()
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED, "请先登录后创建会话"));
@@ -72,6 +77,7 @@ public class SessionController {
     }
 
     @GetMapping("/{id}/messages")
+    @Operation(summary = "Get all messages in a session")
     public ResponseEntity<?> messages(@PathVariable UUID id) {
         ChatSession session = findOwnedSession(id);
         List<ChatMessageEntity> messages = chatMessageRepository.findBySession_IdOrderBySeqAsc(session.getId());
@@ -86,6 +92,7 @@ public class SessionController {
 
     @DeleteMapping("/{id}")
     @Transactional
+    @Operation(summary = "Delete a session and its messages")
     public ResponseEntity<?> delete(@PathVariable UUID id) {
         ChatSession session = findOwnedSession(id);
         chatMessageRepository.deleteBySession_Id(session.getId());
@@ -94,6 +101,7 @@ public class SessionController {
     }
 
     @PutMapping("/{id}/title")
+    @Operation(summary = "Rename a session")
     public ResponseEntity<?> rename(@PathVariable UUID id, @RequestBody RenameBody body) {
         if (body == null || body.title() == null || body.title().isBlank()) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "title 不能为空");

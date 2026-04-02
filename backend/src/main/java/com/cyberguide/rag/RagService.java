@@ -3,6 +3,9 @@ package com.cyberguide.rag;
 import com.cyberguide.infrastructure.cache.CacheGuard;
 import com.cyberguide.model.CareerCase;
 import com.cyberguide.model.CrawledArticle;
+import com.cyberguide.rag.UserProfileInferrer.TargetIntent;
+import com.cyberguide.rag.UserProfileInferrer.UserIntent;
+import com.cyberguide.rag.UserProfileInferrer.UserProfile;
 import com.cyberguide.repository.CareerCaseRepository;
 import com.cyberguide.repository.CrawledArticleRepository;
 import org.slf4j.Logger;
@@ -33,11 +36,6 @@ public class RagService {
     private static final Logger log = LoggerFactory.getLogger(RagService.class);
     private static final Duration RAG_CACHE_TTL = Duration.ofMinutes(30);
     private static final String CACHE_KEY_PREFIX = "rag:evidence:";
-    private static final String PROFILE_DATA_PREFIX = "[PROFILE_DATA]";
-    private static final Pattern SCHOOL_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z]{2,20}(大学|学院))");
-    private static final Pattern GPA_PATTERN = Pattern.compile("(GPA|gpa|绩点)\\s*[:：]?\\s*([0-9](?:\\.[0-9]{1,2})?)");
-    private static final Pattern RANK_PATTERN = Pattern.compile("(前\\s*[0-9]{1,2}(?:\\.[0-9])?%?|rank\\s*[:：]?\\s*[0-9]{1,2}(?:\\.[0-9])?%?)");
-    private static final Pattern STAGE_PATTERN = Pattern.compile("(大一|大二|大三|大四|研一|研二|已工作)");
 
     @Value("${rag.knowledge-base-path:../knowledge_base/skills}")
     private String knowledgeBasePath;
@@ -48,23 +46,29 @@ public class RagService {
     @Value("${rag.default-top-k:2}")
     private int defaultTopK;
 
-    @Value("${rag.university-data-path:../knowledge_base/china_universities.json}")
-    private String universityDataPath;
-
     private final List<KnowledgeChunk> chunks = new ArrayList<>();
-    private final Map<String, SchoolInfo> schoolInfoByName = new LinkedHashMap<>();
-    private final Map<String, SchoolInfo> schoolInfoByAlias = new LinkedHashMap<>();
     private final CacheGuard cacheGuard;
     private final CareerCaseRepository caseRepo;
     private final CrawledArticleRepository articleRepo;
+    private final UniversityResolver universityResolver;
+    private final UserProfileInferrer profileInferrer;
+    private final RetrievalScorer scorer;
 
     public RagService(CacheGuard cacheGuard,
                       CareerCaseRepository caseRepo,
-                      CrawledArticleRepository articleRepo) {
+                      CrawledArticleRepository articleRepo,
+                      UniversityResolver universityResolver,
+                      UserProfileInferrer profileInferrer,
+                      RetrievalScorer scorer) {
         this.cacheGuard = cacheGuard;
         this.caseRepo = caseRepo;
         this.articleRepo = articleRepo;
+        this.universityResolver = universityResolver;
+        this.profileInferrer = profileInferrer;
+        this.scorer = scorer;
     }
+
+    // ─── Records ───
 
     public record KnowledgeChunk(String content, String source, List<String> keywords) {}
     public record RetrievalResult(
@@ -91,29 +95,8 @@ public class RagService {
         List<RetrievalResult> results,
         RetrievalMetadata metadata
     ) implements java.io.Serializable {}
-    public enum UserIntent { POSTGRAD, JOB, UNKNOWN }
-    public enum TargetIntent { KAOYAN, BAOYAN, STUDY_ABROAD, JOB, UNKNOWN }
-    public enum SchoolTier { C9, T985, T211, SYL, YIBEN, ERBEN, UNKNOWN }
-    public record SchoolInfo(
-        String name,
-        String tier,
-        Integer rank,
-        Integer qsRank,
-        String region,
-        List<String> aliases
-    ) implements java.io.Serializable {}
-    public record UserProfile(
-        UserIntent intent,
-        TargetIntent targetIntent,
-        String stage,
-        String school,
-        String schoolTier,
-        String gpa,
-        String rankPct,
-        String highlights,
-        List<String> keywords
-    )
-        implements java.io.Serializable {}
+
+    // ─── Knowledge base loading ───
 
     @PostConstruct
     public void loadKnowledgeBase() {
@@ -129,139 +112,6 @@ public class RagService {
             log.error("Failed to load knowledge base", e);
         }
         log.info("RAG loaded {} chunks from knowledge base", chunks.size());
-
-        loadUniversityData();
-    }
-
-    @SuppressWarnings("unchecked")
-    private void loadUniversityData() {
-        Path path = Paths.get(universityDataPath);
-        if (!Files.isRegularFile(path)) {
-            log.warn("University data file not found: {}", path.toAbsolutePath());
-            return;
-        }
-        try {
-            String json = Files.readString(path);
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Map<String, Object> data = mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {});
-            schoolInfoByName.clear();
-            schoolInfoByAlias.clear();
-            loadSchoolObjectList(data, "domestic");
-            loadSchoolObjectList(data, "international");
-
-            // Backward compatibility with old tier-array format.
-            loadTierList(data, "c9", "C9");
-            loadTierList(data, "985", "985");
-            loadTierList(data, "211_non985", "211");
-            loadTierList(data, "syl_discipline_new", "双一流学科");
-            loadTierList(data, "known_strong_shuangfei", "双非强校");
-        } catch (Exception e) {
-            log.error("Failed to load university tiers", e);
-        }
-        log.info("Loaded {} school mappings (name={}, alias={})",
-            schoolInfoByName.size() + schoolInfoByAlias.size(),
-            schoolInfoByName.size(),
-            schoolInfoByAlias.size());
-    }
-
-    @SuppressWarnings("unchecked")
-    private void loadTierList(Map<String, Object> data, String key, String tier) {
-        Object val = data.get(key);
-        if (val instanceof List<?> list) {
-            for (Object item : list) {
-                if (item instanceof String name) {
-                    SchoolInfo info = new SchoolInfo(name, tier, null, null, "CN", List.of());
-                    registerSchoolInfo(info);
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void loadSchoolObjectList(Map<String, Object> data, String key) {
-        Object val = data.get(key);
-        if (!(val instanceof List<?> list)) return;
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?> row)) continue;
-            String name = asString(row.get("name"));
-            if (name == null || name.isBlank()) continue;
-            String tier = asString(row.get("tier"));
-            Integer rank = asInt(row.get("rank"));
-            Integer qsRank = asInt(row.get("qs_rank"));
-            String region = Optional.ofNullable(asString(row.get("region"))).orElse("CN");
-            List<String> aliases = asStringList(row.get("aliases"));
-            SchoolInfo info = new SchoolInfo(name, tier, rank, qsRank, region, aliases);
-            registerSchoolInfo(info);
-        }
-    }
-
-    private void registerSchoolInfo(SchoolInfo info) {
-        if (info == null || info.name() == null || info.name().isBlank()) return;
-        String nameKey = normalizeSchoolKey(info.name());
-        schoolInfoByName.putIfAbsent(nameKey, info);
-        if (info.aliases() != null) {
-            for (String alias : info.aliases()) {
-                if (alias == null || alias.isBlank()) continue;
-                schoolInfoByAlias.putIfAbsent(normalizeSchoolKey(alias), info);
-            }
-        }
-    }
-
-    private String normalizeSchoolKey(String raw) {
-        return raw == null ? "" : raw.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
-    }
-
-    private String asString(Object v) {
-        return v == null ? null : String.valueOf(v).trim();
-    }
-
-    private Integer asInt(Object v) {
-        if (v == null) return null;
-        if (v instanceof Number n) return n.intValue();
-        try {
-            return Integer.parseInt(String.valueOf(v).trim());
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> asStringList(Object v) {
-        if (!(v instanceof List<?> list)) return List.of();
-        List<String> result = new ArrayList<>();
-        for (Object item : list) {
-            if (item != null) {
-                String s = String.valueOf(item).trim();
-                if (!s.isBlank()) result.add(s);
-            }
-        }
-        return result;
-    }
-
-    public String resolveSchoolTier(String school) {
-        SchoolInfo info = resolveSchool(school);
-        return info == null || info.tier() == null || info.tier().isBlank() ? "普通院校" : info.tier();
-    }
-
-    public SchoolInfo resolveSchool(String school) {
-        if (school == null || school.isBlank()) return null;
-        String key = normalizeSchoolKey(school);
-        SchoolInfo exact = schoolInfoByName.get(key);
-        if (exact != null) return exact;
-        SchoolInfo alias = schoolInfoByAlias.get(key);
-        if (alias != null) return alias;
-
-        for (Map.Entry<String, SchoolInfo> e : schoolInfoByName.entrySet()) {
-            if (key.contains(e.getKey()) || e.getKey().contains(key)) {
-                return e.getValue();
-            }
-        }
-        for (Map.Entry<String, SchoolInfo> e : schoolInfoByAlias.entrySet()) {
-            if (key.contains(e.getKey()) || e.getKey().contains(key)) {
-                return e.getValue();
-            }
-        }
-        return null;
     }
 
     private void loadFile(Path file) {
@@ -304,6 +154,8 @@ public class RagService {
         return result;
     }
 
+    // ─── Public retrieval API ───
+
     public List<RetrievalResult> retrieve(String query, int topK) {
         String cacheKey = CACHE_KEY_PREFIX + hashQuery(query) + ":" + topK;
 
@@ -321,18 +173,13 @@ public class RagService {
         return retrieve(query, defaultTopK);
     }
 
-    /**
-     * Profile-aware retrieval: infers user intent/background from conversation and uses it for ranking.
-     */
     public List<RetrievalResult> retrieve(String query, List<Map<String, String>> messages) {
-        UserProfile profile = inferUserProfile(messages, query);
+        UserProfile profile = profileInferrer.inferUserProfile(messages, query);
         return retrieve(query, profile, defaultTopK);
     }
 
     public List<RetrievalResult> retrieve(String query, UserProfile profile, int topK) {
-        UserProfile safeProfile = profile != null
-            ? profile
-            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of());
+        UserProfile safeProfile = safeProfile(profile);
         String cacheKey = CACHE_KEY_PREFIX + hashQuery(
             query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent() + "|" + safeProfile.stage() + "|" + safeProfile.school()
         ) + ":" + topK;
@@ -348,9 +195,7 @@ public class RagService {
 
     public RetrievalBundle retrieveWithMetadata(String query, UserProfile profile, int topK) {
         long start = System.currentTimeMillis();
-        UserProfile safeProfile = profile != null
-            ? profile
-            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of());
+        UserProfile safeProfile = safeProfile(profile);
         RetrievalComputation computation = doRetrieveDetailed(query, safeProfile, topK);
         List<RetrievalResult> topResults = computation.topResults();
         RetrievalMetadata metadata = new RetrievalMetadata(
@@ -380,205 +225,25 @@ public class RagService {
         return new RetrievalBundle(topResults, metadata);
     }
 
-    /**
-     * Merged retrieval: knowledge base (in-memory) + database (career_cases + crawled_articles).
-     */
-    private List<RetrievalResult> doRetrieve(String query, int topK) {
-        return doRetrieve(query, new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of()), topK);
+    // ─── Delegated public methods (kept for API compatibility) ───
+
+    public UserProfile inferUserProfile(List<Map<String, String>> messages, String latestQuery) {
+        return profileInferrer.inferUserProfile(messages, latestQuery);
     }
 
-    private List<RetrievalResult> doRetrieve(String query, UserProfile profile, int topK) {
-        return doRetrieveDetailed(query, profile, topK).topResults();
+    public String resolveSchoolTier(String school) {
+        return universityResolver.resolveSchoolTier(school);
     }
 
-    private RetrievalComputation doRetrieveDetailed(String query, UserProfile profile, int topK) {
-        List<RetrievalResult> results = new ArrayList<>();
-        String expandedQuery = expandQuery(query, profile);
-
-        // 1. In-memory knowledge base chunks
-        results.addAll(retrieveFromKnowledgeBase(expandedQuery, Math.max(topK, 3)));
-
-        // 2. Career cases from database (AI-extracted structured data)
-        results.addAll(retrieveFromCareerCases(expandedQuery, profile, 50));
-
-        // 3. Crawled articles from database
-        results.addAll(retrieveFromArticles(expandedQuery, profile, 50));
-
-        // Sort by score descending, take top-K
-        results.sort(Comparator.comparingDouble(RetrievalResult::score).reversed());
-        List<RetrievalResult> topResults = results.stream().limit(Math.max(1, topK)).toList();
-        return new RetrievalComputation(topResults, results.size());
+    public UniversityResolver.SchoolInfo resolveSchool(String school) {
+        return universityResolver.resolveSchool(school);
     }
 
-    private List<RetrievalResult> retrieveFromKnowledgeBase(String query, int topK) {
-        if (chunks.isEmpty()) return List.of();
-
-        String queryLower = query.toLowerCase();
-        record Scored(KnowledgeChunk chunk, double score) {}
-
-        return chunks.stream().map(chunk -> {
-            double score = 0;
-            for (String kw : chunk.keywords()) {
-                if (queryLower.contains(kw)) score += 3;
-            }
-            String contentLower = chunk.content().toLowerCase();
-            for (int i = 0; i < queryLower.length() - 1; i++) {
-                String bigram = queryLower.substring(i, i + 2);
-                if (contentLower.contains(bigram)) score += 1;
-            }
-            return new Scored(chunk, score);
-        }).filter(s -> s.score > 0)
-          .sorted(Comparator.comparingDouble(Scored::score).reversed())
-          .limit(topK)
-          .map(s -> new RetrievalResult(
-              "知识库片段",
-              truncate(s.chunk.content(), maxEvidenceChunkLength),
-              "kb:" + s.chunk.source(),
-              null,
-              "kb",
-              "medium",
-              s.score,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null
-          )).toList();
+    public String resolveFuzzySchoolTier(String schoolDescription) {
+        return universityResolver.resolveFuzzySchoolTier(schoolDescription);
     }
 
-    /**
-     * Search career_cases by keyword matching on title + background + tags.
-     */
-    private List<RetrievalResult> retrieveFromCareerCases(String query, UserProfile profile, int limit) {
-        try {
-            List<CareerCase> cases = caseRepo.findCases(null, PageRequest.of(0, Math.max(limit, 50)));
-            if (cases.isEmpty()) return List.of();
-
-            String queryLower = query.toLowerCase();
-            Set<String> allowedCategories = resolveAllowedCategories(profile);
-            boolean useHardCategoryFilter = shouldUseHardCategoryFilter(profile);
-            return cases.stream()
-                .filter(c -> !useHardCategoryFilter || allowedCategories.contains(normalizeCategory(c.getCategory())))
-                .map(c -> {
-                    String searchable = ((c.getTitle() != null ? c.getTitle() : "") + " " +
-                        (c.getBackground() != null ? c.getBackground() : "") + " " +
-                        (c.getResult() != null ? c.getResult() : "") + " " +
-                        (c.getTags() != null ? c.getTags() : "")).toLowerCase();
-                    double score = 0;
-                    score += intentBoost(c.getCategory(), profile.intent());
-                    score += targetIntentBoost(c.getCategory(), profile.targetIntent());
-                    for (int i = 0; i < queryLower.length() - 1; i++) {
-                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
-                    }
-                    score += schoolBonus(profile, searchable);
-                    score += keywordBonus(profile, searchable);
-                    score += Math.min(c.getQualityScore() / 8.0, 10.0);
-                    return new Object[]{c, score};
-                })
-                .filter(pair -> ((double) pair[1]) > 2)
-                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
-                .limit(limit)
-                .map(pair -> {
-                    CareerCase c = (CareerCase) pair[0];
-                    String evidence = formatCaseEvidence(c);
-                    String category = normalizeCategory(c.getCategory());
-                    return new RetrievalResult(
-                        c.getTitle(),
-                        truncate(evidence, maxEvidenceChunkLength),
-                        "case:" + c.getSource(),
-                        c.getUrl(),
-                        category,
-                        computeCaseTier(category, c.getQualityScore()),
-                        (double) pair[1],
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null
-                    );
-                }).toList();
-        } catch (Exception e) {
-            log.warn("Career case retrieval failed: {}", e.getMessage());
-            return List.of();
-        }
-    }
-
-    /**
-     * Search crawled_articles by keyword matching on title + summary.
-     */
-    private List<RetrievalResult> retrieveFromArticles(String query, UserProfile profile, int limit) {
-        try {
-            List<CrawledArticle> articles = articleRepo.findArticles(null, PageRequest.of(0, Math.max(limit, 50)));
-            if (articles.isEmpty()) return List.of();
-
-            String queryLower = query.toLowerCase();
-            Set<String> allowedCategories = resolveAllowedCategories(profile);
-            boolean useHardCategoryFilter = shouldUseHardCategoryFilter(profile);
-            return articles.stream()
-                .filter(a -> !useHardCategoryFilter || allowedCategories.contains(normalizeCategory(a.getCategory())))
-                .map(a -> {
-                    String searchable = ((a.getTitle() != null ? a.getTitle() : "") + " " +
-                        (a.getSummary() != null ? a.getSummary() : "") + " " +
-                        (a.getContentSnippet() != null ? a.getContentSnippet() : "")).toLowerCase();
-                    double score = 0;
-                    score += intentBoost(a.getCategory(), profile.intent());
-                    score += targetIntentBoost(a.getCategory(), profile.targetIntent());
-                    for (int i = 0; i < queryLower.length() - 1; i++) {
-                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
-                    }
-                    score += schoolBonus(profile, searchable);
-                    score += keywordBonus(profile, searchable);
-                    score += profileSimilarityBonus(profile, a);
-                    score += Math.min(a.getQualityScore() / 10.0, 8.0);
-                    score += relevanceTierBonus(a.getRelevanceTier());
-                    return new Object[]{a, score};
-                })
-                .filter(pair -> ((double) pair[1]) > 2)
-                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
-                .limit(limit)
-                .map(pair -> {
-                    CrawledArticle a = (CrawledArticle) pair[0];
-                    String content = a.getContentSnippet() != null && !a.getContentSnippet().isBlank()
-                        ? a.getContentSnippet()
-                        : (a.getSummary() != null ? a.getSummary() : a.getTitle());
-                    return new RetrievalResult(
-                        a.getTitle(),
-                        truncate(content, maxEvidenceChunkLength),
-                        "article:" + a.getSourceName(),
-                        a.getUrl(),
-                        normalizeCategory(a.getCategory()),
-                        normalizeTier(a.getRelevanceTier()),
-                        (double) pair[1],
-                        a.getExtractedSchool(),
-                        a.getExtractedSchoolTier(),
-                        a.getExtractedGpa(),
-                        a.getExtractedRankPct(),
-                        a.getExtractedOutcome(),
-                        a.getExtractedDestSchool()
-                    );
-                }).toList();
-        } catch (Exception e) {
-            log.warn("Article retrieval failed: {}", e.getMessage());
-            return List.of();
-        }
-    }
-
-    private String formatCaseEvidence(CareerCase c) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("【真实案例】").append(c.getTitle()).append("\n");
-        if (c.getBackground() != null && !c.getBackground().isBlank()) {
-            sb.append("背景：").append(c.getBackground()).append("\n");
-        }
-        if (c.getResult() != null && !c.getResult().isBlank()) {
-            sb.append("结果：").append(c.getResult()).append("\n");
-        }
-        if (c.getTags() != null && !c.getTags().isBlank()) {
-            sb.append("标签：").append(c.getTags());
-        }
-        return sb.toString();
-    }
+    // ─── Evidence formatting ───
 
     public String formatEvidence(List<RetrievalResult> results) {
         return formatEvidence(results, null);
@@ -650,477 +315,6 @@ public class RagService {
         return sb.toString();
     }
 
-    private String truncate(String text, int maxLen) {
-        if (text.length() <= maxLen) return text;
-        return text.substring(0, maxLen) + "...";
-    }
-
-    private String hashQuery(String query) {
-        int hash = query.hashCode();
-        return Integer.toHexString(hash);
-    }
-
-    private String normalizeSourceType(String source) {
-        if (source == null || source.isBlank()) {
-            return "unknown";
-        }
-        int idx = source.indexOf(':');
-        if (idx <= 0) {
-            return source.trim().toLowerCase(Locale.ROOT);
-        }
-        return source.substring(0, idx).trim().toLowerCase(Locale.ROOT);
-    }
-
-    public UserProfile inferUserProfile(List<Map<String, String>> messages, String latestQuery) {
-        Map<String, String> structuredProfile = extractStructuredProfileData(messages);
-        if (!structuredProfile.isEmpty()) {
-            return buildProfileFromStructuredData(structuredProfile, latestQuery);
-        }
-
-        String context = buildRecentUserContext(messages, latestQuery);
-        String lower = context.toLowerCase();
-
-        int postgradHits = countHits(lower, List.of("考研", "保研", "推免", "夏令营", "读研", "研究生", "复试", "调剂",
-                "留学", "出国", "申请", "选校", "gre", "toefl", "ielts", "雅思", "托福"));
-        int jobHits = countHits(lower, List.of("实习", "找工作", "秋招", "春招", "校招", "简历", "面试", "offer", "求职", "就业"));
-        UserIntent intent = postgradHits > jobHits ? UserIntent.POSTGRAD
-            : (jobHits > postgradHits ? UserIntent.JOB : UserIntent.UNKNOWN);
-        TargetIntent targetIntent = inferTargetIntent(lower);
-
-        Matcher schoolMatcher = SCHOOL_PATTERN.matcher(context);
-        String school = schoolMatcher.find() ? schoolMatcher.group(1) : "";
-
-        Matcher gpaMatcher = GPA_PATTERN.matcher(context);
-        String gpa = gpaMatcher.find() ? gpaMatcher.group(2) : "";
-        Matcher rankMatcher = RANK_PATTERN.matcher(context);
-        String rankPct = rankMatcher.find() ? rankMatcher.group(1).replace("rank", "").trim() : "";
-        Matcher stageMatcher = STAGE_PATTERN.matcher(context);
-        String stage = stageMatcher.find() ? stageMatcher.group(1) : "";
-
-        List<String> highlights = new ArrayList<>();
-        if (containsAny(context, List.of("实习", "intern"))) highlights.add("有实习经历");
-        if (containsAny(context, List.of("论文", "科研", "项目"))) highlights.add("有科研/项目经历");
-        if (containsAny(context, List.of("学生会", "社团", "志愿", "竞赛"))) highlights.add("有校内活动/竞赛经历");
-        String profileHighlights = String.join("，", highlights);
-
-        List<String> keywords = new ArrayList<>();
-        if (!school.isBlank()) keywords.add(school);
-        if (!stage.isBlank()) keywords.add(stage);
-        if (intent == UserIntent.POSTGRAD) keywords.addAll(List.of("考研", "保研", "上岸经验"));
-        if (intent == UserIntent.JOB) keywords.addAll(List.of("实习", "校招", "面试经验"));
-        if (targetIntent == TargetIntent.BAOYAN) keywords.add("保研");
-        if (targetIntent == TargetIntent.KAOYAN) keywords.add("考研");
-        if (targetIntent == TargetIntent.STUDY_ABROAD) keywords.addAll(List.of("留学", "申请", "选校"));
-        if (targetIntent == TargetIntent.JOB) keywords.add("就业");
-        if (containsAny(context, List.of("计算机", "cs", "软件", "人工智能", "电子", "通信"))) {
-            keywords.add("计算机");
-        }
-
-        String tier = resolveSchoolTier(school);
-        if ("普通院校".equals(tier)) {
-            tier = inferTierFromContext(lower);
-        }
-        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, rankPct, profileHighlights, keywords.stream().distinct().toList());
-    }
-
-    private String inferTierFromContext(String lowerContext) {
-        if (containsAny(lowerContext, List.of("c9"))) return "C9";
-        if (containsAny(lowerContext, List.of("985"))) return "985";
-        if (containsAny(lowerContext, List.of("211"))) return "211";
-        if (containsAny(lowerContext, List.of("双一流"))) return "双一流";
-        if (containsAny(lowerContext, List.of("一本"))) return "普通一本";
-        if (containsAny(lowerContext, List.of("双非", "二本", "四非", "非985", "非211"))) return "双非";
-        return "普通院校";
-    }
-
-    private Map<String, String> extractStructuredProfileData(List<Map<String, String>> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return Map.of();
-        }
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Map<String, String> m = messages.get(i);
-            if (!"user".equals(m.get("role"))) continue;
-            String content = m.get("content");
-            if (content == null) continue;
-            String trimmed = content.trim();
-            if (!trimmed.startsWith(PROFILE_DATA_PREFIX)) continue;
-
-            String payload = trimmed.substring(PROFILE_DATA_PREFIX.length()).trim();
-            if (payload.isBlank()) return Map.of();
-
-            Map<String, String> result = new HashMap<>();
-            for (String segment : payload.split("\\|")) {
-                int idx = segment.indexOf('=');
-                if (idx <= 0 || idx >= segment.length() - 1) continue;
-                String key = segment.substring(0, idx).trim().toLowerCase();
-                String value = segment.substring(idx + 1).trim();
-                if (!key.isBlank() && !value.isBlank()) {
-                    result.put(key, value);
-                }
-            }
-            return result;
-        }
-        return Map.of();
-    }
-
-    private UserProfile buildProfileFromStructuredData(Map<String, String> data, String latestQuery) {
-        String intentRaw = data.getOrDefault("intent", "");
-        TargetIntent targetIntent = mapTargetIntent(intentRaw);
-        UserIntent intent = mapUserIntent(targetIntent, intentRaw);
-
-        String school = data.getOrDefault("school", "");
-        String gpa = data.getOrDefault("gpa", "");
-        String rankPct = data.getOrDefault("rank", data.getOrDefault("rank_pct", ""));
-        String stage = data.getOrDefault("stage", "");
-
-        List<String> highlights = new ArrayList<>();
-        appendHighlight(highlights, data.get("internship"), "实习经历");
-        appendHighlight(highlights, data.get("research"), "科研/项目");
-        appendHighlight(highlights, data.get("competition"), "竞赛/活动");
-        String profileHighlights = String.join("；", highlights);
-
-        List<String> keywords = new ArrayList<>();
-        if (!school.isBlank()) keywords.add(school);
-        if (!stage.isBlank()) keywords.add(stage);
-        if (!gpa.isBlank()) keywords.add("GPA " + gpa);
-        if (targetIntent == TargetIntent.BAOYAN) keywords.addAll(List.of("保研", "推免", "夏令营"));
-        if (targetIntent == TargetIntent.KAOYAN) keywords.addAll(List.of("考研", "复试", "备考"));
-        if (targetIntent == TargetIntent.STUDY_ABROAD) keywords.addAll(List.of("留学", "申请", "选校", "出国"));
-        if (targetIntent == TargetIntent.JOB) keywords.addAll(List.of("就业", "实习", "校招"));
-        if (latestQuery != null && !latestQuery.isBlank()) {
-            keywords.addAll(List.of(latestQuery.split("\\s+")));
-        }
-        String tier = resolveSchoolTier(school);
-        return new UserProfile(intent, targetIntent, stage, school, tier, gpa, rankPct, profileHighlights, keywords.stream().filter(s -> s != null && !s.isBlank()).distinct().toList());
-    }
-
-    private TargetIntent inferTargetIntent(String lowerText) {
-        if (containsAny(lowerText, List.of("保研", "推免", "夏令营"))) return TargetIntent.BAOYAN;
-        if (containsAny(lowerText, List.of("考研", "复试", "调剂"))) return TargetIntent.KAOYAN;
-        if (containsAny(lowerText, List.of("留学", "出国", "申请", "选校", "gre", "toefl", "ielts", "雅思", "托福"))) return TargetIntent.STUDY_ABROAD;
-        if (containsAny(lowerText, List.of("就业", "实习", "秋招", "校招", "面试", "求职"))) return TargetIntent.JOB;
-        return TargetIntent.UNKNOWN;
-    }
-
-    private TargetIntent mapTargetIntent(String intentRaw) {
-        String normalized = intentRaw == null ? "" : intentRaw.trim().toLowerCase();
-        if (normalized.contains("保研") || normalized.contains("推免")) return TargetIntent.BAOYAN;
-        if (normalized.contains("考研")) return TargetIntent.KAOYAN;
-        if (normalized.contains("留学") || normalized.contains("出国")) return TargetIntent.STUDY_ABROAD;
-        if (normalized.contains("就业") || normalized.contains("实习") || normalized.contains("工作")) return TargetIntent.JOB;
-        return TargetIntent.UNKNOWN;
-    }
-
-    private UserIntent mapUserIntent(TargetIntent targetIntent, String rawIntent) {
-        if (targetIntent == TargetIntent.BAOYAN || targetIntent == TargetIntent.KAOYAN
-                || targetIntent == TargetIntent.STUDY_ABROAD) {
-            return UserIntent.POSTGRAD;
-        }
-        if (targetIntent == TargetIntent.JOB) {
-            return UserIntent.JOB;
-        }
-        String normalized = rawIntent == null ? "" : rawIntent.trim();
-        if (normalized.contains("还没想好")) return UserIntent.UNKNOWN;
-        return UserIntent.UNKNOWN;
-    }
-
-    private void appendHighlight(List<String> highlights, String value, String label) {
-        if (value != null && !value.isBlank()) {
-            highlights.add(label + "：" + value);
-        }
-    }
-
-    private String buildRecentUserContext(List<Map<String, String>> messages, String latestQuery) {
-        StringBuilder sb = new StringBuilder();
-        if (messages != null && !messages.isEmpty()) {
-            int count = 0;
-            for (int i = messages.size() - 1; i >= 0 && count < 6; i--) {
-                Map<String, String> m = messages.get(i);
-                if (!"user".equals(m.get("role"))) continue;
-                String content = m.get("content");
-                if (content == null || content.isBlank()) continue;
-                sb.append(content).append("\n");
-                count++;
-            }
-        }
-        if (latestQuery != null && !latestQuery.isBlank()) {
-            sb.append(latestQuery);
-        }
-        return sb.toString();
-    }
-
-    private String expandQuery(String query, UserProfile profile) {
-        StringBuilder sb = new StringBuilder(query == null ? "" : query);
-        if (profile != null) {
-            if (profile.targetIntent() == TargetIntent.BAOYAN) sb.append(" 保研 推免");
-            if (profile.targetIntent() == TargetIntent.KAOYAN) sb.append(" 考研 复试 调剂");
-            if (profile.targetIntent() == TargetIntent.JOB) sb.append(" 实习 校招 面试");
-            if (profile.stage() != null && !profile.stage().isBlank() && !sb.toString().contains(profile.stage())) {
-                sb.append(" ").append(profile.stage());
-            }
-        }
-        if (profile != null && profile.keywords() != null) {
-            for (String kw : profile.keywords()) {
-                if (kw != null && !kw.isBlank() && !sb.toString().contains(kw)) {
-                    sb.append(" ").append(kw);
-                }
-            }
-        }
-        return sb.toString().trim();
-    }
-
-    private double intentBoost(String category, UserIntent intent) {
-        String c = normalizeCategory(category);
-        if (intent == UserIntent.POSTGRAD && (c.contains("kaoyan") || c.contains("baoyan") || c.contains("study_abroad"))) return 3.0;
-        if (intent == UserIntent.JOB && c.contains("job")) return 3.0;
-        return 0.0;
-    }
-
-    private double targetIntentBoost(String category, TargetIntent targetIntent) {
-        String c = normalizeCategory(category);
-        if (targetIntent == TargetIntent.KAOYAN && c.contains("kaoyan")) return 4.0;
-        if (targetIntent == TargetIntent.BAOYAN && c.contains("baoyan")) return 4.0;
-        if (targetIntent == TargetIntent.STUDY_ABROAD && c.contains("study_abroad")) return 4.0;
-        if (targetIntent == TargetIntent.JOB && c.contains("job")) return 4.0;
-        return 0.0;
-    }
-
-    private boolean shouldUseHardCategoryFilter(UserProfile profile) {
-        return profile != null && (profile.intent() != UserIntent.UNKNOWN || profile.targetIntent() != TargetIntent.UNKNOWN);
-    }
-
-    private Set<String> resolveAllowedCategories(UserProfile profile) {
-        if (profile == null) return Set.of();
-        if (profile.targetIntent() == TargetIntent.BAOYAN) return Set.of("baoyan");
-        if (profile.targetIntent() == TargetIntent.KAOYAN) return Set.of("kaoyan");
-        if (profile.targetIntent() == TargetIntent.STUDY_ABROAD) return Set.of("study_abroad");
-        if (profile.targetIntent() == TargetIntent.JOB) return Set.of("job");
-        if (profile.intent() == UserIntent.POSTGRAD) return Set.of("baoyan", "kaoyan", "study_abroad");
-        if (profile.intent() == UserIntent.JOB) return Set.of("job");
-        return Set.of();
-    }
-
-    private String normalizeCategory(String category) {
-        return category == null ? "" : category.trim().toLowerCase();
-    }
-
-    private String normalizeTier(String tier) {
-        if (tier == null || tier.isBlank()) return "low";
-        return tier.trim().toLowerCase();
-    }
-
-    private String computeCaseTier(String category, double qualityScore) {
-        String c = normalizeCategory(category);
-        if ((c.equals("baoyan") || c.equals("kaoyan") || c.equals("job")) && qualityScore >= 20) return "high";
-        if (qualityScore >= 10) return "medium";
-        return "low";
-    }
-
-    private double relevanceTierBonus(String tier) {
-        String t = normalizeTier(tier);
-        if ("high".equals(t)) return 4.0;
-        if ("medium".equals(t)) return 1.5;
-        return 0.0;
-    }
-
-    private double schoolBonus(UserProfile profile, String searchable) {
-        if (profile == null) return 0.0;
-        double bonus = 0.0;
-        if (profile.school() != null && !profile.school().isBlank()
-                && searchable.contains(profile.school().toLowerCase())) {
-            bonus += 5.0;
-        }
-        if (profile.schoolTier() != null && !"未知".equals(profile.schoolTier()) && !"普通院校".equals(profile.schoolTier())) {
-            String tier = profile.schoolTier().toLowerCase();
-            if (searchable.contains(tier)) bonus += 3.0;
-            if ("985".equals(tier) || "c9".equals(tier)) {
-                if (searchable.contains("985") || searchable.contains("c9")) bonus += 2.0;
-            } else if ("211".equals(tier)) {
-                if (searchable.contains("211")) bonus += 2.0;
-            } else if (tier.contains("双非") || tier.contains("双一流学科")) {
-                if (searchable.contains("双非") || searchable.contains("非985")) bonus += 2.0;
-            }
-        }
-        return bonus;
-    }
-
-    private double profileSimilarityBonus(UserProfile profile, CrawledArticle article) {
-        if (profile == null || article == null) return 0.0;
-        double bonus = 0.0;
-        String articleTier = article.getExtractedSchoolTier();
-        if (articleTier == null || articleTier.isBlank() || "未知".equals(articleTier)) {
-            String fuzzy = resolveFuzzySchoolTier(article.getExtractedSchool());
-            if (fuzzy != null) articleTier = fuzzy;
-        }
-        bonus += tierSimilarityBonus(profile.schoolTier(), articleTier);
-        bonus += gpaSimilarityBonus(profile.gpa(), article.getExtractedGpa());
-        bonus += rankPctSimilarityBonus(profile, article);
-        bonus += outcomeMatchBonus(profile.targetIntent(), article.getExtractedOutcome());
-        bonus += schoolRankProximityBonus(profile.school(), article.getExtractedSchool());
-        bonus += experienceSimilarityBonus(profile.highlights(), article);
-        return bonus;
-    }
-
-    private double experienceSimilarityBonus(String userHighlights, CrawledArticle article) {
-        if (userHighlights == null || userHighlights.isBlank()) return 0.0;
-        double bonus = 0.0;
-        String h = userHighlights.toLowerCase();
-        if (h.contains("实习") && Boolean.TRUE.equals(article.getExtractedHasInternship())) bonus += 3.0;
-        if ((h.contains("科研") || h.contains("论文") || h.contains("项目")) && Boolean.TRUE.equals(article.getExtractedHasResearch())) bonus += 3.0;
-        if (h.contains("竞赛") && Boolean.TRUE.equals(article.getExtractedHasCompetition())) bonus += 3.0;
-        return bonus;
-    }
-
-    private double schoolRankProximityBonus(String userSchool, String articleSchool) {
-        if (userSchool == null || userSchool.isBlank() || articleSchool == null || articleSchool.isBlank()) return 0.0;
-        SchoolInfo userInfo = resolveSchool(userSchool);
-        SchoolInfo articleInfo = resolveSchool(articleSchool);
-        if (userInfo == null || articleInfo == null) return 0.0;
-
-        Integer uRank = userInfo.rank() != null ? userInfo.rank() : userInfo.qsRank();
-        Integer aRank = articleInfo.rank() != null ? articleInfo.rank() : articleInfo.qsRank();
-        if (uRank == null || aRank == null) return 0.0;
-
-        int diff = Math.abs(uRank - aRank);
-        if (diff <= 10) return 8.0;
-        if (diff <= 30) return 5.0;
-        if (diff <= 60) return 2.0;
-        return 0.0;
-    }
-
-    private static final Map<String, String> FUZZY_SCHOOL_TIER_MAP = Map.ofEntries(
-        Map.entry("华五", "C9"), Map.entry("top2", "C9"), Map.entry("清北", "C9"),
-        Map.entry("双九", "C9"), Map.entry("中九", "C9"), Map.entry("末九", "985"),
-        Map.entry("中9", "C9"),
-        Map.entry("某985", "985"), Map.entry("末流985", "985"), Map.entry("中流985", "985"),
-        Map.entry("末985", "985"), Map.entry("top985", "985"),
-        Map.entry("某211", "211"), Map.entry("末流211", "211"), Map.entry("中流211", "211"),
-        Map.entry("双非一本", "双非"), Map.entry("双非本科", "双非"), Map.entry("双非本", "双非"),
-        Map.entry("普通双非", "双非"), Map.entry("某双非", "双非"),
-        Map.entry("四非", "双非"), Map.entry("四非院校", "双非"),
-        Map.entry("普通一本", "普通一本"), Map.entry("省属一本", "普通一本"),
-        Map.entry("二本", "二本"), Map.entry("某二本", "二本"), Map.entry("普通二本", "二本")
-    );
-
-    public String resolveFuzzySchoolTier(String schoolDescription) {
-        if (schoolDescription == null || schoolDescription.isBlank()) return null;
-        String key = schoolDescription.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
-        for (Map.Entry<String, String> e : FUZZY_SCHOOL_TIER_MAP.entrySet()) {
-            if (key.equals(e.getKey()) || key.startsWith(e.getKey())) {
-                return e.getValue();
-            }
-        }
-        if (key.contains("985")) return "985";
-        if (key.contains("211")) return "211";
-        if (key.contains("双非") || key.contains("四非") || key.contains("非985") || key.contains("非211")) return "双非";
-        if (key.contains("一本")) return "普通一本";
-        if (key.contains("二本")) return "二本";
-        if (key.contains("c9")) return "C9";
-        return null;
-    }
-
-    private double tierSimilarityBonus(String userTier, String articleTier) {
-        String resolvedArticleTier = articleTier;
-        if ((resolvedArticleTier == null || resolvedArticleTier.isBlank() || "未知".equals(resolvedArticleTier))) {
-            return 0.0;
-        }
-        if (userTier == null || userTier.isBlank()) return 0.0;
-        int d = Math.abs(tierLevel(userTier) - tierLevel(resolvedArticleTier));
-        if (d == 0) return 6.0;
-        if (d == 1) return 3.0;
-        if (d == 2) return 1.0;
-        return 0.0;
-    }
-
-    private int tierLevel(String tier) {
-        String t = tier == null ? "" : tier.toLowerCase(Locale.ROOT);
-        if (t.contains("c9")) return 0;
-        if (t.contains("985")) return 1;
-        if (t.contains("211")) return 2;
-        if (t.contains("双一流")) return 3;
-        if (t.contains("双非") || t.contains("一本")) return 4;
-        if (t.contains("二本")) return 5;
-        return 6;
-    }
-
-    private double gpaSimilarityBonus(String userGpaRaw, String articleGpaRaw) {
-        Double ug = parseGpa(userGpaRaw);
-        Double ag = parseGpa(articleGpaRaw);
-        if (ug == null || ag == null) return 0.0;
-        double diff = Math.abs(ug - ag);
-        if (diff <= 0.3) return 8.0;
-        if (diff <= 0.6) return 4.0;
-        if (diff <= 1.0) return 1.0;
-        return 0.0;
-    }
-
-    private double rankPctSimilarityBonus(UserProfile profile, CrawledArticle article) {
-        Double userRank = parseRankPct(profile == null ? null : profile.rankPct());
-        Double articleRank = parseRankPct(article == null ? null : article.getExtractedRankPct());
-        if (userRank == null || articleRank == null) return 0.0;
-        double diff = Math.abs(userRank - articleRank);
-        if (diff <= 3.0) return 5.0;
-        if (diff <= 8.0) return 2.0;
-        return 0.0;
-    }
-
-    private double outcomeMatchBonus(TargetIntent targetIntent, String outcomeRaw) {
-        if (targetIntent == null || targetIntent == TargetIntent.UNKNOWN || outcomeRaw == null || outcomeRaw.isBlank()) return 0.0;
-        String o = outcomeRaw.toLowerCase(Locale.ROOT);
-        if (targetIntent == TargetIntent.BAOYAN && (o.contains("保研") || o.contains("推免"))) return 4.0;
-        if (targetIntent == TargetIntent.KAOYAN && o.contains("考研")) return 4.0;
-        if (targetIntent == TargetIntent.STUDY_ABROAD && (o.contains("留学") || o.contains("出国"))) return 4.0;
-        if (targetIntent == TargetIntent.JOB && (o.contains("就业") || o.contains("工作") || o.contains("实习"))) return 4.0;
-        return 0.0;
-    }
-
-    private Double parseGpa(String raw) {
-        if (raw == null || raw.isBlank()) return null;
-        Matcher m = Pattern.compile("([0-4](?:\\.[0-9]{1,2})?)").matcher(raw);
-        if (!m.find()) return null;
-        try {
-            return Double.parseDouble(m.group(1));
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private Double parseRankPct(String raw) {
-        if (raw == null || raw.isBlank()) return null;
-        Matcher m = Pattern.compile("([0-9]{1,2}(?:\\.[0-9])?)\\s*%").matcher(raw);
-        if (m.find()) {
-            try {
-                return Double.parseDouble(m.group(1));
-            } catch (Exception ignored) {
-                return null;
-            }
-        }
-        Matcher pctPhrase = Pattern.compile("前\\s*([0-9]{1,2}(?:\\.[0-9])?)").matcher(raw);
-        if (pctPhrase.find()) {
-            try {
-                return Double.parseDouble(pctPhrase.group(1));
-            } catch (Exception ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private double keywordBonus(UserProfile profile, String searchable) {
-        if (profile == null || profile.keywords() == null || profile.keywords().isEmpty()) {
-            return 0.0;
-        }
-        double bonus = 0.0;
-        for (String kw : profile.keywords()) {
-            if (kw == null || kw.isBlank()) continue;
-            if (searchable.contains(kw.toLowerCase())) {
-                bonus += 1.0;
-            }
-            if (bonus >= 5.0) break;
-        }
-        return bonus;
-    }
-
     public List<Map<String, Object>> buildSimilarCases(List<RetrievalResult> results, int limit) {
         if (results == null || results.isEmpty()) return List.of();
         return results.stream()
@@ -1149,20 +343,236 @@ public class RagService {
             .toList();
     }
 
-    private int countHits(String text, List<String> words) {
-        int score = 0;
-        for (String w : words) {
-            if (text.contains(w.toLowerCase())) score++;
-        }
-        return score;
+    // ─── Private retrieval logic ───
+
+    private List<RetrievalResult> doRetrieve(String query, int topK) {
+        return doRetrieve(query, safeProfile(null), topK);
     }
 
-    private boolean containsAny(String text, List<String> words) {
-        String lower = text.toLowerCase();
-        for (String w : words) {
-            if (lower.contains(w.toLowerCase())) return true;
+    private List<RetrievalResult> doRetrieve(String query, UserProfile profile, int topK) {
+        return doRetrieveDetailed(query, profile, topK).topResults();
+    }
+
+    private RetrievalComputation doRetrieveDetailed(String query, UserProfile profile, int topK) {
+        List<RetrievalResult> results = new ArrayList<>();
+        String expandedQuery = expandQuery(query, profile);
+
+        // 1. In-memory knowledge base chunks
+        results.addAll(retrieveFromKnowledgeBase(expandedQuery, Math.max(topK, 3)));
+
+        // 2. Career cases from database
+        results.addAll(retrieveFromCareerCases(expandedQuery, profile, 50));
+
+        // 3. Crawled articles from database
+        results.addAll(retrieveFromArticles(expandedQuery, profile, 50));
+
+        // Sort by score descending, take top-K
+        results.sort(Comparator.comparingDouble(RetrievalResult::score).reversed());
+        List<RetrievalResult> topResults = results.stream().limit(Math.max(1, topK)).toList();
+        return new RetrievalComputation(topResults, results.size());
+    }
+
+    private List<RetrievalResult> retrieveFromKnowledgeBase(String query, int topK) {
+        if (chunks.isEmpty()) return List.of();
+
+        String queryLower = query.toLowerCase();
+        record Scored(KnowledgeChunk chunk, double score) {}
+
+        return chunks.stream().map(chunk -> {
+            double score = 0;
+            for (String kw : chunk.keywords()) {
+                if (queryLower.contains(kw)) score += 3;
+            }
+            String contentLower = chunk.content().toLowerCase();
+            for (int i = 0; i < queryLower.length() - 1; i++) {
+                String bigram = queryLower.substring(i, i + 2);
+                if (contentLower.contains(bigram)) score += 1;
+            }
+            return new Scored(chunk, score);
+        }).filter(s -> s.score > 0)
+          .sorted(Comparator.comparingDouble(Scored::score).reversed())
+          .limit(topK)
+          .map(s -> new RetrievalResult(
+              "知识库片段",
+              truncate(s.chunk.content(), maxEvidenceChunkLength),
+              "kb:" + s.chunk.source(),
+              null,
+              "kb",
+              "medium",
+              s.score,
+              null, null, null, null, null, null
+          )).toList();
+    }
+
+    private List<RetrievalResult> retrieveFromCareerCases(String query, UserProfile profile, int limit) {
+        try {
+            List<CareerCase> cases = caseRepo.findCases(null, PageRequest.of(0, Math.max(limit, 50)));
+            if (cases.isEmpty()) return List.of();
+
+            String queryLower = query.toLowerCase();
+            Set<String> allowedCategories = scorer.resolveAllowedCategories(profile);
+            boolean useHardCategoryFilter = scorer.shouldUseHardCategoryFilter(profile);
+            return cases.stream()
+                .filter(c -> !useHardCategoryFilter || allowedCategories.contains(scorer.normalizeCategory(c.getCategory())))
+                .map(c -> {
+                    String searchable = ((c.getTitle() != null ? c.getTitle() : "") + " " +
+                        (c.getBackground() != null ? c.getBackground() : "") + " " +
+                        (c.getResult() != null ? c.getResult() : "") + " " +
+                        (c.getTags() != null ? c.getTags() : "")).toLowerCase();
+                    double score = 0;
+                    score += scorer.intentBoost(c.getCategory(), profile.intent());
+                    score += scorer.targetIntentBoost(c.getCategory(), profile.targetIntent());
+                    for (int i = 0; i < queryLower.length() - 1; i++) {
+                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
+                    }
+                    score += scorer.schoolBonus(profile, searchable);
+                    score += scorer.keywordBonus(profile, searchable);
+                    score += Math.min(c.getQualityScore() / 8.0, 10.0);
+                    return new Object[]{c, score};
+                })
+                .filter(pair -> ((double) pair[1]) > 2)
+                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
+                .limit(limit)
+                .map(pair -> {
+                    CareerCase c = (CareerCase) pair[0];
+                    String evidence = formatCaseEvidence(c);
+                    String category = scorer.normalizeCategory(c.getCategory());
+                    return new RetrievalResult(
+                        c.getTitle(),
+                        truncate(evidence, maxEvidenceChunkLength),
+                        "case:" + c.getSource(),
+                        c.getUrl(),
+                        category,
+                        scorer.computeCaseTier(category, c.getQualityScore()),
+                        (double) pair[1],
+                        null, null, null, null, null, null
+                    );
+                }).toList();
+        } catch (Exception e) {
+            log.warn("Career case retrieval failed: {}", e.getMessage());
+            return List.of();
         }
-        return false;
+    }
+
+    private List<RetrievalResult> retrieveFromArticles(String query, UserProfile profile, int limit) {
+        try {
+            List<CrawledArticle> articles = articleRepo.findArticles(null, PageRequest.of(0, Math.max(limit, 50)));
+            if (articles.isEmpty()) return List.of();
+
+            String queryLower = query.toLowerCase();
+            Set<String> allowedCategories = scorer.resolveAllowedCategories(profile);
+            boolean useHardCategoryFilter = scorer.shouldUseHardCategoryFilter(profile);
+            return articles.stream()
+                .filter(a -> !useHardCategoryFilter || allowedCategories.contains(scorer.normalizeCategory(a.getCategory())))
+                .map(a -> {
+                    String searchable = ((a.getTitle() != null ? a.getTitle() : "") + " " +
+                        (a.getSummary() != null ? a.getSummary() : "") + " " +
+                        (a.getContentSnippet() != null ? a.getContentSnippet() : "")).toLowerCase();
+                    double score = 0;
+                    score += scorer.intentBoost(a.getCategory(), profile.intent());
+                    score += scorer.targetIntentBoost(a.getCategory(), profile.targetIntent());
+                    for (int i = 0; i < queryLower.length() - 1; i++) {
+                        if (searchable.contains(queryLower.substring(i, i + 2))) score += 1;
+                    }
+                    score += scorer.schoolBonus(profile, searchable);
+                    score += scorer.keywordBonus(profile, searchable);
+                    score += scorer.profileSimilarityBonus(profile, a);
+                    score += Math.min(a.getQualityScore() / 10.0, 8.0);
+                    score += scorer.relevanceTierBonus(a.getRelevanceTier());
+                    return new Object[]{a, score};
+                })
+                .filter(pair -> ((double) pair[1]) > 2)
+                .sorted((a, b) -> Double.compare((double) b[1], (double) a[1]))
+                .limit(limit)
+                .map(pair -> {
+                    CrawledArticle a = (CrawledArticle) pair[0];
+                    String content = a.getContentSnippet() != null && !a.getContentSnippet().isBlank()
+                        ? a.getContentSnippet()
+                        : (a.getSummary() != null ? a.getSummary() : a.getTitle());
+                    return new RetrievalResult(
+                        a.getTitle(),
+                        truncate(content, maxEvidenceChunkLength),
+                        "article:" + a.getSourceName(),
+                        a.getUrl(),
+                        scorer.normalizeCategory(a.getCategory()),
+                        scorer.normalizeTier(a.getRelevanceTier()),
+                        (double) pair[1],
+                        a.getExtractedSchool(),
+                        a.getExtractedSchoolTier(),
+                        a.getExtractedGpa(),
+                        a.getExtractedRankPct(),
+                        a.getExtractedOutcome(),
+                        a.getExtractedDestSchool()
+                    );
+                }).toList();
+        } catch (Exception e) {
+            log.warn("Article retrieval failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    // ─── Helpers ───
+
+    private UserProfile safeProfile(UserProfile profile) {
+        return profile != null
+            ? profile
+            : new UserProfile(UserIntent.UNKNOWN, TargetIntent.UNKNOWN, "", "", "未知", "", "", "", List.of());
+    }
+
+    private String formatCaseEvidence(CareerCase c) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("【真实案例】").append(c.getTitle()).append("\n");
+        if (c.getBackground() != null && !c.getBackground().isBlank()) {
+            sb.append("背景：").append(c.getBackground()).append("\n");
+        }
+        if (c.getResult() != null && !c.getResult().isBlank()) {
+            sb.append("结果：").append(c.getResult()).append("\n");
+        }
+        if (c.getTags() != null && !c.getTags().isBlank()) {
+            sb.append("标签：").append(c.getTags());
+        }
+        return sb.toString();
+    }
+
+    private String expandQuery(String query, UserProfile profile) {
+        StringBuilder sb = new StringBuilder(query == null ? "" : query);
+        if (profile != null) {
+            if (profile.targetIntent() == TargetIntent.BAOYAN) sb.append(" 保研 推免");
+            if (profile.targetIntent() == TargetIntent.KAOYAN) sb.append(" 考研 复试 调剂");
+            if (profile.targetIntent() == TargetIntent.JOB) sb.append(" 实习 校招 面试");
+            if (profile.stage() != null && !profile.stage().isBlank() && !sb.toString().contains(profile.stage())) {
+                sb.append(" ").append(profile.stage());
+            }
+        }
+        if (profile != null && profile.keywords() != null) {
+            for (String kw : profile.keywords()) {
+                if (kw != null && !kw.isBlank() && !sb.toString().contains(kw)) {
+                    sb.append(" ").append(kw);
+                }
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    private String truncate(String text, int maxLen) {
+        if (text.length() <= maxLen) return text;
+        return text.substring(0, maxLen) + "...";
+    }
+
+    private String hashQuery(String query) {
+        int hash = query.hashCode();
+        return Integer.toHexString(hash);
+    }
+
+    private String normalizeSourceType(String source) {
+        if (source == null || source.isBlank()) {
+            return "unknown";
+        }
+        int idx = source.indexOf(':');
+        if (idx <= 0) {
+            return source.trim().toLowerCase(Locale.ROOT);
+        }
+        return source.substring(0, idx).trim().toLowerCase(Locale.ROOT);
     }
 
     private record RetrievalComputation(List<RetrievalResult> topResults, int totalCandidates) {}

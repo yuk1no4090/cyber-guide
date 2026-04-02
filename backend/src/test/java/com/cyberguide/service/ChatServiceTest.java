@@ -4,6 +4,7 @@ import com.cyberguide.ai.AiClient;
 import com.cyberguide.event.ChatCompletedEvent;
 import com.cyberguide.event.CrisisDetectedEvent;
 import com.cyberguide.rag.RagService;
+import com.cyberguide.rag.UserProfileInferrer;
 import com.cyberguide.service.pipeline.MessageContext;
 import com.cyberguide.service.pipeline.MessagePipeline;
 import com.cyberguide.service.strategy.ChatStrategy;
@@ -111,9 +112,9 @@ class ChatServiceTest {
         List<Map<String, String>> messages = List.of(
             Map.of("role", "user", "content", "hello")
         );
-        RagService.UserProfile profile = new RagService.UserProfile(
-            RagService.UserIntent.UNKNOWN,
-            RagService.TargetIntent.UNKNOWN,
+        UserProfileInferrer.UserProfile profile = new UserProfileInferrer.UserProfile(
+            UserProfileInferrer.UserIntent.UNKNOWN,
+            UserProfileInferrer.TargetIntent.UNKNOWN,
             "",
             "",
             "未知",
@@ -166,8 +167,8 @@ class ChatServiceTest {
         List<Map<String, String>> messages = List.of(
             Map.of("role", "user", "content", "hello")
         );
-        RagService.UserProfile profile = new RagService.UserProfile(
-            RagService.UserIntent.UNKNOWN, RagService.TargetIntent.UNKNOWN,
+        UserProfileInferrer.UserProfile profile = new UserProfileInferrer.UserProfile(
+            UserProfileInferrer.UserIntent.UNKNOWN, UserProfileInferrer.TargetIntent.UNKNOWN,
             "", "", "未知", "", "", "", List.of()
         );
         List<RagService.RetrievalResult> retrieved = List.of(

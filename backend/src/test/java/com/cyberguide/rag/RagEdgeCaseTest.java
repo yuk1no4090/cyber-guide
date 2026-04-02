@@ -25,10 +25,15 @@ class RagEdgeCaseTest {
     @Mock private CrawledArticleRepository articleRepo;
 
     private RagService ragService;
+    private UniversityResolver universityResolver;
+    private UserProfileInferrer profileInferrer;
 
     @BeforeEach
     void setUp() {
-        ragService = new RagService(cacheGuard, caseRepo, articleRepo);
+        universityResolver = new UniversityResolver();
+        profileInferrer = new UserProfileInferrer(universityResolver);
+        var scorer = new RetrievalScorer(universityResolver);
+        ragService = new RagService(cacheGuard, caseRepo, articleRepo, universityResolver, profileInferrer, scorer);
         // Skip knowledge base loading (no files in test env)
     }
 
@@ -38,7 +43,7 @@ class RagEdgeCaseTest {
     void inferProfileFromEmptyMessages() {
         var profile = ragService.inferUserProfile(List.of(), "你好");
         assertNotNull(profile);
-        assertEquals(RagService.UserIntent.UNKNOWN, profile.intent());
+        assertEquals(UserProfileInferrer.UserIntent.UNKNOWN, profile.intent());
     }
 
     @Test
@@ -54,8 +59,8 @@ class RagEdgeCaseTest {
             Map.of("role", "user", "content", "推免需要什么条件")
         );
         var profile = ragService.inferUserProfile(messages, "保研经验");
-        assertEquals(RagService.UserIntent.POSTGRAD, profile.intent());
-        assertEquals(RagService.TargetIntent.BAOYAN, profile.targetIntent());
+        assertEquals(UserProfileInferrer.UserIntent.POSTGRAD, profile.intent());
+        assertEquals(UserProfileInferrer.TargetIntent.BAOYAN, profile.targetIntent());
     }
 
     @Test
@@ -65,7 +70,7 @@ class RagEdgeCaseTest {
             Map.of("role", "user", "content", "简历投递有什么技巧")
         );
         var profile = ragService.inferUserProfile(messages, "找实习");
-        assertEquals(RagService.UserIntent.JOB, profile.intent());
+        assertEquals(UserProfileInferrer.UserIntent.JOB, profile.intent());
     }
 
     @Test
@@ -88,7 +93,7 @@ class RagEdgeCaseTest {
         var profile = ragService.inferUserProfile(messages, "");
         assertEquals("清华大学", profile.school());
         assertEquals("3.9", profile.gpa());
-        assertEquals(RagService.TargetIntent.BAOYAN, profile.targetIntent());
+        assertEquals(UserProfileInferrer.TargetIntent.BAOYAN, profile.targetIntent());
     }
 
     @Test
@@ -108,7 +113,7 @@ class RagEdgeCaseTest {
         );
         var profile = ragService.inferUserProfile(messages, "你好");
         assertNotNull(profile);
-        assertEquals(RagService.UserIntent.UNKNOWN, profile.intent());
+        assertEquals(UserProfileInferrer.UserIntent.UNKNOWN, profile.intent());
     }
 
     // ── Retrieval edge cases ──
@@ -148,9 +153,9 @@ class RagEdgeCaseTest {
 
     @Test
     void formatEvidenceIncludesUserContext() {
-        var profile = new RagService.UserProfile(
-            RagService.UserIntent.POSTGRAD,
-            RagService.TargetIntent.BAOYAN,
+        var profile = new UserProfileInferrer.UserProfile(
+            UserProfileInferrer.UserIntent.POSTGRAD,
+            UserProfileInferrer.TargetIntent.BAOYAN,
             "大三",
             "清华大学",
             "C9",

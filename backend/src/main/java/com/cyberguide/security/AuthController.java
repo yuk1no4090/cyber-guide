@@ -3,6 +3,8 @@ package com.cyberguide.security;
 import com.cyberguide.controller.ApiResponse;
 import com.cyberguide.exception.BizException;
 import com.cyberguide.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +27,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Auth", description = "Authentication — anonymous token, login, register, GitHub OAuth")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
@@ -60,6 +63,7 @@ public class AuthController {
      * The frontend calls this on first load to get a JWT.
      */
     @PostMapping("/anonymous")
+    @Operation(summary = "Issue an anonymous session token")
     public ResponseEntity<?> anonymous(@RequestBody(required = false) Map<String, String> body) {
         String sessionId = (body != null && body.containsKey("session_id"))
                 ? body.get("session_id")
@@ -76,6 +80,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Operation(summary = "Register a new user with email and password")
     public ResponseEntity<?> register(@RequestBody RegisterBody body) {
         if (body == null) {
             throw new BizException(ErrorCode.INVALID_REQUEST);
@@ -95,6 +100,7 @@ public class AuthController {
     }
 
     @PostMapping("/email-code/send")
+    @Operation(summary = "Send a verification code to the given email")
     public ResponseEntity<?> sendEmailCode(@RequestBody EmailCodeSendBody body) {
         if (body == null || body.email() == null || body.email().isBlank()) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "email 不能为空");
@@ -108,6 +114,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Login with email and password")
     public ResponseEntity<?> login(@RequestBody LoginBody body) {
         if (body == null) {
             throw new BizException(ErrorCode.INVALID_REQUEST);
@@ -122,6 +129,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Get current user info")
     public ResponseEntity<?> me() {
         AuthPrincipal principal = SecurityUtils.currentPrincipal()
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
@@ -142,6 +150,7 @@ public class AuthController {
     }
 
     @GetMapping("/github")
+    @Operation(summary = "Redirect to GitHub OAuth authorization page")
     public ResponseEntity<Void> githubAuth(@RequestParam(name = "redirect_uri", required = false) String redirectUri) {
         if (githubClientId == null || githubClientId.isBlank()) {
             throw new BizException(ErrorCode.INVALID_REQUEST, "GitHub OAuth 尚未配置");
@@ -166,6 +175,7 @@ public class AuthController {
     }
 
     @GetMapping("/github/callback")
+    @Operation(summary = "GitHub OAuth callback — exchanges code for token")
     public ResponseEntity<Void> githubCallback(@RequestParam String code,
                                                @RequestParam(required = false) String state) {
         AuthService.AuthResult result = authService.loginWithGithubCode(code);
@@ -181,6 +191,7 @@ public class AuthController {
     }
 
     @PostMapping("/upgrade")
+    @Operation(summary = "Upgrade anonymous session data to a logged-in user")
     public ResponseEntity<?> upgrade(@RequestBody UpgradeBody body) {
         if (body == null || body.session_id() == null || body.session_id().isBlank()) {
             throw new BizException(ErrorCode.INVALID_SESSION_ID);

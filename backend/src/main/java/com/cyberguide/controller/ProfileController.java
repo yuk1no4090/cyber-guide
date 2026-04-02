@@ -8,6 +8,8 @@ import com.cyberguide.security.SecurityUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +19,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/profile")
+@Tag(name = "Profile", description = "User profile (structured background data)")
 public class ProfileController {
 
     private final UserRepository userRepository;
@@ -28,6 +31,7 @@ public class ProfileController {
     }
 
     @GetMapping
+    @Operation(summary = "Get the current user's profile")
     public ResponseEntity<?> getProfile() {
         User user = currentUser();
         Map<String, Object> profile = parseProfile(user.getProfileJson());
@@ -35,6 +39,7 @@ public class ProfileController {
     }
 
     @PutMapping
+    @Operation(summary = "Update the current user's profile")
     public ResponseEntity<?> updateProfile(@RequestBody Map<String, Object> profile) {
         User user = currentUser();
         try {

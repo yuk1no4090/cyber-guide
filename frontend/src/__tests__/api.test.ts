@@ -5,6 +5,7 @@ function mockJsonResponse(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(),
     json: vi.fn().mockResolvedValue(body),
   } as unknown as Response;
 }
