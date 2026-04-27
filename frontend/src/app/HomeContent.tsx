@@ -489,11 +489,12 @@ export default function HomeContent() {
 
   return (
     <>
-      <div className="flex h-screen h-[100dvh] overflow-hidden">
+      <div className="bg-gradient-mesh flex h-screen overflow-hidden text-slate-900 dark:text-slate-100">
+        {/* Sidebar */}
         <aside
-          className={`overflow-hidden transition-all duration-200 ease-out ${
-            sidebarOpen ? 'flex-[1_1_0%] max-w-[300px]' : 'flex-[0_0_0px] max-w-0'
-          }`}
+          className={`${
+            sidebarOpen ? 'translate-x-0 md:w-[260px]' : '-translate-x-full md:w-0'
+          } fixed md:relative z-30 left-0 top-0 h-full w-[260px] overflow-hidden transition-[transform,width] duration-300 ease-in-out md:translate-x-0`}
         >
           <Sidebar
             sessions={sessions}
@@ -501,6 +502,7 @@ export default function HomeContent() {
             darkMode={darkMode}
             user={user}
             onToggleDarkMode={toggleDarkMode}
+            onToggleSidebar={() => setSidebarOpen(false)}
             onSelectSession={loadSessionMessages}
             onNewSession={doResetChat}
             onRenameSession={renameSession}
@@ -509,19 +511,17 @@ export default function HomeContent() {
             onLogout={logout}
           />
         </aside>
-        <div className="cg-chat-shell chat-container flex flex-col h-screen h-[100dvh] flex-[3_1_0%] min-w-0 relative">
-          <button
-            onClick={() => setSidebarOpen((v) => !v)}
-            className={`absolute left-3 top-3 z-30 rounded-lg border px-2 py-1.5 text-xs shadow-sm backdrop-blur ${
-              darkMode
-                ? 'border-slate-700 bg-slate-900/90 text-slate-200 hover:bg-slate-800'
-                : 'border-slate-300 bg-white/90 text-slate-700 hover:bg-slate-50'
-            }`}
-            aria-label="切换侧边栏"
-          >
-            ☰
-          </button>
 
+        {/* Mobile overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-20 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Main area */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <ChatHeader
             mode={mode}
             darkMode={darkMode}
@@ -538,6 +538,8 @@ export default function HomeContent() {
             reportContent={reportContent}
             profileMessages={profileMessages}
             messages={messages}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((v) => !v)}
             onToggleDarkMode={toggleDarkMode}
             onToggleDataOptIn={toggleDataOptIn}
             onLoginClick={() => setShowLoginModal(true)}
@@ -555,17 +557,17 @@ export default function HomeContent() {
             isLoading={isLoading}
             isSessionLoading={isSessionLoading}
             currentMessages={currentMessages}
-            plans={plans}
-            todayPlan={todayPlan}
-            todayIndex={todayIndex}
-            isPlanLoading={isPlanLoading}
-            isPlanActing={isPlanActing}
-            planError={planError}
-            sessionId={sessionId}
+              plans={plans}
+              todayPlan={todayPlan}
+              todayIndex={todayIndex}
+              isPlanLoading={isPlanLoading}
+              isPlanActing={isPlanActing}
+              planError={planError}
+              sessionId={sessionId}
             messages={messages}
             onUpdatePlanStatus={updateTodayPlanStatus}
             onRegeneratePlan={regenerateTodayPlan}
-            onGeneratePlan={generatePlan}
+              onGeneratePlan={generatePlan}
             selectedScenario={selectedScenario}
             onSelectScenario={setSelectedScenario}
             scenarioCopied={scenarioCopied}
@@ -578,7 +580,7 @@ export default function HomeContent() {
             reportContent={reportContent}
             onCloseReport={backToChat}
             similarCases={similarCases}
-            recap={recap}
+              recap={recap}
             recapMeta={recapMeta}
             onCloseRecap={() => setRecap(null)}
             showFeedback={showFeedback}
@@ -587,18 +589,18 @@ export default function HomeContent() {
             onSubmitFeedback={submitFeedback}
             onSkipFeedback={handleFeedbackSkip}
             onShowFeedback={() => setShowFeedback(true)}
-            suggestions={suggestions}
+              suggestions={suggestions}
             onSelectSuggestion={sendMessage}
             messagesEndRef={messagesEndRef}
           />
 
-          <footer className="glass safe-bottom sticky bottom-0 z-20 border-t border-slate-200/60 dark:border-slate-700/60">
-            <div className="px-3 sm:px-5 lg:px-8 pt-3 pb-3">
-              <ChatInput
-                onSend={sendMessage}
-                disabled={isLoading || isRecapLoading || !!reportContent || showProfileForm}
-              />
-            </div>
+          <footer className="border-t border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-[#0f172a]/90 px-4 pt-3 pb-4 backdrop-blur-xl">
+            <div className="max-w-3xl mx-auto">
+          <ChatInput
+            onSend={sendMessage}
+            disabled={isLoading || isRecapLoading || !!reportContent || showProfileForm}
+          />
+        </div>
           </footer>
         </div>
       </div>

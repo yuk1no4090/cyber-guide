@@ -17,6 +17,8 @@ interface ChatHeaderProps {
   reportContent: string | null;
   profileMessages: Array<{ role: string; content: string }>;
   messages: Array<{ role: string; content: string }>;
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
   onToggleDarkMode: () => void;
   onToggleDataOptIn: () => void;
   onLoginClick: () => void;
@@ -42,6 +44,8 @@ export default function ChatHeader({
   reportContent,
   profileMessages,
   messages,
+  sidebarOpen,
+  onToggleSidebar,
   onToggleDarkMode,
   onToggleDataOptIn,
   onLoginClick,
@@ -53,114 +57,111 @@ export default function ChatHeader({
   onDismissDisclaimer,
 }: ChatHeaderProps) {
   return (
-    <header className="glass safe-top sticky top-0 z-20 border-b border-slate-200/60 dark:border-slate-700/60">
-      <div className="pl-12 pr-4 sm:pl-14 sm:pr-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="relative pulse-online w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-sky-400 via-blue-400 to-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
-            <span className="text-base sm:text-lg">🛶</span>
+    <header className="h-14 flex items-center gap-3 px-4 border-b border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-[#0f172a]/90 backdrop-blur-xl shrink-0 sticky top-0 z-20">
+      {/* Sidebar toggle (mobile) */}
+      {onToggleSidebar && (
+        <button
+          onClick={onToggleSidebar}
+          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
+
+      {!sidebarOpen && (
+        <div className="hidden sm:flex items-center gap-2 mr-1">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-sm shadow-sky-200 dark:shadow-sky-950/40">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+            </svg>
           </div>
-          <div>
-            <h1 className="font-semibold text-[15px] sm:text-base text-slate-800 dark:text-slate-100 leading-tight tracking-tight">
-              小舟 · Cyber Guide
-            </h1>
-            <p className="text-[11px] text-sky-500 dark:text-sky-300 leading-tight">
-              {mode === 'chat' ? '在线 · 渡你过河的 CS 小船' : mode === 'profile_other' ? '🔍 读人模式' : '📋 画像分析模式'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto">
-          <button
-            onClick={onToggleDarkMode}
-            className={`shrink-0 h-8 w-8 rounded-lg border text-sm flex items-center justify-center transition-colors ${
-              darkMode
-                ? 'text-amber-100 bg-amber-900/35 border-amber-700 hover:bg-amber-900/55'
-                : 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100'
-            }`}
-            title={darkMode ? '切换到浅色模式' : '切换到深色模式'}
-            aria-label={darkMode ? '切换到浅色模式' : '切换到深色模式'}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          {!authLoading && !isLoggedIn && (
-            <button
-              onClick={onLoginClick}
-              className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-sky-600 dark:text-sky-50 bg-sky-50 dark:bg-sky-800/70 border border-sky-200 dark:border-sky-600 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-700/80 transition-colors"
-            >
-              登录
-            </button>
-          )}
-          {!isProfileMode ? (
-            <>
-              {messages.length > 1 && (
-                <button
-                  onClick={onStartNewChat}
-                  className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-slate-500 dark:text-slate-100 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                >
-                  ✨ 新对话
-                </button>
-              )}
-              {canGenerateRecap && (
-                <button
-                  onClick={onGenerateRecap}
-                  disabled={isRecapLoading}
-                  className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-indigo-600 dark:text-indigo-50 bg-indigo-50 dark:bg-indigo-800/70 border border-indigo-200 dark:border-indigo-600 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-700/80 disabled:opacity-40 transition-colors"
-                >
-                  {isRecapLoading ? '生成中...' : '🧭 复盘卡'}
-                </button>
-              )}
-              <button
-                onClick={onStartProfile}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-sky-600 dark:text-sky-50 bg-sky-50 dark:bg-sky-800/70 border border-sky-200 dark:border-sky-600 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-700/80 transition-colors"
-              >
-                📋 画像
-              </button>
-              <button
-                onClick={onToggleDataOptIn}
-                title={dataOptIn ? '已开启匿名指标记录（点击关闭）' : '已关闭匿名指标记录（点击开启）'}
-                className={`shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] rounded-lg border transition-colors ${
-                  dataOptIn
-                    ? 'text-emerald-600 dark:text-emerald-50 bg-emerald-50 dark:bg-emerald-800/65 border-emerald-200 dark:border-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-700/80'
-                    : 'text-slate-500 dark:text-slate-100 bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
-                }`}
-              >
-                {dataOptIn ? '🔓 记录' : '🔒 记录'}
-              </button>
-            </>
-          ) : (
-            <div className="flex gap-1.5">
-              {!reportContent && profileMessages.filter(m => m.role === 'user' && m.content.length > 5).length >= 2 && (
-                <button
-                  onClick={onGenerateReport}
-                  disabled={isLoading}
-                  className="px-2 py-1.5 text-[12px] text-emerald-600 dark:text-emerald-50 bg-emerald-50 dark:bg-emerald-800/65 border border-emerald-200 dark:border-emerald-600 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-700/80 disabled:opacity-40 transition-colors"
-                >
-                  ✨ 生成{mode === 'profile_other' ? '分析' : '画像'}
-                </button>
-              )}
-              <button
-                onClick={onBackToChat}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-[12px] text-slate-500 dark:text-slate-100 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-              >
-                返回聊天
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      {showDisclaimer && !isProfileMode && (
-        <div className="disclaimer-bar px-4 py-1.5 flex items-center justify-between gap-2">
-          <p className="text-[11px] sm:text-xs text-amber-600/70 dark:text-amber-300/80 flex-1 text-center">
-            <span className="mr-1">🛶</span>
-            小舟是 AI 陪伴工具，分享的经验仅供参考，不替代专业咨询
-          </p>
-          <button
-            onClick={onDismissDisclaimer}
-            className="text-amber-500/50 dark:text-amber-300/70 hover:text-amber-600 dark:hover:text-amber-200 text-xs p-1 transition-colors flex-shrink-0"
-          >
-            ✕
-          </button>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Cyber Guide</span>
         </div>
       )}
+
+      {/* Session title */}
+      <div className="flex-1 min-w-0">
+        <h1 className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+          {mode === 'chat' ? 'Cyber Guide' : mode === 'profile_other' ? '读人模式' : '画像分析'}
+        </h1>
+      </div>
+
+      {/* Right actions */}
+      <div className="flex items-center gap-2">
+        {!isProfileMode ? (
+          <>
+            {messages.length > 1 && (
+              <button
+                onClick={onStartNewChat}
+                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
+              >
+                新对话
+              </button>
+            )}
+            {canGenerateRecap && (
+              <button
+                onClick={onGenerateRecap}
+                disabled={isRecapLoading}
+                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-40 transition-all duration-150"
+              >
+                {isRecapLoading ? '生成中...' : '复盘'}
+              </button>
+            )}
+            <button
+              onClick={onStartProfile}
+              className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
+            >
+              画像
+            </button>
+          </>
+        ) : (
+          <>
+            {!reportContent && profileMessages.filter(m => m.role === 'user' && m.content.length > 5).length >= 2 && (
+              <button
+                onClick={onGenerateReport}
+                disabled={isLoading}
+                className="shrink-0 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-40 transition-all duration-150"
+              >
+                生成{mode === 'profile_other' ? '分析' : '画像'}
+              </button>
+            )}
+            <button
+              onClick={onBackToChat}
+              className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
+            >
+              返回
+            </button>
+          </>
+        )}
+
+        <button
+          onClick={onToggleDarkMode}
+          title={darkMode ? '切换浅色' : '切换深色'}
+          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          {darkMode ? (
+            <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          )}
+        </button>
+
+        {!authLoading && !isLoggedIn && (
+          <button
+            onClick={onLoginClick}
+            className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
+          >
+            登录
+          </button>
+        )}
+      </div>
     </header>
   );
 }
