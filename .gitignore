@@ -62,3 +62,9 @@ pgdata/
 .idea/
 *.iml
 .vscode/
+
+# 本地原型与个人文件（不纳入版本库）
+/AI 学业职业规划助手/
+个人简历.docx
+个人简历.pdf
+CLAUDE.md
