@@ -84,6 +84,8 @@ security:
       redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:8080/api/auth/github/callback}
       frontend-callback: ${GITHUB_FRONTEND_CALLBACK:http://localhost:3000}
       allowed-redirect-origins: ${GITHUB_ALLOWED_REDIRECT_ORIGINS:http://localhost:3000}
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,https://*.cyberguide.dev}
 
 # Resilience4j
 resilience4j:

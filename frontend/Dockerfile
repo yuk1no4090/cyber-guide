@@ -1,5 +1,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+ARG INTERNAL_API_BASE_URL=http://localhost:8080
+ARG NEXT_PUBLIC_API_BASE_URL=
+ENV INTERNAL_API_BASE_URL=${INTERNAL_API_BASE_URL}
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install
 COPY . .

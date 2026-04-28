@@ -177,13 +177,18 @@ export default function LoginModal({
               loading ||
               !email ||
               password.length < 6 ||
-              (mode === 'register' && (emailCode.trim().length < 4 || confirmPassword.length < 6))
+              (mode === 'register' && confirmPassword.length < 6)
             }
             onClick={submit}
             className="w-full rounded-lg bg-gradient-to-r from-sky-500 via-cyan-500 to-sky-600 px-3 py-2 text-sm font-medium text-white hover:brightness-105 disabled:opacity-50"
           >
             {loading ? '处理中...' : mode === 'login' ? '登录' : '注册'}
           </button>
+          {mode === 'register' && (
+            <p className="text-[12px] text-slate-400 dark:text-slate-500">
+              若当前环境未开启邮箱验证，可直接注册；若已开启，后端会校验验证码。
+            </p>
+          )}
 
           <button
             onClick={onGithub}

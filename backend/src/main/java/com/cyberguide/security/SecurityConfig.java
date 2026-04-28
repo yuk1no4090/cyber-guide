@@ -2,6 +2,7 @@ package com.cyberguide.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -30,6 +31,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
+    @Value("${security.cors.allowed-origin-patterns:http://localhost:*,https://*.cyberguide.dev}")
+    private String allowedOriginPatterns;
 
     public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
         this.jwtFilter = jwtFilter;
@@ -69,10 +72,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of(
-            "http://localhost:*",
-            "https://*.cyberguide.dev"
-        ));
+        config.setAllowedOriginPatterns(
+            java.util.Arrays.stream(allowedOriginPatterns.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList()
+        );
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

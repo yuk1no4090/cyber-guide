@@ -51,6 +51,23 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-glm-4.6}
       OPENAI_FALLBACK_MODEL: ${OPENAI_FALLBACK_MODEL:-}
       OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-25000}
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      EMAIL_CODE_ENABLED: ${EMAIL_CODE_ENABLED:-false}
+      EMAIL_CODE_DEV_LOG_ONLY: ${EMAIL_CODE_DEV_LOG_ONLY:-true}
+      EMAIL_CODE_FROM: ${EMAIL_CODE_FROM:-}
+      EMAIL_CODE_HASH_PEPPER: ${EMAIL_CODE_HASH_PEPPER:-cyber-guide-email-code-pepper}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-}
+      GITHUB_FRONTEND_CALLBACK: ${GITHUB_FRONTEND_CALLBACK:-}
+      GITHUB_ALLOWED_REDIRECT_ORIGINS: ${GITHUB_ALLOWED_REDIRECT_ORIGINS:-}
+      CORS_ALLOWED_ORIGIN_PATTERNS: ${CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:*,https://*.cyberguide.dev}
       RAG_KNOWLEDGE_BASE_PATH: /app/knowledge_base
     ports:
       - "${BACKEND_PORT:-8080}:8080"
@@ -58,12 +75,17 @@ services:
       - ./knowledge_base:/app/knowledge_base:ro
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8080}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
     restart: unless-stopped
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://backend:8080
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 
