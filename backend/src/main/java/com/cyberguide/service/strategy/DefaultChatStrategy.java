@@ -70,9 +70,9 @@ public class DefaultChatStrategy implements ChatStrategy {
     private String cleanPlaceholderLinks(String text) {
         if (text == null || text.isBlank()) return "";
         return text
-            .replaceAll("\\\\[([^\\\\]]+)\\\\]\\\\(https?://x+[^)]*\\\\)", "$1")
-            .replaceAll("https?://x+(?:\\\\.[A-Za-z0-9_-]+)*(?:/\\\\S*)?", "")
-            .replaceAll("https?://example\\\\.com(?:/\\\\S*)?", "")
+            .replaceAll("\\[([^\\]]+)\\]\\(https?://x+[^)]*\\)", "$1")
+            .replaceAll("https?://x+(?:\\.[A-Za-z0-9_-]+)*(?:/\\S*)?", "")
+            .replaceAll("https?://example\\.com(?:/\\S*)?", "")
             .replaceAll("\\n{3,}", "\n\n")
             .trim();
     }
