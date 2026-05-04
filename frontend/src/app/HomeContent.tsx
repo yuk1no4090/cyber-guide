@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import AppShell from './components/AppShell';
 import ChatInput from './components/ChatInput';
 import ChatHeader from './components/ChatHeader';
 import MessageArea from './components/MessageArea';
@@ -489,20 +490,20 @@ export default function HomeContent() {
 
   return (
     <>
-      <div className="bg-gradient-mesh flex h-screen overflow-hidden text-slate-900 dark:text-slate-100">
-        {/* Sidebar */}
-        <aside
-          className={`${
-            sidebarOpen ? 'translate-x-0 md:w-[260px]' : '-translate-x-full md:w-0'
-          } fixed md:relative z-30 left-0 top-0 h-full w-[260px] overflow-hidden transition-[transform,width] duration-300 ease-in-out md:translate-x-0`}
-        >
+      <AppShell
+        mobileSidebarOpen={sidebarOpen}
+        onMobileSidebarOpenChange={setSidebarOpen}
+        renderSidebar={({ isDesktop, isTablet, desktopSidebarCollapsed, closeMobileSidebar, toggleSidebar }) => (
           <Sidebar
             sessions={sessions}
             selectedSessionId={selectedSessionId}
             darkMode={darkMode}
             user={user}
+            collapsed={isDesktop && desktopSidebarCollapsed}
+            isDrawer={!isDesktop}
             onToggleDarkMode={toggleDarkMode}
-            onToggleSidebar={() => setSidebarOpen(false)}
+            onCloseSidebar={closeMobileSidebar}
+            onToggleCollapse={isDesktop ? toggleSidebar : undefined}
             onSelectSession={loadSessionMessages}
             onNewSession={doResetChat}
             onRenameSession={renameSession}
@@ -510,64 +511,52 @@ export default function HomeContent() {
             onLoginClick={() => setShowLoginModal(true)}
             onLogout={logout}
           />
-        </aside>
-
-        {/* Mobile overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/40 z-20 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
         )}
-
-        {/* Main area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        renderHeader={({ isDesktop, isTablet, mobileSidebarOpen, desktopSidebarCollapsed, toggleSidebar }) => (
           <ChatHeader
             mode={mode}
             darkMode={darkMode}
+            isDesktop={isDesktop}
+            isTablet={isTablet}
+            mobileSidebarOpen={mobileSidebarOpen}
+            desktopSidebarCollapsed={desktopSidebarCollapsed}
             isLoggedIn={isLoggedIn}
             authLoading={authLoading}
             isLoading={isLoading}
             isRecapLoading={isRecapLoading}
             isProfileMode={isProfileMode}
             canGenerateRecap={canGenerateRecap}
-            showDisclaimer={showDisclaimer}
-            showFeedback={showFeedback}
-            feedbackDone={feedbackDone}
-            dataOptIn={dataOptIn}
             reportContent={reportContent}
             profileMessages={profileMessages}
             messages={messages}
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            onToggleSidebar={toggleSidebar}
             onToggleDarkMode={toggleDarkMode}
-            onToggleDataOptIn={toggleDataOptIn}
             onLoginClick={() => setShowLoginModal(true)}
             onStartNewChat={startNewChat}
             onStartProfile={startProfile}
             onBackToChat={backToChat}
             onGenerateRecap={generateRecap}
             onGenerateReport={generateReport}
-            onDismissDisclaimer={() => setShowDisclaimer(false)}
           />
-
+        )}
+        renderContent={() => (
           <MessageArea
             mode={mode}
             isProfileMode={isProfileMode}
             isLoading={isLoading}
             isSessionLoading={isSessionLoading}
             currentMessages={currentMessages}
-              plans={plans}
-              todayPlan={todayPlan}
-              todayIndex={todayIndex}
-              isPlanLoading={isPlanLoading}
-              isPlanActing={isPlanActing}
-              planError={planError}
-              sessionId={sessionId}
+            plans={plans}
+            todayPlan={todayPlan}
+            todayIndex={todayIndex}
+            isPlanLoading={isPlanLoading}
+            isPlanActing={isPlanActing}
+            planError={planError}
+            sessionId={sessionId}
             messages={messages}
             onUpdatePlanStatus={updateTodayPlanStatus}
             onRegeneratePlan={regenerateTodayPlan}
-              onGeneratePlan={generatePlan}
+            onGeneratePlan={generatePlan}
             selectedScenario={selectedScenario}
             onSelectScenario={setSelectedScenario}
             scenarioCopied={scenarioCopied}
@@ -580,7 +569,7 @@ export default function HomeContent() {
             reportContent={reportContent}
             onCloseReport={backToChat}
             similarCases={similarCases}
-              recap={recap}
+            recap={recap}
             recapMeta={recapMeta}
             onCloseRecap={() => setRecap(null)}
             showFeedback={showFeedback}
@@ -589,21 +578,18 @@ export default function HomeContent() {
             onSubmitFeedback={submitFeedback}
             onSkipFeedback={handleFeedbackSkip}
             onShowFeedback={() => setShowFeedback(true)}
-              suggestions={suggestions}
+            suggestions={suggestions}
             onSelectSuggestion={sendMessage}
             messagesEndRef={messagesEndRef}
           />
-
-          <footer className="border-t border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-[#0f172a]/90 px-4 pt-3 pb-4 backdrop-blur-xl">
-            <div className="max-w-3xl mx-auto">
+        )}
+        renderComposer={() => (
           <ChatInput
             onSend={sendMessage}
             disabled={isLoading || isRecapLoading || !!reportContent || showProfileForm}
           />
-        </div>
-          </footer>
-        </div>
-      </div>
+        )}
+      />
       <LoginModal
         open={showLoginModal}
         loading={authLoading}

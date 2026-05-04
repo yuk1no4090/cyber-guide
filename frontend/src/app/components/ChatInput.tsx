@@ -69,7 +69,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
           disabled={disabled}
           rows={1}
           aria-label="输入消息"
-          className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 max-h-[180px] py-0.5 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
+          className="chat-input-textarea flex-1 appearance-none bg-transparent border-0 outline-none ring-0 shadow-none focus:border-0 focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none resize-none text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 max-h-[180px] py-0.5 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ minHeight: '24px' }}
         />
 

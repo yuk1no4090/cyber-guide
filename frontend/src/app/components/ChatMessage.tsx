@@ -122,7 +122,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
 
           {/* 消息内容 */}
           <div
-            className="text-sm leading-relaxed text-slate-700 dark:text-slate-200 break-words overflow-wrap-anywhere pr-8"
+            className="chat-message-content text-sm leading-relaxed text-slate-700 dark:text-slate-100 break-words overflow-wrap-anywhere pr-8"
             dangerouslySetInnerHTML={{ __html: formattedHtml }}
           />
         {Array.isArray(evidence) && evidence.length > 0 && (
