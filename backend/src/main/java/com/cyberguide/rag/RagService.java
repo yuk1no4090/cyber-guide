@@ -291,7 +291,7 @@ public class RagService {
             } else {
                 sb.append("3. 用户还没想好方向，请分别给出升学和就业两条路的具体案例和数据支撑。\n");
             }
-            sb.append("4. 每条建议都必须附上至少一个原文链接，让用户可以自己点击查看完整经验帖。\n\n");
+            sb.append("4. 如果引用的 EVIDENCE 有“原文链接”，必须原样附上；如果没有原文链接，明确说“该条为内部知识库依据”，严禁编造链接。\n\n");
         }
         for (int i = 0; i < results.size(); i++) {
             RetrievalResult r = results.get(i);
@@ -394,14 +394,14 @@ public class RagService {
           .limit(topK)
           .map(s -> new RetrievalResult(
               "知识库片段",
-              truncate(s.chunk.content(), maxEvidenceChunkLength),
+            truncate(s.chunk.content(), maxEvidenceChunkLength),
               "kb:" + s.chunk.source(),
               null,
               "kb",
               "medium",
               s.score,
               null, null, null, null, null, null
-          )).toList();
+        )).toList();
     }
 
     private List<RetrievalResult> retrieveFromCareerCases(String query, UserProfile profile, int limit) {

@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Cyber Guide 产品说明书</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Songti SC", "Microsoft YaHei", Arial, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.68;
+      font-size: 12.2px;
+    }
+    .cover {
+      min-height: 720px;
+      padding: 42px 44px;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(14,165,233,.26), transparent 30%),
+        radial-gradient(circle at 88% 72%, rgba(37,99,235,.20), transparent 34%),
+        linear-gradient(145deg, #f8fbff 0%, #eef7ff 56%, #e7f1ff 100%);
+      border: 1px solid #dbeafe;
+      position: relative;
+      overflow: hidden;
+    }
+    .brand-pill {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(14,165,233,.12);
+      color: #0369a1;
+      font-weight: 700;
+      letter-spacing: .06em;
+      font-size: 11px;
+      border: 1px solid rgba(14,165,233,.25);
+    }
+    h1 {
+      margin: 90px 0 16px;
+      font-size: 42px;
+      line-height: 1.12;
+      letter-spacing: -0.04em;
+      color: #082f49;
+    }
+    .subtitle {
+      width: 78%;
+      color: #334155;
+      font-size: 17px;
+      line-height: 1.75;
+      margin-bottom: 36px;
+    }
+    .cover-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 60px;
+    }
+    .cover-card {
+      background: rgba(255,255,255,.74);
+      border: 1px solid rgba(148,163,184,.24);
+      border-radius: 18px;
+      padding: 16px 18px;
+      box-shadow: 0 14px 30px rgba(15,23,42,.06);
+    }
+    .cover-card b { display:block; color:#075985; margin-bottom:5px; font-size:13px; }
+    .meta { position: absolute; left: 44px; bottom: 34px; color:#64748b; font-size: 11px; }
+    .section { page-break-inside: avoid; margin: 28px 0 22px; }
+    h2 {
+      margin: 0 0 12px;
+      color: #0f172a;
+      font-size: 22px;
+      border-left: 5px solid #0ea5e9;
+      padding-left: 12px;
+      line-height: 1.3;
+    }
+    h3 { margin: 18px 0 8px; color:#075985; font-size: 15px; }
+    p { margin: 7px 0; }
+    .lead { color:#334155; font-size: 13.5px; }
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .card {
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 13px 14px;
+      box-shadow: 0 8px 22px rgba(15,23,42,.045);
+      page-break-inside: avoid;
+    }
+    .card-title { font-weight: 800; color:#075985; margin-bottom: 4px; }
+    .tag {
+      display:inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background:#eff6ff;
+      color:#1d4ed8;
+      border:1px solid #bfdbfe;
+      font-weight:700;
+      font-size:10.5px;
+      margin: 2px 3px 2px 0;
+    }
+    ul { margin: 6px 0 6px 18px; padding:0; }
+    li { margin: 3px 0; }
+    table { width:100%; border-collapse: collapse; margin: 10px 0; font-size: 11.5px; }
+    th, td { border:1px solid #e2e8f0; padding: 8px 9px; vertical-align: top; }
+    th { background:#f1f5f9; color:#0f172a; text-align:left; }
+    .quote {
+      border-left: 4px solid #38bdf8;
+      background: #f8fafc;
+      padding: 12px 14px;
+      border-radius: 10px;
+      color:#334155;
+      margin: 10px 0;
+    }
+    .flow {
+      display:grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .flow div {
+      text-align:center;
+      padding:10px 8px;
+      border-radius:14px;
+      background:#f0f9ff;
+      border:1px solid #bae6fd;
+      color:#075985;
+      font-weight:700;
+      font-size:11px;
+    }
+    .small { font-size: 10.5px; color:#64748b; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <span class="brand-pill">AI ACADEMIC & CAREER PLANNING ASSISTANT</span>
+    <h1>Cyber Guide<br/>AI 学业职业规划助手</h1>
+    <p class="subtitle">面向计算机相关学生与早期职场人的智能规划产品。它不仅回答问题，更会结合用户背景、真实案例、原文依据与行动计划，帮助用户判断“我现在的位置，能去哪里，以及下一步怎么走”。</p>
+    <div class="cover-grid">
+      <div class="cover-card"><b>核心定位</b>背景相似检索 + AI 对话规划 + 可执行行动建议</div>
+      <div class="cover-card"><b>主要人群</b>本科/研究生、考研/保研/留学用户、校招与转码求职者</div>
+      <div class="cover-card"><b>关键特色</b>基于真实经验帖与案例库，回答可附原文链接</div>
+      <div class="cover-card"><b>产品目标</b>让小众学校用户也能获得相似层次、相近成绩的出路参考</div>
+    </div>
+    <div class="meta">产品说明文档 · Cyber Guide · 2026</div>
+  </section>
+
+  <div class="page-break"></div>
+
+  <section class="section">
+    <h2>1. 产品一句话介绍</h2>
+    <p class="lead"><b>Cyber Guide 是一款面向学业与职业选择的 AI 规划助手。</b>用户输入自己的学校、成绩、排名、实习、科研、竞赛与目标方向后，系统会检索相似背景案例，结合 AI 生成个性化建议，并提供原文链接与可执行计划。</p>
+    <div class="quote">区别于普通聊天机器人，Cyber Guide 的重点不是“泛泛给建议”，而是“找到和用户类似的人走过什么路”。</div>
+  </section>
+
+  <section class="section">
+    <h2>2. 目标用户与典型痛点</h2>
+    <div class="grid-2">
+      <div class="card"><div class="card-title">计算机相关学生</div><ul><li>不知道自己的学校层次和成绩能匹配哪些学校。</li><li>保研、考研、留学、就业几条路之间难以取舍。</li><li>普通一本、双非、小众院校缺少同校经验帖。</li></ul></div>
+      <div class="card"><div class="card-title">早期职场人与转码人群</div><ul><li>不清楚自己的项目、实习、学历对求职竞争力的影响。</li><li>需要面经、薪资、岗位选择和路线建议。</li><li>想知道“相似背景的人最后去了哪里”。</li></ul></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>3. 产品核心特色</h2>
+    <div class="grid-2">
+      <div class="card"><div class="card-title">相似背景检索</div><p>系统会识别用户学校、学校层次、GPA、排名、实习、科研、竞赛和目标方向，并从案例库中找出背景接近的真实案例。</p></div>
+      <div class="card"><div class="card-title">原文可验证</div><p>AI 回答会尽量引用真实经验帖，并附上可点击原文链接，减少“AI 编故事”的不确定性。</p></div>
+      <div class="card"><div class="card-title">多路径规划</div><p>覆盖保研、考研、留学、就业、GAP、转码等方向；用户意向不明确时，可同时给出升学与就业两条路径。</p></div>
+      <div class="card"><div class="card-title">7 天行动计划</div><p>用户不仅能得到结论，还能生成 7 天微行动计划，将规划拆成可执行任务。</p></div>
+      <div class="card"><div class="card-title">结构化画像</div><p>支持录入学校、GPA、排名、实习、科研、竞赛和目标方向，让建议更贴合个人情况。</p></div>
+      <div class="card"><div class="card-title">登录后持久化</div><p>登录用户可保存聊天历史、用户画像、行动计划和会话数据；匿名用户则保持轻量使用体验。</p></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>4. 功能模块总览</h2>
+    <table>
+      <thead><tr><th>模块</th><th>功能说明</th><th>用户价值</th></tr></thead>
+      <tbody>
+        <tr><td>AI 对话咨询</td><td>支持围绕保研、考研、留学、就业、转码等进行连续问答。</td><td>快速获得方向判断与下一步建议。</td></tr>
+        <tr><td>相似案例推荐</td><td>基于学校层次、GPA、排名、目标方向和经历匹配真实案例。</td><td>让用户知道“像我这样的人去了哪里”。</td></tr>
+        <tr><td>Evidence 原文依据</td><td>回答中展示引用来源、相关度和原文链接。</td><td>方便用户自行验证经验帖完整内容。</td></tr>
+        <tr><td>画像表单</td><td>收集学校、成绩、实习、科研、竞赛、目标等结构化信息。</td><td>减少反复解释背景，提高建议精度。</td></tr>
+        <tr><td>7 天计划</td><td>根据当前目标生成短周期行动任务。</td><td>把焦虑转化成可执行步骤。</td></tr>
+        <tr><td>会话侧边栏</td><td>支持新建、切换、重命名、删除历史会话。</td><td>方便长期规划与复盘。</td></tr>
+        <tr><td>登录注册</td><td>支持邮箱注册、验证码、GitHub OAuth。</td><td>沉淀长期用户资产。</td></tr>
+        <tr><td>反馈卡片</td><td>收集用户对回答的评价与改进意见。</td><td>为后续模型与检索优化提供数据。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="page-break"></div>
+
+  <section class="section">
+    <h2>5. 相似背景检索能力</h2>
+    <p>这是 Cyber Guide 的核心差异化能力。系统不只根据关键词搜索，而是将用户背景和案例背景拆成结构化要素，再计算相似度。</p>
+    <div class="grid-3">
+      <div class="card"><div class="card-title">学校维度</div><span class="tag">C9</span><span class="tag">985</span><span class="tag">211</span><span class="tag">双一流</span><span class="tag">双非</span><span class="tag">普通一本</span></div>
+      <div class="card"><div class="card-title">成绩维度</div><span class="tag">GPA</span><span class="tag">均分</span><span class="tag">排名百分比</span><span class="tag">408 分数</span></div>
+      <div class="card"><div class="card-title">经历维度</div><span class="tag">实习</span><span class="tag">科研</span><span class="tag">竞赛</span><span class="tag">项目</span></div>
+    </div>
+    <h3>检索逻辑示例</h3>
+    <p>当用户说：“我是双非计算机大三，GPA 3.5，排名前 10%，想保研去 985”，系统会优先检索：</p>
+    <ul>
+      <li>学校层次相近：双非、普通一本、双非强校。</li>
+      <li>成绩接近：GPA 3.2 - 3.8、排名前 5% - 15%。</li>
+      <li>目标一致：保研/推免/夏令营案例。</li>
+      <li>经历相似：有科研、实习或竞赛加分。</li>
+      <li>输出可验证：附原文链接与案例摘要。</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>6. 数据与知识来源</h2>
+    <p>Cyber Guide 通过爬虫与结构化抽取构建案例库，主要覆盖知乎、掘金、V2EX、CSDN、考研/保研相关站点等来源。</p>
+    <table>
+      <thead><tr><th>数据类型</th><th>内容</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>经验帖正文</td><td>考研上岸、保研夏令营、留学申请、秋招面经、实习转正等。</td><td>作为 RAG 检索证据。</td></tr>
+        <tr><td>结构化案例</td><td>学校、层次、GPA、排名、去向、目标学校、实习/科研/竞赛。</td><td>用于相似度排序。</td></tr>
+        <tr><td>学校映射库</td><td>国内高校层次与排名、海外 QS 学校及别名。</td><td>解决小众学校匹配问题。</td></tr>
+        <tr><td>知识库文档</td><td>规划方法、路线建议、专业技能建议。</td><td>补充通用指导。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>7. 技术架构概览</h2>
+    <div class="flow"><div>用户输入背景</div><div>画像提取</div><div>RAG 检索案例</div><div>AI 生成建议</div><div>链接与计划输出</div></div>
+    <h3>前端</h3>
+    <p>Next.js + React + Tailwind，包含聊天界面、侧边栏、登录注册、画像表单、相似案例卡片、证据面板与行动计划组件。</p>
+    <h3>后端</h3>
+    <p>Spring Boot + PostgreSQL + Redis，使用责任链 Pipeline 处理消息，包括脱敏、风控、RAG 检索、AI 调用和响应解析。</p>
+    <h3>爬虫与数据加工</h3>
+    <p>Python 爬虫负责抓取文章；补全文脚本拉取完整正文；结构化抽取脚本将经验帖转为可匹配字段。</p>
+  </section>
+
+  <section class="section">
+    <h2>8. 用户使用流程</h2>
+    <ol>
+      <li>用户进入页面，输入自己的背景或打开画像表单。</li>
+      <li>系统识别学校层次、GPA、排名、经历与目标方向。</li>
+      <li>RAG 从真实案例中检索相似背景用户的路径。</li>
+      <li>AI 生成简洁建议，并给出案例引用和原文链接。</li>
+      <li>用户可继续追问，也可生成 7 天行动计划。</li>
+      <li>登录用户可保存历史会话、画像和计划。</li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <h2>9. 典型使用场景</h2>
+    <div class="grid-2">
+      <div class="card"><div class="card-title">保研定位</div><p>“我是双非计算机，GPA 3.5，排名前 8%，能冲哪些 985？”</p></div>
+      <div class="card"><div class="card-title">考研择校</div><p>“普通一本二战 408，想考 985，应该怎么选学校？”</p></div>
+      <div class="card"><div class="card-title">留学选校</div><p>“GPA 3.2，想申请美国/港新/英国 CS 硕士，有什么参考案例？”</p></div>
+      <div class="card"><div class="card-title">就业求职</div><p>“我有一段实习和项目经历，秋招后端能投哪些公司？”</p></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>10. 产品优势总结</h2>
+    <ul>
+      <li><b>更接近真实决策：</b>不只给泛建议，而是结合相似背景案例。</li>
+      <li><b>对小众学校更友好：</b>通过学校层次、排名区间和群体标签匹配，不依赖同校案例。</li>
+      <li><b>可验证：</b>重要建议尽量附上原文链接和证据来源。</li>
+      <li><b>可执行：</b>支持将方向建议拆成短周期行动计划。</li>
+      <li><b>可持续进化：</b>爬虫、反馈、结构化抽取和评估脚本让案例库持续增长。</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>11. 当前适合展示的卖点话术</h2>
+    <div class="quote">Cyber Guide 不是简单的“AI 聊天助手”，而是一个能理解学生背景、检索真实相似案例、给出可验证路径和短期行动计划的学业职业规划系统。</div>
+    <p class="small">本说明文档基于当前项目功能整理，可用于课程答辩、项目展示、产品介绍与后续交接。</p>
+  </section>
+</body>
+</html>

@@ -29,8 +29,8 @@ public class DefaultChatStrategy implements ChatStrategy {
             "- 你的回答**必须**引用下方 EVIDENCE 中的真实案例，绝对不要编造案例或说笼统套话。\n" +
             "- 引用时提取案例中的**具体数据**（GPA/绩点、排名百分比、学校层次、去向学校、offer结果等），" +
             "融入你的回答。例如：\u201c有个双非的同学 GPA 3.6 排名前5%，最后保研去了浙大\u201d。\n" +
-            "- 每个引用的案例**结尾必须附上原文链接**，用 Markdown 格式：[查看原帖](https://xxx)。" +
-            "链接来自 EVIDENCE 中的\u201c原文链接\u201d行，直接复制使用即可。\n" +
+            "- 每个引用的案例**结尾必须附上原文链接**，格式为：[查看原帖](直接复制EVIDENCE里的真实URL)。" +
+            "链接只能来自 EVIDENCE 中的\u201c原文链接\u201d行，必须原样复制；严禁生成 http://xxx、https://xxx、example.com 等占位链接。\n" +
             "- 如果用户问\u201c我的均分/GPA能去哪些学校\u201d，从 EVIDENCE 中找背景最接近的案例，" +
             "告诉用户\u201c和你情况差不多的同学去了 XX 和 YY\u201d，并附链接让用户自己看详情。\n" +
             "- 如果证据中包含学校层次信息（985/211/双非等），针对用户的学校层次给出适配建议。\n" +
@@ -58,11 +58,23 @@ public class DefaultChatStrategy implements ChatStrategy {
             }
         }
 
+        String cleanedMessage = cleanPlaceholderLinks(message.toString().trim());
+
         if (suggestions.isEmpty()) {
-            suggestions = generateContextualFallback(message.toString());
+            suggestions = generateContextualFallback(cleanedMessage);
         }
 
-        return new ChatResult(message.toString().trim(), suggestions, false);
+        return new ChatResult(cleanedMessage, suggestions, false);
+    }
+
+    private String cleanPlaceholderLinks(String text) {
+        if (text == null || text.isBlank()) return "";
+        return text
+            .replaceAll("\\\\[([^\\\\]]+)\\\\]\\\\(https?://x+[^)]*\\\\)", "$1")
+            .replaceAll("https?://x+(?:\\\\.[A-Za-z0-9_-]+)*(?:/\\\\S*)?", "")
+            .replaceAll("https?://example\\\\.com(?:/\\\\S*)?", "")
+            .replaceAll("\\n{3,}", "\n\n")
+            .trim();
     }
 
     private List<String> generateContextualFallback(String message) {

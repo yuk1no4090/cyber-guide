@@ -57,12 +57,12 @@ export default function ChatHeader({
   onDismissDisclaimer,
 }: ChatHeaderProps) {
   return (
-    <header className="h-14 flex items-center gap-3 px-4 border-b border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-[#0f172a]/90 backdrop-blur-xl shrink-0 sticky top-0 z-20">
+    <header className="min-h-14 flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 border-b border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-[#0f172a]/90 backdrop-blur-xl shrink-0 sticky top-0 z-20">
       {/* Sidebar toggle (mobile) */}
       {onToggleSidebar && (
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="shrink-0 p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,36 +83,36 @@ export default function ChatHeader({
       )}
 
       {/* Session title */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-[72px] sm:min-w-0">
         <h1 className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
           {mode === 'chat' ? 'Cyber Guide' : mode === 'profile_other' ? '读人模式' : '画像分析'}
         </h1>
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 max-w-[68vw] sm:max-w-none items-center gap-1.5 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {!isProfileMode ? (
           <>
             {messages.length > 1 && (
               <button
                 onClick={onStartNewChat}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
               >
-                新对话
+                新建
               </button>
             )}
             {canGenerateRecap && (
               <button
                 onClick={onGenerateRecap}
                 disabled={isRecapLoading}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-40 transition-all duration-150"
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-40 transition-all duration-150"
               >
-                {isRecapLoading ? '生成中...' : '复盘'}
+                {isRecapLoading ? '生成中' : '复盘'}
               </button>
             )}
             <button
               onClick={onStartProfile}
-              className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
+              className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
             >
               画像
             </button>
@@ -123,14 +123,14 @@ export default function ChatHeader({
               <button
                 onClick={onGenerateReport}
                 disabled={isLoading}
-                className="shrink-0 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-40 transition-all duration-150"
+                className="shrink-0 px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-40 transition-all duration-150"
               >
                 生成{mode === 'profile_other' ? '分析' : '画像'}
               </button>
             )}
             <button
               onClick={onBackToChat}
-              className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
+              className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150"
             >
               返回
             </button>
@@ -140,7 +140,7 @@ export default function ChatHeader({
         <button
           onClick={onToggleDarkMode}
           title={darkMode ? '切换浅色' : '切换深色'}
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="shrink-0 p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
           {darkMode ? (
             <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,7 +156,7 @@ export default function ChatHeader({
         {!authLoading && !isLoggedIn && (
           <button
             onClick={onLoginClick}
-            className="shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
+            className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all duration-150"
           >
             登录
           </button>

@@ -48,7 +48,7 @@ services:
       REDIS_PORT: 6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
-      OPENAI_MODEL: ${OPENAI_MODEL:-glm-4.6}
+      OPENAI_MODEL: ${OPENAI_MODEL:-glm-4-flash}
       OPENAI_FALLBACK_MODEL: ${OPENAI_FALLBACK_MODEL:-}
       OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-25000}
       JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
