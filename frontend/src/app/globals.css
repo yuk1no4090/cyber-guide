@@ -268,6 +268,79 @@ html.theme-dark .toggle-switch {
   transform: translateX(18px);
 }
 
+/* ============= 主题按钮与选项字体 ============= */
+.theme-toggle-btn {
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  background: rgba(240, 249, 255, 0.96);
+  color: #0369a1;
+  box-shadow: 0 8px 18px rgba(14, 165, 233, 0.1);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.theme-toggle-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(224, 242, 254, 0.98);
+  border-color: rgba(125, 211, 252, 0.95);
+  color: #0284c7;
+}
+
+.theme-toggle-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.theme-toggle-btn--dark {
+  background: rgba(15, 23, 42, 0.84);
+  border-color: rgba(71, 85, 105, 0.92);
+  color: #cbd5e1;
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.32);
+}
+
+html.theme-dark .theme-toggle-btn--dark {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(56, 189, 248, 0.22);
+}
+
+.theme-toggle-btn--dark:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #f8fafc;
+}
+
+.theme-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.choice-pill {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+@media (min-width: 640px) {
+  .choice-pill {
+    font-size: 14px;
+  }
+}
+
+.choice-label {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.choice-input {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
 /* ============= 输入框 ============= */
 .input-glow:focus {
   box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);

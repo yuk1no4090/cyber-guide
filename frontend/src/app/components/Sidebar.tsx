@@ -59,13 +59,13 @@ export default function Sidebar({
     container: darkMode
       ? 'bg-[#020617]/92 border-slate-800/90 text-slate-100'
       : 'bg-white/88 border-slate-200/80 text-slate-800',
-    sectionHint: darkMode ? 'text-slate-400' : 'text-slate-500',
+    sectionHint: darkMode ? 'text-slate-300' : 'text-slate-500',
     divider: darkMode ? 'border-slate-800/90' : 'border-slate-200/80',
     searchBox: darkMode
-      ? 'border-slate-800 bg-slate-900/75 text-slate-100'
+      ? 'border-slate-700 bg-slate-900/80 text-slate-100'
       : 'border-slate-200/80 bg-white/90 text-slate-800',
     subtleBtn: darkMode
-      ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white'
+      ? 'border-slate-600/90 bg-slate-800/90 text-slate-100 hover:bg-slate-700 hover:text-white'
       : 'border-slate-200/80 bg-white/90 text-slate-700 hover:bg-slate-100 hover:text-slate-900',
     newChatBtn:
       'bg-sky-500 text-white hover:bg-sky-600 shadow-sm shadow-sky-300/30 dark:shadow-sky-950/45',
@@ -308,9 +308,9 @@ export default function Sidebar({
           <div className={`flex ${collapsed ? 'flex-col items-center gap-2' : 'flex-col gap-3'}`}>
             <button
               onClick={onToggleDarkMode}
-              className={`flex rounded-2xl border text-sm font-medium transition-colors ${
+              className={`theme-toggle-btn ${darkMode ? 'theme-toggle-btn--dark' : ''} flex rounded-2xl text-sm font-medium ${
                 collapsed ? 'h-10 w-10 items-center justify-center' : 'h-10 w-full items-center justify-center gap-2 px-3'
-              } ${tone.subtleBtn}`}
+              }`}
               aria-label={darkMode ? '切换到浅色模式' : '切换到深色模式'}
               title={collapsed ? (darkMode ? '切换到浅色模式' : '切换到深色模式') : undefined}
             >

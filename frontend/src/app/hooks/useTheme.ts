@@ -25,6 +25,7 @@ export function useTheme() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('theme-dark', darkMode);
+    root.classList.toggle('dark', darkMode);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, darkMode ? 'dark' : 'light');
     } catch {

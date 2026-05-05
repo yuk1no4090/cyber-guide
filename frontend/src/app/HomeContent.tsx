@@ -90,6 +90,7 @@ export default function HomeContent() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const { darkMode, toggleDarkMode } = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [shouldStickToBottom, setShouldStickToBottom] = useState(true);
 
   const {
     plans, todayPlan, todayIndex,
@@ -174,13 +175,20 @@ export default function HomeContent() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [messages, profileMessages, feedbackDone]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, profileMessages, isLoading, suggestions, reportContent]);
+    if (!shouldStickToBottom) return;
+    scrollToBottom(isLoading ? 'auto' : 'smooth');
+  }, [messages, profileMessages, isLoading, suggestions, reportContent, shouldStickToBottom]);
+
+  const handleMessageAreaScroll = (event: React.UIEvent<HTMLElement>) => {
+    const target = event.currentTarget;
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    setShouldStickToBottom(distanceFromBottom < 140);
+  };
 
   const isProfileMode = mode === 'profile' || mode === 'profile_other';
   const currentMessages = mode === 'chat' ? messages : profileMessages;
@@ -230,6 +238,7 @@ export default function HomeContent() {
 
   const doResetChat = () => {
     sendSessionMetrics(messages, mode);
+    setShouldStickToBottom(true);
     clearStorage();
     setMessages([WELCOME_MESSAGE]);
     setProfileMessages([]);
@@ -254,6 +263,7 @@ export default function HomeContent() {
   };
 
   const startProfile = () => {
+    setShouldStickToBottom(true);
     setChatSuggestionsBak(suggestions);
     setMode('profile');
     setProfileMessages([PROFILE_CHOOSE]);
@@ -367,6 +377,7 @@ export default function HomeContent() {
   };
 
   const sendMessage = async (content: string) => {
+    setShouldStickToBottom(true);
     // ===== Action routing =====
     if (isAction(content)) {
       if (content === ACTION_PROFILE_SELF && mode === 'profile') {
@@ -580,6 +591,7 @@ export default function HomeContent() {
             onShowFeedback={() => setShowFeedback(true)}
             suggestions={suggestions}
             onSelectSuggestion={sendMessage}
+            onScroll={handleMessageAreaScroll}
             messagesEndRef={messagesEndRef}
           />
         )}

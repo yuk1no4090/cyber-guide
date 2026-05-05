@@ -62,6 +62,7 @@ interface MessageAreaProps {
   // Suggestions
   suggestions: string[];
   onSelectSuggestion: (s: string) => void;
+  onScroll: (event: React.UIEvent<HTMLElement>) => void;
   // Ref
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -106,6 +107,7 @@ export default function MessageArea({
   onShowFeedback,
   suggestions,
   onSelectSuggestion,
+  onScroll,
   messagesEndRef,
 }: MessageAreaProps) {
   const hasChatUserMessages = messages.some((message) => message.role === 'user' && message.content.trim().length > 0);
@@ -115,7 +117,7 @@ export default function MessageArea({
     : currentMessages;
 
   return (
-    <main className="cg-chat-viewport flex min-h-0 flex-1 overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label="对话消息">
+    <main className="cg-chat-viewport flex h-full min-h-0 flex-1 overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label="对话消息" onScroll={onScroll}>
       <div className="mx-auto flex w-full max-w-[880px] min-w-0 flex-col gap-3 px-3 pb-6 pt-4 sm:gap-4 sm:px-5 sm:pb-8 sm:pt-6 lg:px-6 xl:px-8">
         {isSessionLoading && (
           <div className="surface-card rounded-2xl border border-sky-100/80 px-3 py-2.5 text-xs text-sky-700 dark:border-sky-900/60 dark:text-sky-100">
@@ -124,18 +126,18 @@ export default function MessageArea({
         )}
 
         {showWelcomeHero && (
-          <div className="surface-card fade-in-up overflow-hidden rounded-[30px] border border-sky-100/80 p-5 shadow-xl shadow-sky-100/60 dark:border-sky-900/50 dark:shadow-black/25 sm:p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          <div className="surface-card fade-in-up rounded-[30px] border border-sky-100/80 p-4 shadow-xl shadow-sky-100/60 dark:border-sky-900/50 dark:shadow-black/25 sm:p-6">
+            <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
               <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 via-cyan-400 to-blue-600 shadow-lg shadow-sky-200/70 dark:shadow-sky-950/60">
-                    <svg className="h-7 w-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 via-cyan-400 to-blue-600 shadow-lg shadow-sky-200/70 dark:shadow-sky-950/60 sm:h-14 sm:w-14">
+                    <svg className="h-6 w-6 text-white sm:h-7 sm:w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.42A12.08 12.08 0 0118 14.5c0 1.8-2.69 3.25-6 3.25s-6-1.45-6-3.25c0-1.35.11-2.65-.16-3.92L12 14z" />
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <div className="mb-2 flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                       <h2 className="text-lg font-bold tracking-tight text-slate-800 dark:text-slate-100 sm:text-[22px]">
                         开始你的规划工作台
                       </h2>
@@ -166,7 +168,7 @@ export default function MessageArea({
                 </div>
               </div>
 
-              <div className="w-full max-w-full lg:max-w-[320px]">
+              <div className="w-full max-w-full xl:max-w-[320px]">
                 <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-700/80 dark:bg-slate-900/55">
                   <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">试试这些开场问题</div>
                   <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-1 sm:overflow-visible sm:px-0">

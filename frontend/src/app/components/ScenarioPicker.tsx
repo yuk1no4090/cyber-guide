@@ -32,7 +32,7 @@ export default function ScenarioPicker({
 
   return (
     <section className={`message-bubble mt-2 mb-1 ${className}`.trim()}>
-      <p className="text-[12px] sm:text-[13px] text-slate-500 dark:text-slate-300 mb-1.5" id="scenario-picker-label">
+      <p className="choice-label text-slate-500 dark:text-slate-300 mb-1.5" id="scenario-picker-label">
         关系场景模板（可切换）
       </p>
 
@@ -45,7 +45,7 @@ export default function ScenarioPicker({
             aria-pressed={value === null}
             className={`
               px-3 py-1.5 sm:px-3.5 sm:py-2
-              text-[12px] sm:text-[13px]
+              choice-pill
               rounded-full border transition-all duration-200
               ${value === null
                 ? 'text-sky-700 dark:text-sky-50 bg-sky-100 dark:bg-sky-800/70 border-sky-300 dark:border-sky-600'
@@ -66,7 +66,7 @@ export default function ScenarioPicker({
             aria-pressed={value === option.id}
             className={`
               px-3 py-1.5 sm:px-3.5 sm:py-2
-              text-[12px] sm:text-[13px]
+              choice-pill
               rounded-full border transition-all duration-200
               ${value === option.id
                 ? 'text-sky-700 dark:text-sky-50 bg-sky-100 dark:bg-sky-800/70 border-sky-300 dark:border-sky-600'

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AppMode } from '../hooks/useChatFlow';
 
 interface ChatHeaderProps {
@@ -62,15 +63,60 @@ export default function ChatHeader({
   onGenerateReport,
 }: ChatHeaderProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
+
+  useEffect(() => {
+    if (isDesktop && moreOpen) {
+      setMoreOpen(false);
+    }
+  }, [isDesktop, moreOpen]);
+
+  useLayoutEffect(() => {
+    if (!moreOpen) {
+      setMenuPosition(null);
+      return;
+    }
+
+    const updateMenuPosition = () => {
+      const button = moreButtonRef.current;
+      if (!button) return;
+
+      const rect = button.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 10,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [moreOpen]);
 
   useEffect(() => {
     if (!moreOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMoreOpen(false);
+      const target = event.target as Node;
+      if (
+        (menuRef.current && menuRef.current.contains(target)) ||
+        (moreButtonRef.current && moreButtonRef.current.contains(target))
+      ) {
+        return;
       }
+      setMoreOpen(false);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -174,12 +220,12 @@ export default function ChatHeader({
   };
 
   return (
-    <header className="surface-panel relative flex min-h-[52px] items-center gap-2 rounded-[24px] border border-soft px-3 py-2 shadow-sm shadow-slate-900/5 backdrop-blur-xl sm:min-h-[56px] sm:px-4">
+    <header className="surface-panel relative z-30 flex min-h-[52px] items-center gap-2 rounded-[24px] border border-soft px-3 py-2 shadow-sm shadow-slate-900/5 backdrop-blur-xl sm:min-h-[56px] sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/80 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/80 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:border-slate-600/90 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
           aria-label={
             isDesktop
               ? desktopSidebarCollapsed
@@ -205,7 +251,7 @@ export default function ChatHeader({
           <h1 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100 sm:text-[15px]">
             {modeTitle}
           </h1>
-          <p className="hidden truncate text-xs text-slate-500 dark:text-slate-400 sm:block">
+          <p className="hidden truncate text-xs text-slate-500 dark:text-slate-300 sm:block">
             {modeSubtitle}
           </p>
         </div>
@@ -229,7 +275,7 @@ export default function ChatHeader({
             type="button"
             onClick={onToggleDarkMode}
             title={darkMode ? '切换到浅色模式' : '切换到深色模式'}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/80 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className={`theme-toggle-btn ${darkMode ? 'theme-toggle-btn--dark' : ''} flex h-10 w-10 items-center justify-center rounded-2xl`}
           >
             {darkMode ? <SunIcon className="h-4 w-4 text-amber-400" /> : <MoonIcon className="h-4 w-4" />}
           </button>
@@ -260,9 +306,10 @@ export default function ChatHeader({
           ))}
 
           <button
+            ref={moreButtonRef}
             type="button"
             onClick={() => setMoreOpen((prev) => !prev)}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/80 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/80 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:border-slate-600/90 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             aria-label="更多操作"
             aria-expanded={moreOpen}
           >
@@ -275,10 +322,11 @@ export default function ChatHeader({
         </div>
       )}
 
-      {!isDesktop && moreOpen && (
+      {portalTarget && !isDesktop && moreOpen && menuPosition && createPortal(
         <div
           ref={menuRef}
-          className="surface-card absolute right-0 top-[calc(100%+10px)] z-30 w-[min(86vw,320px)] rounded-[22px] border border-soft p-2 shadow-2xl shadow-slate-900/12"
+          className="surface-card fixed z-[100] w-[min(86vw,320px)] rounded-[22px] border border-soft p-2 shadow-2xl shadow-slate-900/12"
+          style={{ top: menuPosition.top, right: menuPosition.right }}
         >
           <div className="space-y-1">
             {primaryActions.map((action) => (
@@ -324,7 +372,8 @@ export default function ChatHeader({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        portalTarget,
       )}
     </header>
   );

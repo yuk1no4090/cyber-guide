@@ -168,7 +168,7 @@ export default function AppShell({
         <div className="safe-top shrink-0 px-2 pb-1 pt-2 sm:px-3 sm:pt-3 lg:px-4">
           {renderHeader(context)}
         </div>
-        <div className="relative min-h-0 flex-1 overflow-hidden">{renderContent(context)}</div>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">{renderContent(context)}</div>
         <div className="app-shell-composer safe-bottom shrink-0 px-3 pb-3 pt-3 sm:px-4 sm:pb-4 lg:px-6">
           <div className="mx-auto w-full max-w-[880px]">{renderComposer(context)}</div>
         </div>
