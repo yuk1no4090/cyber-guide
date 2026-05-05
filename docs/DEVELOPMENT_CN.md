@@ -16,7 +16,7 @@ docker compose up -d postgres redis
 # 2. 启动后端
 cd backend
 export OPENAI_API_KEY="your-key"
-export OPENAI_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
+export OPENAI_BASE_URL="https://open.bigmodel.cn/api/paas/v4"   # 默认智谱兼容端点
 export OPENAI_MODEL="glm-4-flash"
 ./mvnw spring-boot:run
 
@@ -35,7 +35,7 @@ npm run dev
 | 变量 | 必填 | 默认值 | 说明 |
 |---|---|---|---|
 | `OPENAI_API_KEY` | 是 | — | AI 服务商 API 密钥 |
-| `OPENAI_BASE_URL` | 否 | `https://open.bigmodel.cn/api/paas/v4` | OpenAI 兼容接口地址 |
+| `OPENAI_BASE_URL` | 否 | `https://open.bigmodel.cn/api/paas/v4` | OpenAI 兼容接口地址（默认指向智谱兼容服务） |
 | `OPENAI_MODEL` | 否 | `glm-4-flash` | 主模型 |
 | `OPENAI_FALLBACK_MODEL` | 否 | — | 备用模型（熔断降级） |
 | `POSTGRES_HOST` | 否 | `localhost` | PostgreSQL 主机地址 |

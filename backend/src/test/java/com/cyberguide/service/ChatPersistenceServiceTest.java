@@ -151,6 +151,68 @@ class ChatPersistenceServiceTest {
     }
 
     @Test
+    void persistConversationDefaultsModeToChatWhenBlank() {
+        UUID userId = UUID.randomUUID();
+        ChatSession created = new ChatSession();
+        created.setId(UUID.randomUUID());
+        created.setUserId(userId);
+        created.setAnonymousSessionId("anon-blank");
+        created.setTitle("hello");
+        created.setMode("chat");
+
+        when(sessionRepository.findTopByAnonymousSessionIdAndUserIdOrderByUpdatedAtDesc("anon-blank", userId))
+            .thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ChatSession.class))).thenReturn(created);
+        when(messageRepository.countBySession_Id(created.getId())).thenReturn(0);
+        when(messageRepository.save(any(ChatMessageEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.persistConversation(
+            "anon-blank",
+            userId,
+            "   ",
+            null,
+            List.of(Map.of("role", "user", "content", "hello")),
+            "world",
+            false
+        );
+
+        ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
+        verify(sessionRepository).save(captor.capture());
+        assertEquals("chat", captor.getValue().getMode());
+    }
+
+    @Test
+    void persistConversationUpdatesExistingSessionModeWhenProvided() {
+        UUID userId = UUID.randomUUID();
+        ChatSession existing = new ChatSession();
+        UUID sessionId = UUID.randomUUID();
+        existing.setId(sessionId);
+        existing.setUserId(userId);
+        existing.setAnonymousSessionId("anon-mode");
+        existing.setTitle("已有标题");
+        existing.setMode("chat");
+
+        when(sessionRepository.findTopByAnonymousSessionIdAndUserIdOrderByUpdatedAtDesc("anon-mode", userId))
+            .thenReturn(Optional.of(existing));
+        when(sessionRepository.save(existing)).thenReturn(existing);
+        when(messageRepository.countBySession_Id(sessionId)).thenReturn(0);
+        when(messageRepository.save(any(ChatMessageEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.persistConversation(
+            "anon-mode",
+            userId,
+            "profile_other",
+            null,
+            List.of(Map.of("role", "user", "content", "hello")),
+            "world",
+            false
+        );
+
+        assertEquals("profile_other", existing.getMode());
+        verify(sessionRepository).save(existing);
+    }
+
+    @Test
     void persistConversationSavesEvidenceJsonOnAssistantMessage() {
         UUID userId = UUID.randomUUID();
         ChatSession session = new ChatSession();

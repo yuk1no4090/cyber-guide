@@ -16,7 +16,7 @@ docker compose up -d postgres redis
 # 2. Start backend
 cd backend
 export OPENAI_API_KEY="your-key"
-export OPENAI_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
+export OPENAI_BASE_URL="https://open.bigmodel.cn/api/paas/v4"   # default Zhipu-compatible endpoint
 export OPENAI_MODEL="glm-4-flash"
 ./mvnw spring-boot:run
 
@@ -34,8 +34,8 @@ Copy `.env.example` to `.env` and fill in:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `OPENAI_API_KEY` | yes | — | AI provider API key |
-| `OPENAI_BASE_URL` | no | `https://open.bigmodel.cn/api/paas/v4` | OpenAI-compatible endpoint |
+| `OPENAI_API_KEY` | yes | — | API key for your AI provider |
+| `OPENAI_BASE_URL` | no | `https://open.bigmodel.cn/api/paas/v4` | OpenAI-compatible endpoint (defaults to Zhipu compatible API) |
 | `OPENAI_MODEL` | no | `glm-4-flash` | Primary model |
 | `OPENAI_FALLBACK_MODEL` | no | — | Fallback model (circuit breaker) |
 | `POSTGRES_HOST` | no | `localhost` | PostgreSQL host |

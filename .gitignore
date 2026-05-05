@@ -74,3 +74,5 @@ CLAUDE.md
 # 临时脚本、密钥与部署产物
 .tmp/
 yuk1no4090.site_nginx.zip
+runtime.env
+runtime.env.bak.*

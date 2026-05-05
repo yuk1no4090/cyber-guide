@@ -52,7 +52,9 @@ curl -s -X POST http://localhost:8080/api/auth/anonymous \
 完整变量表请参阅 `DEVELOPMENT.md`。生产环境关键变量：
 
 ```env
-OPENAI_API_KEY=your-key          # 必填
+OPENAI_API_KEY=your-key          # 必填；变量名沿用 OpenAI 兼容格式
+OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4   # 默认智谱兼容端点
+OPENAI_MODEL=glm-4-flash
 JWT_SECRET=your-32-char-secret   # 请修改默认值
 POSTGRES_PASSWORD=strong-pw      # 请修改默认值
 ```

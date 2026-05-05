@@ -61,7 +61,10 @@ vim .env
 
 ```bash
 # AI API（必填）
-OPENAI_API_KEY=your-zhipu-api-key-here
+# 变量名沿用 OpenAI 兼容接口风格；默认 endpoint / model 已指向智谱兼容服务
+OPENAI_API_KEY=your-api-key-here
+OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+OPENAI_MODEL=glm-4-flash
 
 # 数据库密码（必改）
 POSTGRES_PASSWORD=your-strong-password-here

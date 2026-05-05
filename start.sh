@@ -2,11 +2,11 @@
 # Cyber Guide 启动脚本
 
 # 加载环境变量
-cd ~/cyber-guide
+cd /opt/cyber-guide
 source .env
 
 # 启动后端
-cd ~/cyber-guide/backend
+cd /opt/cyber-guide/backend
 nohup java -jar target/*.jar > ~/backend.log 2>&1 &
 echo $! > ~/backend.pid
 echo "后端已启动，PID: $(cat ~/backend.pid)"
@@ -15,7 +15,7 @@ echo "后端已启动，PID: $(cat ~/backend.pid)"
 sleep 5
 
 # 启动前端
-cd ~/cyber-guide/frontend
+cd /opt/cyber-guide/frontend
 nohup npm start > ~/frontend.log 2>&1 &
 echo $! > ~/frontend.pid
 echo "前端已启动，PID: $(cat ~/frontend.pid)"
