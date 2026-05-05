@@ -44,6 +44,9 @@ public class ScenarioChatStrategy implements ChatStrategy {
             }
         }
         String cleanedMessage = cleanPlaceholderLinks(message.toString().trim());
+        if (cleanedMessage.isBlank() && aiResponse != null && !aiResponse.isBlank()) {
+            cleanedMessage = cleanPlaceholderLinks(aiResponse.trim());
+        }
         if (suggestions.isEmpty()) {
             suggestions = java.util.List.of("继续模拟", "换个场景", "结束模拟");
         }

@@ -72,10 +72,14 @@ public final class AllowedLinkSanitizer {
         }
         plain.appendTail(plainCleaned);
 
-        return plainCleaned.toString()
+        String cleaned = plainCleaned.toString()
             .replaceAll("[ \\t]{2,}", " ")
             .replaceAll("\\n{3,}", "\n\n")
             .trim();
+        if (cleaned.isBlank() && !text.isBlank()) {
+            return PLAIN_URL.matcher(text).replaceAll("").trim();
+        }
+        return cleaned;
     }
 
     private static boolean isAllowed(String url, Set<String> allowed) {

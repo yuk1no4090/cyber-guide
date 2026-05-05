@@ -95,4 +95,12 @@ class ChatStrategyTest {
         assertFalse(cleaned.contains("296733467"));
         assertTrue(cleaned.contains("假的：查看原帖"));
     }
+
+    @Test
+    void defaultStrategyFallsBackWhenAllLinesLookLikeSuggestions() {
+        var strategy = new DefaultChatStrategy();
+        var result = strategy.process("💡 这其实是一整段回复，只是模型误用了建议符号");
+        assertFalse(result.message().isBlank());
+        assertTrue(result.message().contains("误用了建议符号"));
+    }
 }

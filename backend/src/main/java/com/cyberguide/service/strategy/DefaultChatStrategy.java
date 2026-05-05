@@ -60,6 +60,9 @@ public class DefaultChatStrategy implements ChatStrategy {
         }
 
         String cleanedMessage = cleanPlaceholderLinks(message.toString().trim());
+        if (cleanedMessage.isBlank() && aiResponse != null && !aiResponse.isBlank()) {
+            cleanedMessage = cleanPlaceholderLinks(aiResponse.trim());
+        }
 
         if (suggestions.isEmpty()) {
             suggestions = generateContextualFallback(cleanedMessage);
