@@ -1,5 +1,6 @@
 package com.cyberguide.service.pipeline;
 
+import com.cyberguide.service.AllowedLinkSanitizer;
 import com.cyberguide.service.strategy.ChatStrategy;
 import com.cyberguide.service.strategy.ChatStrategyFactory;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,11 @@ public class ResponseParseHandler implements MessageHandler {
     public void handle(MessageContext context) {
         ChatStrategy strategy = strategyFactory.getStrategy(context.getMode());
         ChatStrategy.ChatResult result = strategy.process(context.getAiResponse());
-        context.setProcessedMessage(result.message());
+        String sanitizedMessage = AllowedLinkSanitizer.sanitizeWithRetrievalResults(
+            result.message(),
+            context.getRetrievalResults()
+        );
+        context.setProcessedMessage(sanitizedMessage);
         context.setSuggestions(result.suggestions());
         context.setCrisis(result.isCrisis());
     }

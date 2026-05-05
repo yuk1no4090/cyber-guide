@@ -5,6 +5,7 @@ import com.cyberguide.exception.ErrorCode;
 import com.cyberguide.exception.RateLimitException;
 import com.cyberguide.infrastructure.cache.RedisRateLimiter;
 import com.cyberguide.security.SecurityUtils;
+import com.cyberguide.service.AllowedLinkSanitizer;
 import com.cyberguide.service.ChatPersistenceService;
 import com.cyberguide.service.ChatService;
 import com.cyberguide.service.strategy.ChatStrategy;
@@ -237,6 +238,7 @@ public class ChatController {
                     parsedCrisis = parsed.isCrisis();
                     parsedSuggestions = parsed.suggestions();
                 }
+                finalMessage = AllowedLinkSanitizer.sanitizeWithEvidenceMaps(finalMessage, evidence, similarCases);
                 finalParsedMessage = finalMessage;
 
                 String metaJson = objectMapper.writeValueAsString(Map.of(

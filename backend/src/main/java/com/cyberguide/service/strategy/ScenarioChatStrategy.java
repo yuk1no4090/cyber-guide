@@ -24,7 +24,7 @@ public class ScenarioChatStrategy implements ChatStrategy {
             "表达方式尽量口语化、简短，不要一次输出过长大段；优先 3-6 句短句，" +
             "非必要不要分很多点，必要时最多 2-3 点。\n" +
             "引用 EVIDENCE 中的案例时，提取具体数据（GPA、排名、去向等），" +
-            "并在引用结尾附上原文链接，链接必须直接复制 EVIDENCE 中的真实 URL；严禁生成 http://xxx、https://xxx、example.com 等占位链接。\n" +
+            "并在引用结尾附上原文链接，链接必须直接复制 EVIDENCE 中的真实 URL；严禁生成 http://xxx、https://xxx、example.com、示例链接等占位或编造链接。\n" +
             "在回复末尾换行输出 2-3 条后续建议，每条以 \uD83D\uDCA1 开头，和当前场景相关。" +
             scenarioContext + evidence;
     }

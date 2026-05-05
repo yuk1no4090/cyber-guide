@@ -1,6 +1,7 @@
 package com.cyberguide.service;
 
 import com.cyberguide.service.strategy.*;
+import com.cyberguide.rag.RagService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -69,5 +70,29 @@ class ChatStrategyTest {
         var strategy = new ScenarioChatStrategy();
         String prompt = strategy.buildSystemPrompt("evidence", "面试模拟");
         assertTrue(prompt.contains("面试模拟"));
+    }
+
+    @Test
+    void allowedLinkSanitizerRemovesHallucinatedUrls() {
+        var results = List.of(new RagService.RetrievalResult(
+            "case",
+            "content",
+            "article:zhihu",
+            "https://zhuanlan.zhihu.com/p/123",
+            "baoyan",
+            "high",
+            10.0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        ));
+        String raw = "真实：[查看原帖](https://zhuanlan.zhihu.com/p/123)\n假的：[查看原帖](https://www.zhihu.com/question/296733467/answer/123456789)";
+        String cleaned = AllowedLinkSanitizer.sanitizeWithRetrievalResults(raw, results);
+        assertTrue(cleaned.contains("https://zhuanlan.zhihu.com/p/123"));
+        assertFalse(cleaned.contains("296733467"));
+        assertTrue(cleaned.contains("假的：查看原帖"));
     }
 }
