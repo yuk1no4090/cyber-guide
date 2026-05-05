@@ -1,4 +1,13 @@
-import { authFetch, clearToken, getCachedTokenUnsafe, getToken } from '@/lib/api';
+import {
+  authFetch,
+  clearStoredAnonymousToken,
+  clearToken,
+  getCachedTokenKindUnsafe,
+  getCachedTokenUnsafe,
+  getStoredAnonymousToken,
+  getToken,
+  setToken,
+} from '@/lib/api';
 import { beforeEach, vi } from 'vitest';
 
 function mockJsonResponse(body: unknown, status = 200): Response {
@@ -13,6 +22,7 @@ function mockJsonResponse(body: unknown, status = 200): Response {
 describe('api auth utilities', () => {
   beforeEach(() => {
     clearToken();
+    clearStoredAnonymousToken();
     localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -54,30 +64,27 @@ describe('api auth utilities', () => {
     expect(headers.Authorization).toBe('Bearer jwt-2');
   });
 
-  it('authFetch clears stale token and retries once on 401', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(mockJsonResponse({
-        token: 'jwt-old',
-        session_id: 's-3',
-        type: 'anonymous',
-      }))
-      .mockResolvedValueOnce(mockJsonResponse({ error: 'unauthorized' }, 401))
-      .mockResolvedValueOnce(mockJsonResponse({
-        token: 'jwt-new',
-        session_id: 's-3',
-        type: 'anonymous',
-      }))
-      .mockResolvedValueOnce(mockJsonResponse({ ok: true }, 200));
+  it('getToken caches anonymous token for later upgrade', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({
+      token: 'jwt-anon',
+      session_id: 's-anon',
+      type: 'anonymous',
+    }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const response = await authFetch('s-3', '/api/chat', { method: 'POST', body: '{}' });
+    const token = await getToken('s-anon');
 
-    expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(token).toBe('jwt-anon');
+    expect(getCachedTokenUnsafe()).toBe('jwt-anon');
+    expect(getCachedTokenKindUnsafe()).toBe('anonymous');
+    expect(getStoredAnonymousToken('s-anon')).toBe('jwt-anon');
+  });
 
-    const firstApiHeaders = (fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>;
-    const secondApiHeaders = (fetchMock.mock.calls[3][1] as RequestInit).headers as Record<string, string>;
-    expect(firstApiHeaders.Authorization).toBe('Bearer jwt-old');
-    expect(secondApiHeaders.Authorization).toBe('Bearer jwt-new');
+  it('setToken stores user token kind separately from anonymous token cache', () => {
+    setToken('jwt-user', 'user');
+
+    expect(getCachedTokenUnsafe()).toBe('jwt-user');
+    expect(getCachedTokenKindUnsafe()).toBe('user');
+    expect(getStoredAnonymousToken('s-anon')).toBeNull();
   });
 });

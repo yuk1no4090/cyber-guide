@@ -92,6 +92,24 @@ export default function HomeContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [shouldStickToBottom, setShouldStickToBottom] = useState(true);
 
+  const clearDerivedViewState = (nextSuggestions: string[]) => {
+    setRecap(null);
+    setRecapMeta(undefined);
+    setReportContent(null);
+    setSelectedScenario(null);
+    setSimilarCases([]);
+    setShowProfileForm(false);
+    setSuggestions(nextSuggestions);
+  };
+
+  const resetToWelcomeChat = () => {
+    setMode('chat');
+    setMessages([WELCOME_MESSAGE]);
+    setProfileMessages([]);
+    setIsLoading(false);
+    clearDerivedViewState(getWelcomeSuggestions());
+  };
+
   const {
     plans, todayPlan, todayIndex,
     isPlanLoading, isPlanActing, planError,
@@ -111,14 +129,18 @@ export default function HomeContent() {
     sessionId,
     isLoggedIn,
     setMessages,
+    setProfileMessages,
     setMode,
     welcomeMessage: WELCOME_MESSAGE,
+    onSessionLoaded: ({ mode: restoredMode }) => {
+      clearDerivedViewState(restoredMode === 'chat' ? [] : DEFAULT_PROFILE_FOLLOWUP_SUGGESTIONS);
+    },
   });
 
   useEffect(() => {
     setStructuredProfile(loadProfileFromStorage());
     clearStorage();
-    setSuggestions(getWelcomeSuggestions());
+    clearDerivedViewState(getWelcomeSuggestions());
   }, []);
 
   useEffect(() => {
@@ -126,6 +148,7 @@ export default function HomeContent() {
     if (!isLoggedIn) {
       setSessions([]);
       setSelectedSessionId(null);
+      resetToWelcomeChat();
       try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
       return;
     }
@@ -141,7 +164,7 @@ export default function HomeContent() {
       if (chosen) {
         await loadSessionMessages(chosen);
       } else {
-        setMessages([WELCOME_MESSAGE]);
+        resetToWelcomeChat();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,24 +265,15 @@ export default function HomeContent() {
     clearStorage();
     setMessages([WELCOME_MESSAGE]);
     setProfileMessages([]);
-    setSuggestions(getWelcomeSuggestions());
+    clearDerivedViewState(getWelcomeSuggestions());
     setMode('chat');
     setShowFeedback(false);
     setFeedbackDone(false);
     setHadCrisis(false);
     setPendingReset(false);
-    setRecap(null);
-    setRecapMeta(undefined);
-    setSelectedScenario(null);
-    setSimilarCases([]);
-    setReportContent(null);
-    setShowProfileForm(false);
     setIsLoading(false);
     setSelectedSessionId(null);
     try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
-    if (isLoggedIn) {
-      void createSession();
-    }
   };
 
   const startProfile = () => {
@@ -285,10 +299,12 @@ export default function HomeContent() {
   const doBackToChat = () => {
     sendSessionMetrics(profileMessages, mode);
     setMode('chat');
+    setProfileMessages([]);
     setSuggestions(chatSuggestionsBak.length > 0 ? chatSuggestionsBak : (messages.length <= 1 ? getWelcomeSuggestions() : []));
     setReportContent(null);
     setSelectedScenario(null);
     setShowProfileForm(false);
+    setSimilarCases([]);
   };
 
   const maybeAnswerPlanQuestion = (content: string): string | null => {
@@ -607,14 +623,10 @@ export default function HomeContent() {
         loading={authLoading}
         onClose={() => setShowLoginModal(false)}
         onLogin={async (email, password) => {
-          const anonymousToken = await login(email, password);
-          await upgradeAnonymousSession(anonymousToken);
-          await loadSessions();
+          await login(email, password);
         }}
         onRegister={async (email, password, emailCode, nickname) => {
-          const anonymousToken = await register(email, password, emailCode, nickname);
-          await upgradeAnonymousSession(anonymousToken);
-          await loadSessions();
+          await register(email, password, emailCode, nickname);
         }}
         onSendCode={sendRegisterCode}
         onGithub={loginWithGithub}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { SidebarSessionItem } from '../components/Sidebar';
 import type { EvidenceItem } from '../components/ChatMessage';
+import { type AppMode } from './useChatFlow';
 import { authFetch, unwrapEnvelope } from '@/lib/api';
 
 interface Message {
@@ -25,16 +26,35 @@ interface UseSidebarSessionsArgs {
   sessionId: string;
   isLoggedIn: boolean;
   setMessages: (messages: Message[]) => void;
-  setMode: (mode: 'chat' | 'profile' | 'profile_other') => void;
+  setProfileMessages: (messages: Message[]) => void;
+  setMode: (mode: AppMode) => void;
   welcomeMessage: Message;
+  onSessionLoaded?: (payload: { mode: AppMode }) => void;
+}
+
+function normalizeSessionMode(mode?: string): AppMode {
+  if (mode === 'profile_other') return 'profile_other';
+  if (mode === 'profile') return 'profile';
+  return 'chat';
+}
+
+function mapApiMessages(messages: ApiMessage[]): Message[] {
+  return messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+    isCrisis: m.isCrisis,
+    evidence: Array.isArray(m.evidence) && m.evidence.length > 0 ? m.evidence : undefined,
+  }));
 }
 
 export function useSidebarSessions({
   sessionId,
   isLoggedIn,
   setMessages,
+  setProfileMessages,
   setMode,
   welcomeMessage,
+  onSessionLoaded,
 }: UseSidebarSessionsArgs) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<SidebarSessionItem[]>([]);
@@ -65,19 +85,18 @@ export function useSidebarSessions({
     try {
       const res = await authFetch(sessionId, `/api/sessions/${id}/messages`, { method: 'GET' }, 10_000);
       const raw = await res.json();
-      const payload = unwrapEnvelope<{ messages: ApiMessage[] }>(raw);
-      const mapped = Array.isArray(payload?.messages) ? payload.messages : [];
-      if (mapped.length > 0) {
-        setMessages(mapped.map((m) => ({
-          role: m.role,
-          content: m.content,
-          isCrisis: m.isCrisis,
-          evidence: Array.isArray(m.evidence) && m.evidence.length > 0 ? m.evidence : undefined,
-        })));
+      const payload = unwrapEnvelope<{ session?: { mode?: string }; messages: ApiMessage[] }>(raw);
+      const mapped = Array.isArray(payload?.messages) ? mapApiMessages(payload.messages) : [];
+      const nextMode = normalizeSessionMode(payload?.session?.mode);
+      onSessionLoaded?.({ mode: nextMode });
+      if (nextMode === 'chat') {
+        setMessages(mapped.length > 0 ? mapped : [welcomeMessage]);
+        setProfileMessages([]);
       } else {
+        setProfileMessages(mapped);
         setMessages([welcomeMessage]);
       }
-      setMode('chat');
+      setMode(nextMode);
       setSelectedSessionId(id);
       try { localStorage.setItem(ACTIVE_SESSION_KEY, id); } catch {}
     } catch {

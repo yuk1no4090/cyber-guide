@@ -5,7 +5,16 @@
 
 const API_BASE = '';  // empty = same origin, Next.js rewrites /api/* to backend
 const TOKEN_KEY = 'cyber-guide-jwt';
+const TOKEN_KIND_KEY = 'cyber-guide-jwt-kind';
+const ANONYMOUS_TOKEN_KEY = 'cyber-guide-anonymous-token';
 const TRACE_ID_HEADER = 'X-Trace-Id';
+
+type TokenKind = 'anonymous' | 'user';
+
+interface StoredAnonymousToken {
+  sessionId: string;
+  token: string;
+}
 
 // ─── Token management ───
 
@@ -20,18 +29,74 @@ function getCachedToken(): string | null {
   }
 }
 
-function cacheToken(token: string) {
+function getCachedTokenKind(): TokenKind | null {
+  try {
+    const value = localStorage.getItem(TOKEN_KIND_KEY);
+    return value === 'anonymous' || value === 'user' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheToken(token: string, kind: TokenKind) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KIND_KEY, kind);
   } catch {}
 }
 
-export function setToken(token: string) {
-  cacheToken(token);
+function cacheAnonymousToken(sessionId: string, token: string) {
+  if (!sessionId || !token) return;
+  try {
+    const payload: StoredAnonymousToken = { sessionId, token };
+    localStorage.setItem(ANONYMOUS_TOKEN_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+export function setToken(token: string, kind: TokenKind = 'user') {
+  cacheToken(token, kind);
+}
+
+function rememberAnonymousToken(sessionId: string, token: string) {
+  cacheAnonymousToken(sessionId, token);
+}
+
+export function prepareAnonymousTokenForUpgrade(sessionId: string): string | null {
+  const token = getCachedTokenKind() === 'anonymous'
+    ? getCachedToken()
+    : getStoredAnonymousToken(sessionId);
+  if (token) {
+    rememberAnonymousToken(sessionId, token);
+  }
+  return token;
+}
+
+export function getStoredAnonymousToken(sessionId: string): string | null {
+  try {
+    const raw = localStorage.getItem(ANONYMOUS_TOKEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredAnonymousToken;
+    if (!parsed || parsed.sessionId !== sessionId || typeof parsed.token !== 'string' || !parsed.token) {
+      return null;
+    }
+    return parsed.token;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStoredAnonymousToken() {
+  try {
+    localStorage.removeItem(ANONYMOUS_TOKEN_KEY);
+  } catch {}
 }
 
 export function getCachedTokenUnsafe(): string | null {
   return getCachedToken();
+}
+
+export function getCachedTokenKindUnsafe(): TokenKind | null {
+  return getCachedTokenKind();
 }
 
 /**
@@ -57,7 +122,10 @@ export async function getToken(sessionId: string): Promise<string> {
         if (!res.ok) throw new Error(`Auth failed: ${res.status}`);
         const data = await res.json();
         const token = data.token as string;
-        cacheToken(token);
+        if (typeof token === 'string' && token.length > 0) {
+          cacheToken(token, 'anonymous');
+          rememberAnonymousToken(sessionId, token);
+        }
         return token;
       } finally {
         tokenPromise = null;
@@ -74,6 +142,7 @@ export async function getToken(sessionId: string): Promise<string> {
 export function clearToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KIND_KEY);
   } catch {}
   tokenPromise = null;
 }

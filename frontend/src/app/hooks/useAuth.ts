@@ -1,7 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { authFetch, clearToken, getCachedTokenUnsafe, setToken, unwrapEnvelope } from '@/lib/api';
+import {
+  authFetch,
+  clearStoredAnonymousToken,
+  clearToken,
+  getStoredAnonymousToken,
+  prepareAnonymousTokenForUpgrade,
+  setToken,
+  unwrapEnvelope,
+} from '@/lib/api';
 
 export interface AuthUser {
   id: string;
@@ -53,7 +61,7 @@ export function useAuth(sessionId: string): AuthState {
     const url = new URL(window.location.href);
     const token = url.searchParams.get('token');
     if (token) {
-      setToken(token);
+      setToken(token, 'user');
       url.searchParams.delete('token');
       url.searchParams.delete('provider');
       window.history.replaceState({}, '', url.toString());
@@ -74,7 +82,7 @@ export function useAuth(sessionId: string): AuthState {
   }, [sessionId, refreshMe]);
 
   const applyAuthResult = useCallback(async (path: string, body: Record<string, unknown>) => {
-    const previousToken = getCachedTokenUnsafe();
+    const previousToken = prepareAnonymousTokenForUpgrade(sessionId);
     const res = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,10 +102,10 @@ export function useAuth(sessionId: string): AuthState {
     if (!res.ok || !payload?.token || !payload?.user) {
       throw new Error((raw as { error?: { message?: string } })?.error?.message || '认证失败');
     }
-    setToken(payload.token);
+    setToken(payload.token, 'user');
     setUser(payload.user);
     return previousToken;
-  }, []);
+  }, [sessionId]);
 
   const login = useCallback(async (email: string, password: string) => {
     return applyAuthResult('/api/auth/login', { email, password });
@@ -127,15 +135,19 @@ export function useAuth(sessionId: string): AuthState {
 
   const logout = useCallback(() => {
     clearToken();
+    clearStoredAnonymousToken();
     setUser(null);
   }, []);
 
   const upgradeAnonymousSession = useCallback(async (anonymousToken?: string | null) => {
-    if (!sessionId || !user || !anonymousToken) return;
+    if (!sessionId || !user) return;
+    const candidateToken = anonymousToken || getStoredAnonymousToken(sessionId);
+    if (!candidateToken) return;
     await authFetch(sessionId, '/api/auth/upgrade', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, anonymous_token: anonymousToken }),
+      body: JSON.stringify({ session_id: sessionId, anonymous_token: candidateToken }),
     }, 8_000);
+    clearStoredAnonymousToken();
   }, [sessionId, user]);
 
   return useMemo(() => ({

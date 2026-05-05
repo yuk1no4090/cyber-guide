@@ -100,6 +100,11 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
             <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-300">小舟</span>
             <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
             <span className="text-[10px] text-slate-400 dark:text-slate-500">AI 学业职业规划助手</span>
+            {isCrisis && (
+              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-200">
+                紧急
+              </span>
+            )}
           </div>
           {/* 复制按钮 */}
           <button
