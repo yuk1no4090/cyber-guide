@@ -221,7 +221,7 @@ export default function MessageArea({
                   onClick={onCopyScenarioScript}
                   className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[12px] text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-600 dark:bg-sky-800/70 dark:text-sky-50 dark:hover:bg-sky-700/80"
                 >
-                  {scenarioCopied ? '✅ 已复制话术' : '📋 复制上一条话术'}
+                  {scenarioCopied ? '已复制话术' : '复制上一条话术'}
                 </button>
               </div>
             )}
@@ -285,7 +285,7 @@ export default function MessageArea({
               onClick={onShowFeedback}
               className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[12px] text-sky-500 transition-colors hover:bg-sky-100 hover:text-sky-600 dark:border-sky-600 dark:bg-sky-800/70 dark:text-sky-50 dark:hover:bg-sky-700/80 dark:hover:text-white"
             >
-              💬 聊完了？给我打个分吧
+              聊完了？给我打个分吧
             </button>
           </div>
         )}

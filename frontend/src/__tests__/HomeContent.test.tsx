@@ -125,11 +125,17 @@ describe('HomeContent auth/session behavior', () => {
     expect(screen.getByText('开始你的规划工作台')).toBeInTheDocument();
   });
 
-  it('tries to upgrade anonymous session on logged-in load', async () => {
+  it('falls back to the first session when saved active session is missing', async () => {
+    localStorage.setItem('cyber-guide-active-session-id', 'missing-session');
+    loadSessions.mockResolvedValueOnce([
+      { id: 'chat-1', title: '第一个会话', mode: 'chat' },
+      { id: 'chat-2', title: '第二个会话', mode: 'chat' },
+    ]);
+
     render(<HomeContent />);
 
     await waitFor(() => {
-      expect(mockAuthState.upgradeAnonymousSession).toHaveBeenCalled();
+      expect(loadSessionMessages).toHaveBeenCalledWith('chat-1');
     });
   });
 

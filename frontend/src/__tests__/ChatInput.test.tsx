@@ -16,17 +16,11 @@ describe('ChatInput', () => {
     expect(onSend).toHaveBeenCalledWith('你好，小舟');
   });
 
-  it('does not send when disabled', () => {
+  it('shows coming-soon affordances for secondary actions', () => {
     const onSend = vi.fn();
-    render(<ChatInput onSend={onSend} disabled />);
+    render(<ChatInput onSend={onSend} />);
 
-    const textarea = screen.getByLabelText('输入消息');
-    fireEvent.change(textarea, { target: { value: 'hello' } });
-
-    const button = screen.getByLabelText('发送消息');
-    fireEvent.click(button);
-
-    expect(onSend).not.toHaveBeenCalled();
-    expect(button).toBeDisabled();
+    expect(screen.getByLabelText('文件上传即将开放')).toBeDisabled();
+    expect(screen.getByLabelText('语音输入即将开放')).toBeDisabled();
   });
 });

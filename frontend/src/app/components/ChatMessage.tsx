@@ -30,25 +30,40 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
   const [copied, setCopied] = useState(false);
 
   const formattedHtml = useMemo(() => {
+    const protectedBlocks: string[] = [];
+
+    const stashBlock = (html: string) => {
+      const token = `__HTML_BLOCK_${protectedBlocks.length}__`;
+      protectedBlocks.push(html);
+      return token;
+    };
+
+    const formatInlineText = (value: string) => value
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-slate-50">$1</strong>')
+      .replace(/([\d-]{7,})/g, '<span class="text-sky-600 dark:text-sky-300 font-medium">$1</span>')
+      .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-sky-50 dark:bg-sky-900/35 rounded text-sky-700 dark:text-sky-200 text-[13px]">$1</code>');
+
     let formatted = content;
 
-    formatted = formatted.replace(/^### (.+)/gm, '<div class="text-[13px] font-semibold text-slate-800 dark:text-slate-100 mt-2 mb-1">$1</div>');
-    formatted = formatted.replace(/^## (.+)/gm, '<div class="text-[14px] font-semibold text-slate-800 dark:text-slate-100 mt-3 mb-1">$1</div>');
-    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-slate-50">$1</strong>');
-    formatted = formatted.replace(/^(\d+)\.\s+(.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 font-medium min-w-[1.2em] text-right">$1.</span><span>$2</span></div>');
-    formatted = formatted.replace(/^- (.+)/gm, '<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 mt-0.5">•</span><span>$1</span></div>');
-    formatted = formatted.replace(/([\d-]{7,})/g, '<span class="text-sky-600 dark:text-sky-300 font-medium">$1</span>');
-    formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-sky-50 dark:bg-sky-900/35 rounded text-sky-700 dark:text-sky-200 text-[13px]">$1</code>');
-    // Markdown links: [text](https://example.com)
+    formatted = formatted.replace(/^### (.+)/gm, (_, title: string) => `<div class="text-[13px] font-semibold text-slate-800 dark:text-slate-100 mt-2 mb-1">${formatInlineText(title)}</div>`);
+    formatted = formatted.replace(/^## (.+)/gm, (_, title: string) => `<div class="text-[14px] font-semibold text-slate-800 dark:text-slate-100 mt-3 mb-1">${formatInlineText(title)}</div>`);
+    formatted = formatted.replace(/^(- .+)$/gm, (line: string) => {
+      const matched = line.match(/^- (.+)$/);
+      return matched
+        ? `<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 mt-0.5">•</span><span>${formatInlineText(matched[1])}</span></div>`
+        : line;
+    });
+    formatted = formatted.replace(/^(\d+)\.\s+(.+)$/gm, (_, index: string, text: string) => `<div class="flex gap-1.5 items-start mb-0.5"><span class="text-sky-500 font-medium min-w-[1.2em] text-right">${index}.</span><span>${formatInlineText(text)}</span></div>`);
     formatted = formatted.replace(
       /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">$1</a>'
+      (_, label: string, url: string) => stashBlock(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">${label}</a>`)
     );
-    // Plain URLs
     formatted = formatted.replace(
       /(^|[\s(（])(https?:\/\/[^\s<)）]+)([)）.,!?，。；;:]?)/g,
-      '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">$2</a>$3'
+      (_, prefix: string, url: string, suffix: string) => `${prefix}${stashBlock(`<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-300 underline underline-offset-2 break-all">${url}</a>`)}${suffix}`
     );
+    formatted = formatInlineText(formatted);
+    formatted = formatted.replace(/__HTML_BLOCK_(\d+)__/g, (_, index: string) => protectedBlocks[Number(index)] ?? '');
     formatted = formatted.replace(/\n/g, '<br />');
     formatted = formatted.replace(/(<br \/>){3,}/g, '<br /><br />');
 
@@ -109,7 +124,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
           {/* 复制按钮 */}
           <button
             onClick={handleCopy}
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+            className="copy-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
             title="复制内容"
             aria-label="复制消息内容"
           >
@@ -133,7 +148,7 @@ const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, e
         {Array.isArray(evidence) && evidence.length > 0 && (
           <details className="mt-2.5 rounded-xl border border-sky-100/80 dark:border-sky-900/45 bg-gradient-to-br from-sky-50/80 to-indigo-50/70 dark:from-slate-900/70 dark:to-slate-800/70 px-2.5 py-2">
             <summary className="cursor-pointer text-[11px] text-slate-600 dark:text-slate-300 font-medium">
-              📎 回答依据（{evidence.length}）
+              回答依据（{evidence.length}）
             </summary>
             <div className="evidence-panel mt-1.5 space-y-1.5">
               {evidence.slice(0, 5).map((item, idx) => (

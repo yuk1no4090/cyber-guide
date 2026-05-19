@@ -69,7 +69,7 @@ export default function RecapCard({ recap, onClose, generationMeta }: RecapCardP
               title="复制行动清单"
               aria-label="复制行动清单"
             >
-              {copied ? '✅ 已复制' : '📋 复制行动'}
+              {copied ? '已复制' : '复制行动'}
             </button>
             {onClose && (
               <button

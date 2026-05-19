@@ -54,7 +54,7 @@ const ProfileReport = React.memo(function ProfileReport({ content, onClose, isOt
               className="text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-100 text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               title="复制报告"
             >
-              {copied ? '✅ 已复制' : '📋 复制'}
+              {copied ? '已复制' : '复制'}
             </button>
             <button
               onClick={onClose}

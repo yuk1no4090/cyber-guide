@@ -150,6 +150,8 @@ export function useSidebarSessions({
         if (fallback) {
           void loadSessionMessages(fallback);
         } else {
+          setProfileMessages([]);
+          setMode('chat');
           setMessages([welcomeMessage]);
           try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
         }

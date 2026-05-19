@@ -91,6 +91,7 @@ export default function HomeContent() {
   const { darkMode, toggleDarkMode } = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [shouldStickToBottom, setShouldStickToBottom] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
 
   const clearDerivedViewState = (nextSuggestions: string[]) => {
     setRecap(null);
@@ -144,7 +145,12 @@ export default function HomeContent() {
   }, []);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (authLoading) return;
+    setAuthReady(true);
+  }, [authLoading]);
+
+  useEffect(() => {
+    if (!sessionId || !authReady) return;
     if (!isLoggedIn) {
       setSessions([]);
       setSelectedSessionId(null);
@@ -168,7 +174,7 @@ export default function HomeContent() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, isLoggedIn]);
+  }, [sessionId, isLoggedIn, authReady]);
 
   useEffect(() => {
     if (!sessionId || !isLoggedIn) return;
@@ -273,7 +279,7 @@ export default function HomeContent() {
     setPendingReset(false);
     setIsLoading(false);
     setSelectedSessionId(null);
-    try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
+    setStructuredProfile(loadProfileFromStorage());
   };
 
   const startProfile = () => {

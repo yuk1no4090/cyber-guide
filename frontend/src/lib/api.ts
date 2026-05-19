@@ -6,6 +6,7 @@
 const API_BASE = '';  // empty = same origin, Next.js rewrites /api/* to backend
 const TOKEN_KEY = 'cyber-guide-jwt';
 const TOKEN_KIND_KEY = 'cyber-guide-jwt-kind';
+const TOKEN_SESSION_KEY = 'cyber-guide-jwt-session-id';
 const ANONYMOUS_TOKEN_KEY = 'cyber-guide-anonymous-token';
 const TRACE_ID_HEADER = 'X-Trace-Id';
 
@@ -38,10 +39,23 @@ function getCachedTokenKind(): TokenKind | null {
   }
 }
 
-function cacheToken(token: string, kind: TokenKind) {
+function getCachedTokenSessionId(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function cacheToken(token: string, kind: TokenKind, sessionId?: string | null) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(TOKEN_KIND_KEY, kind);
+    if (kind === 'anonymous' && sessionId) {
+      localStorage.setItem(TOKEN_SESSION_KEY, sessionId);
+    } else {
+      localStorage.removeItem(TOKEN_SESSION_KEY);
+    }
   } catch {}
 }
 
@@ -53,8 +67,8 @@ function cacheAnonymousToken(sessionId: string, token: string) {
   } catch {}
 }
 
-export function setToken(token: string, kind: TokenKind = 'user') {
-  cacheToken(token, kind);
+export function setToken(token: string, kind: TokenKind = 'user', sessionId?: string | null) {
+  cacheToken(token, kind, sessionId);
 }
 
 function rememberAnonymousToken(sessionId: string, token: string) {
@@ -62,9 +76,10 @@ function rememberAnonymousToken(sessionId: string, token: string) {
 }
 
 export function prepareAnonymousTokenForUpgrade(sessionId: string): string | null {
-  const token = getCachedTokenKind() === 'anonymous'
+  const cachedAnonymousToken = getCachedTokenKind() === 'anonymous' && getCachedTokenSessionId() === sessionId
     ? getCachedToken()
-    : getStoredAnonymousToken(sessionId);
+    : null;
+  const token = cachedAnonymousToken || getStoredAnonymousToken(sessionId);
   if (token) {
     rememberAnonymousToken(sessionId, token);
   }
@@ -105,7 +120,13 @@ export function getCachedTokenKindUnsafe(): TokenKind | null {
  */
 export async function getToken(sessionId: string): Promise<string> {
   const cached = getCachedToken();
-  if (cached) return cached;
+  const cachedKind = getCachedTokenKind();
+  const cachedSessionId = getCachedTokenSessionId();
+  if (cached) {
+    if (cachedKind === 'user') return cached;
+    if (cachedKind === 'anonymous' && cachedSessionId === sessionId) return cached;
+    clearToken();
+  }
 
   if (!tokenPromise) {
     tokenPromise = (async () => {
@@ -123,7 +144,7 @@ export async function getToken(sessionId: string): Promise<string> {
         const data = await res.json();
         const token = data.token as string;
         if (typeof token === 'string' && token.length > 0) {
-          cacheToken(token, 'anonymous');
+          cacheToken(token, 'anonymous', sessionId);
           rememberAnonymousToken(sessionId, token);
         }
         return token;
@@ -143,6 +164,7 @@ export function clearToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KIND_KEY);
+    localStorage.removeItem(TOKEN_SESSION_KEY);
   } catch {}
   tokenPromise = null;
 }
@@ -183,14 +205,22 @@ export async function fetchWithTimeout(
   timeoutMs = 10_000
 ): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+  const existingSignal = init.signal;
+  const abortFromExisting = () => controller.abort();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const existingSignal = init.signal;
-    // If caller already provided a signal, don't override it
-    const signal = existingSignal || controller.signal;
-    return await fetch(input, { ...init, signal });
+    if (existingSignal) {
+      if (existingSignal.aborted) {
+        controller.abort();
+      } else {
+        existingSignal.addEventListener('abort', abortFromExisting, { once: true });
+      }
+    }
+    return await fetch(input, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
+    existingSignal?.removeEventListener('abort', abortFromExisting);
   }
 }
 

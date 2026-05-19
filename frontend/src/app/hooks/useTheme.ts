@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 
 const THEME_STORAGE_KEY = 'cyber-guide-theme';
+const LIGHT_THEME_COLOR = '#f0f7ff';
+const DARK_THEME_COLOR = '#020617';
 
 export function useTheme() {
   const [darkMode, setDarkMode] = useState(false);
@@ -26,6 +28,14 @@ export function useTheme() {
     const root = document.documentElement;
     root.classList.toggle('theme-dark', darkMode);
     root.classList.toggle('dark', darkMode);
+    const themeColor = darkMode ? DARK_THEME_COLOR : LIGHT_THEME_COLOR;
+    let themeMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    if (!themeMeta) {
+      themeMeta = document.createElement('meta');
+      themeMeta.name = 'theme-color';
+      document.head.appendChild(themeMeta);
+    }
+    themeMeta.content = themeColor;
     try {
       localStorage.setItem(THEME_STORAGE_KEY, darkMode ? 'dark' : 'light');
     } catch {
