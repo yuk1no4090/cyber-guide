@@ -18,7 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Random;
+import java.security.SecureRandom;
 
 @Service
 public class EmailCodeService {
@@ -29,6 +29,12 @@ public class EmailCodeService {
     private static final Duration SEND_WINDOW = Duration.ofHours(1);
     private static final int MAX_SEND_PER_HOUR = 10;
     private static final int MAX_VERIFY_ATTEMPTS = 6;
+
+    /** A verification code is a credential; java.util.Random is a predictable PRNG, not a source for one. */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    /** Matches the value in application.yml so a deployment left on it can be called out. */
+    static final String COMMITTED_DEFAULT_PEPPER = "cyber-guide-email-code-pepper";
 
     private final StringRedisTemplate redis;
     private final Optional<JavaMailSender> mailSender;
@@ -93,6 +99,23 @@ public class EmailCodeService {
         }
     }
 
+
+    /**
+     * The pepper ships with a value committed to a public repository. It is mixed
+     * into the stored code hash, so a deployment left on the default gains nothing
+     * from hashing: anyone who can read Redis can brute-force a six-digit code
+     * offline in moments. Not fatal enough to refuse startup -- the codes live five
+     * minutes in a password-protected local Redis -- but it should never pass
+     * unnoticed.
+     */
+    @PostConstruct
+    void warnOnDefaultPepper() {
+        if (enabled && COMMITTED_DEFAULT_PEPPER.equals(hashPepper)) {
+            log.error("email code verification is enabled but EMAIL_CODE_HASH_PEPPER is still the "
+                    + "default committed in application.yml. Set it to a private random value.");
+        }
+    }
+
     public SendCodeResult sendRegisterCode(String email) {
         String normalizedEmail = normalizeEmail(email);
         if (!enabled) {
@@ -101,7 +124,7 @@ public class EmailCodeService {
         }
         ensureCanSend(normalizedEmail);
 
-        String code = String.format("%06d", new Random().nextInt(1_000_000));
+        String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
         String codeHash = sha256Hex(normalizedEmail + ":" + code + ":" + hashPepper);
 
         redis.opsForValue().set(codeKey(normalizedEmail), codeHash, CODE_TTL);

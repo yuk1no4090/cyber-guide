@@ -33,6 +33,7 @@ class InputValidationTest {
     @MockBean private RedisRateLimiter rateLimiter;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private PlanService planService;
+    @MockBean private com.cyberguide.security.SessionOwnershipGuard ownershipGuard;
     @MockBean private FeedbackService feedbackService;
 
     // ── Chat endpoint ──

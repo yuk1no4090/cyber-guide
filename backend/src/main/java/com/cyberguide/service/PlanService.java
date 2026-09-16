@@ -4,6 +4,7 @@ import com.cyberguide.ai.AiClient;
 import com.cyberguide.infrastructure.cache.CacheGuard;
 import com.cyberguide.model.PlanDay;
 import com.cyberguide.repository.PlanDayRepository;
+import com.cyberguide.security.SecurityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -99,6 +100,7 @@ public class PlanService {
             plan.setDayIndex(dayIndex);
             plan.setTaskText(taskText);
             plan.setStatus("todo");
+            stampOwner(plan);
             saved.add(repo.save(plan));
         }
 
@@ -151,6 +153,7 @@ public class PlanService {
         plan.setDayIndex(dayIndex);
         plan.setTaskText(taskText);
         plan.setStatus("todo");
+        stampOwner(plan);
         PlanDay saved = repo.save(plan);
 
         evictPlanCache(sessionId);
@@ -160,6 +163,18 @@ public class PlanService {
     /**
      * Evict plan cache for a session (called after any write operation).
      */
+    /**
+     * Record the owning user on rows a logged-in caller creates, so the ownership
+     * check has something to check. Anonymous sessions leave it null until
+     * AuthUpgradeService claims them at signup; an already-stamped row is never
+     * reassigned.
+     */
+    private void stampOwner(PlanDay plan) {
+        if (plan.getUserId() == null) {
+            SecurityUtils.currentUserId().ifPresent(plan::setUserId);
+        }
+    }
+
     private void evictPlanCache(String sessionId) {
         cacheGuard.evict(CACHE_KEY_PREFIX + sessionId);
         log.debug("plan cache evicted: sessionId={}", sessionId);

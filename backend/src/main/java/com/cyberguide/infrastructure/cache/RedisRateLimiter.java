@@ -70,6 +70,18 @@ public class RedisRateLimiter {
     }
 
     /**
+     * Drop a counter. Used after a successful login so that a legitimate user
+     * who signs in repeatedly never accumulates their way into a block.
+     */
+    public void reset(String key) {
+        try {
+            redisTemplate.delete(key);
+        } catch (Exception e) {
+            log.warn("Redis rate limiter reset failed: key={}, error={}", key, e.getMessage());
+        }
+    }
+
+    /**
      * Convenience method for chat rate limiting.
      * Key format: rate:chat:{sessionId}
      */

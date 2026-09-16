@@ -51,4 +51,43 @@ class JwtTokenProviderTest {
         String t2 = provider.generateAnonymousToken("session-2");
         assertNotEquals(t1, t2);
     }
+
+    @Test
+    void refusesTheSecretCommittedToTheRepository() {
+        // That value is public. A deployment still on it has no signing secret at
+        // all, so starting up would be worse than not starting.
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtTokenProvider(JwtTokenProvider.COMMITTED_DEFAULT_SECRET, 86400000L));
+
+        assertTrue(ex.getMessage().contains("JWT_SECRET"));
+    }
+
+    @Test
+    void refusesAnEmptySecret() {
+        assertThrows(IllegalStateException.class, () -> new JwtTokenProvider("", 86400000L));
+    }
+
+    @Test
+    void refusesAShortSecretInsteadOfPaddingIt() {
+        // The old behaviour zero-padded to 32 bytes, producing a key that is mostly
+        // null bytes while still reporting as HS256 strength.
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtTokenProvider("too-short", 86400000L));
+
+        assertTrue(ex.getMessage().contains("bytes"));
+    }
+
+    @Test
+    void allowsTheCommittedDefaultOnlyUnderADevProfile() {
+        JwtTokenProvider dev = new JwtTokenProvider(
+                JwtTokenProvider.COMMITTED_DEFAULT_SECRET, 86400000L, "local");
+
+        assertTrue(dev.validateToken(dev.generateAnonymousToken("s-1")));
+    }
+
+    @Test
+    void anUnprofiledBootIsTreatedAsProduction() {
+        assertThrows(IllegalStateException.class,
+                () -> new JwtTokenProvider(JwtTokenProvider.COMMITTED_DEFAULT_SECRET, 86400000L, ""));
+    }
 }

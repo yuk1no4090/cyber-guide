@@ -72,6 +72,18 @@ security:
   jwt:
     secret: ${JWT_SECRET:cyber-guide-default-secret-key-change-in-production-32chars!!}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  api-docs:
+    # The OpenAPI schema is a complete map of every endpoint and body shape.
+    # Public only when explicitly switched on, or under a dev-like profile.
+    public: ${API_DOCS_PUBLIC:false}
+  rate-limit:
+    # Keyed on email, not IP: this service sits behind nginx and a Next.js
+    # rewrite, so every request arrives from 127.0.0.1 and the forwarded-for
+    # chain is client-writable. See AuthRateLimiter for the reasoning.
+    login-per-window: ${AUTH_LOGIN_PER_WINDOW:10}
+    login-window-seconds: ${AUTH_LOGIN_WINDOW_SECONDS:900}
+    register-per-email-per-hour: ${AUTH_REGISTER_PER_EMAIL_PER_HOUR:5}
+    register-global-per-hour: ${AUTH_REGISTER_GLOBAL_PER_HOUR:60}
   email-code:
     enabled: ${EMAIL_CODE_ENABLED:false}
     dev-log-only: ${EMAIL_CODE_DEV_LOG_ONLY:true}

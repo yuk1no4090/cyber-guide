@@ -39,4 +39,17 @@ public final class SecurityUtils {
                 .filter(AuthPrincipal::isAnonymous)
                 .map(AuthPrincipal::id);
     }
+
+    /**
+     * Whether the named active profiles mean "a developer is running this locally".
+     * Security defaults are relaxed only here, never on an unprofiled (production) boot.
+     */
+    public static boolean isDevLikeProfile(String activeProfiles) {
+        if (activeProfiles == null || activeProfiles.isBlank()) return false;
+        for (String profile : activeProfiles.split(",")) {
+            String p = profile.trim().toLowerCase(java.util.Locale.ROOT);
+            if (p.equals("local") || p.equals("dev") || p.equals("test")) return true;
+        }
+        return false;
+    }
 }

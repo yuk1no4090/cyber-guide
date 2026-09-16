@@ -16,7 +16,8 @@ public enum ErrorCode {
     EMAIL_ALREADY_EXISTS("EMAIL_ALREADY_EXISTS", 409, "邮箱已被注册"),
     EMAIL_CODE_INVALID("EMAIL_CODE_INVALID", 400, "邮箱验证码错误"),
     EMAIL_CODE_EXPIRED("EMAIL_CODE_EXPIRED", 400, "邮箱验证码已过期"),
-    UNAUTHORIZED("UNAUTHORIZED", 401, "未登录或登录已过期"),
+    UNAUTHORIZED("UNAUTHORIZED", 401, "未登录或登录已过期"),
+    FORBIDDEN("FORBIDDEN", 403, "无权访问该资源"),
     RESOURCE_NOT_FOUND("RESOURCE_NOT_FOUND", 404, "资源不存在"),
     RATE_LIMITED("RATE_LIMITED", 429, "请求过于频繁，请稍后再试"),
 

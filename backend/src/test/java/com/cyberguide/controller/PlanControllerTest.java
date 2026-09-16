@@ -33,6 +33,9 @@ class PlanControllerTest {
     private PlanService planService;
 
     @MockBean
+    private com.cyberguide.security.SessionOwnershipGuard ownershipGuard;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @Test

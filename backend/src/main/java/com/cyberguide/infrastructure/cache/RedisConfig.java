@@ -3,7 +3,7 @@ package com.cyberguide.infrastructure.cache;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
@@ -41,8 +41,19 @@ public class RedisConfig {
 
         ObjectMapper om = new ObjectMapper();
         om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        om.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL);
+        // Default typing writes a class name into every cached value and trusts it
+        // on the way back. LaissezFaire trusted ANY class name, which turns a write
+        // to Redis into arbitrary object construction -- the standard Jackson
+        // deserialization gadget path. Restrict it to the types this cache actually
+        // stores so a forged class name is refused instead of instantiated.
+        BasicPolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.cyberguide.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.lang.")
+                .allowIfSubType("java.time.")
+                .allowIfSubType("java.math.")
+                .build();
+        om.activateDefaultTyping(typeValidator, ObjectMapper.DefaultTyping.NON_FINAL);
 
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(om);
         StringRedisSerializer stringSerializer = new StringRedisSerializer();

@@ -38,6 +38,18 @@ public class SecurityConfig {
     @Value("${security.cors.allowed-origin-patterns:http://localhost:*,https://*.cyberguide.dev}")
     private String allowedOriginPatterns;
 
+    @Value("${spring.profiles.active:}")
+    private String activeProfiles;
+
+    /**
+     * Whether the OpenAPI schema and Swagger UI answer without credentials. Off by
+     * default: the schema is a complete map of every endpoint and body shape, which
+     * is a gift to anyone probing the service. Dev-like profiles keep it on so local
+     * work is unaffected.
+     */
+    @Value("${security.api-docs.public:false}")
+    private boolean apiDocsPublic;
+
     public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
         this.jwtFilter = jwtFilter;
     }
@@ -48,16 +60,30 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .authorizeHttpRequests(auth -> auth
-                // Public endpoints
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // All other /api/** require authentication
-                .requestMatchers("/api/**").authenticated()
-                .anyRequest().permitAll()
-            )
+            .authorizeHttpRequests(auth -> {
+                auth
+                    // Public endpoints
+                    .requestMatchers("/api/auth/**").permitAll()
+                    // Only the probes nginx and uptime checks need, not all of actuator.
+                    .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                    .requestMatchers("/actuator/**").denyAll()
+                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
+
+                // These paths are outside /api/**, so dropping a permitAll rule would
+                // leave them reachable through anyRequest().permitAll() below. Closing
+                // them takes an explicit denial.
+                String[] apiDocs = {"/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**"};
+                if (apiDocsPublic || SecurityUtils.isDevLikeProfile(activeProfiles)) {
+                    auth.requestMatchers(apiDocs).permitAll();
+                } else {
+                    auth.requestMatchers(apiDocs).denyAll();
+                }
+
+                auth
+                    // All other /api/** require authentication
+                    .requestMatchers("/api/**").authenticated()
+                    .anyRequest().permitAll();
+            })
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

@@ -2,6 +2,7 @@ package com.cyberguide.controller;
 
 import com.cyberguide.exception.BizException;
 import com.cyberguide.exception.ErrorCode;
+import com.cyberguide.security.SessionOwnershipGuard;
 import com.cyberguide.service.PlanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,9 +23,11 @@ public class PlanController {
     private static final Logger log = LoggerFactory.getLogger(PlanController.class);
     private static final Set<String> VALID_STATUSES = Set.of("todo", "done", "skipped");
     private final PlanService planService;
+    private final SessionOwnershipGuard ownershipGuard;
 
-    public PlanController(PlanService planService) {
+    public PlanController(PlanService planService, SessionOwnershipGuard ownershipGuard) {
         this.planService = planService;
+        this.ownershipGuard = ownershipGuard;
     }
 
     @GetMapping("/fetch")
@@ -33,6 +36,7 @@ public class PlanController {
         if (session_id == null || session_id.isBlank()) {
             throw new BizException(ErrorCode.INVALID_SESSION_ID);
         }
+        ownershipGuard.assertCanAccessPlan(session_id);
         log.info("plan fetch: sessionId={}", session_id);
         var result = planService.fetch(session_id);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("plans", result.plans(), "today_index", result.todayIndex())));
@@ -46,6 +50,7 @@ public class PlanController {
         if (sessionId == null || sessionId.isBlank()) {
             throw new BizException(ErrorCode.INVALID_SESSION_ID);
         }
+        ownershipGuard.assertCanAccessPlan(sessionId);
         log.info("plan generate: sessionId={}", sessionId);
         var result = planService.generate(sessionId, context);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("plans", result.plans())));
@@ -60,6 +65,7 @@ public class PlanController {
         if (!VALID_STATUSES.contains(body.status())) {
             throw new BizException(ErrorCode.INVALID_STATUS, "status 必须是 todo/done/skipped 之一");
         }
+        ownershipGuard.assertCanAccessPlan(body.session_id());
         log.info("plan status update: sessionId={}, day={}, status={}", body.session_id(), body.day_index(), body.status());
         try {
             var plan = planService.update(body.session_id(), body.day_index(), body.status());
@@ -78,6 +84,7 @@ public class PlanController {
         if (body.day_index() < 1 || body.day_index() > 7) {
             throw new BizException(ErrorCode.INVALID_DAY_INDEX);
         }
+        ownershipGuard.assertCanAccessPlan(body.session_id());
         log.info("plan regenerate: sessionId={}, day={}", body.session_id(), body.day_index());
         var plan = planService.regenerateDay(body.session_id(), body.day_index(), body.context());
         return ResponseEntity.ok(ApiResponse.ok(Map.of("plan", plan)));

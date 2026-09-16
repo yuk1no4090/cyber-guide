@@ -22,22 +22,61 @@ public class JwtTokenProvider {
 
     private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
 
+    /**
+     * The value that ships in application.yml. It is in a public repository, so a
+     * deployment still running on it has no signing secret at all: anyone can mint
+     * a token for any user. Refusing to start is the only honest response.
+     */
+    static final String COMMITTED_DEFAULT_SECRET =
+            "cyber-guide-default-secret-key-change-in-production-32chars!!";
+
+    private static final int MIN_SECRET_BYTES = 32;
+
     private final SecretKey key;
     private final long expirationMs;
 
+    /** Test/non-Spring entry point. Applies production strictness, which is what tests should see. */
+    public JwtTokenProvider(String secret, long expirationMs) {
+        this(secret, expirationMs, "");
+    }
+
     public JwtTokenProvider(
-            @Value("${security.jwt.secret:cyber-guide-default-secret-key-change-in-production-32chars!!}") String secret,
-            @Value("${security.jwt.expiration-ms:86400000}") long expirationMs) {
-        // Ensure key is at least 256 bits for HS256
+            @Value("${security.jwt.secret:}") String secret,
+            @Value("${security.jwt.expiration-ms:86400000}") long expirationMs,
+            @Value("${spring.profiles.active:}") String activeProfiles) {
+
+        boolean relaxed = SecurityUtils.isDevLikeProfile(activeProfiles);
+
+        if (secret == null || secret.isBlank() || COMMITTED_DEFAULT_SECRET.equals(secret)) {
+            String problem = "JWT_SECRET is unset or still the default committed in application.yml";
+            if (!relaxed) {
+                throw new IllegalStateException(problem
+                        + ". Set JWT_SECRET to a private random value of at least "
+                        + MIN_SECRET_BYTES + " bytes before starting outside a dev profile.");
+            }
+            log.warn("{} -- allowed only because a dev profile is active: {}", problem, activeProfiles);
+            secret = COMMITTED_DEFAULT_SECRET;
+        }
+
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            // The old behaviour zero-padded, which turns a short secret into a key
+            // that is mostly null bytes while still reporting as HS256 strength.
+            if (!relaxed) {
+                throw new IllegalStateException("JWT_SECRET is only " + keyBytes.length
+                        + " bytes; HS256 needs at least " + MIN_SECRET_BYTES
+                        + ". Padding it would fake the key strength, so startup stops here.");
+            }
+            log.warn("JWT secret is {} bytes, padding to {} -- dev profile only", keyBytes.length, MIN_SECRET_BYTES);
+            byte[] padded = new byte[MIN_SECRET_BYTES];
             System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
             keyBytes = padded;
         }
+
         this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expirationMs = expirationMs;
     }
+
 
     /**
      * Generate an anonymous session token.

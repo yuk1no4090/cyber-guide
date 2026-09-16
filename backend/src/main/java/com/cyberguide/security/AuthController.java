@@ -35,6 +35,7 @@ public class AuthController {
     private final AuthService authService;
     private final AuthUpgradeService authUpgradeService;
     private final EmailCodeService emailCodeService;
+    private final AuthRateLimiter authRateLimiter;
 
     @Value("${security.oauth.github.client-id:}")
     private String githubClientId;
@@ -51,11 +52,13 @@ public class AuthController {
     public AuthController(JwtTokenProvider tokenProvider,
                           AuthService authService,
                           AuthUpgradeService authUpgradeService,
-                          EmailCodeService emailCodeService) {
+                          EmailCodeService emailCodeService,
+                          AuthRateLimiter authRateLimiter) {
         this.tokenProvider = tokenProvider;
         this.authService = authService;
         this.authUpgradeService = authUpgradeService;
         this.emailCodeService = emailCodeService;
+        this.authRateLimiter = authRateLimiter;
     }
 
     /**
@@ -85,6 +88,7 @@ public class AuthController {
         if (body == null) {
             throw new BizException(ErrorCode.INVALID_REQUEST);
         }
+        authRateLimiter.checkRegister(body.email());
         AuthService.AuthResult result = authService.register(
                 body.email(),
                 body.password(),
@@ -138,7 +142,9 @@ public class AuthController {
         if (body == null) {
             throw new BizException(ErrorCode.INVALID_REQUEST);
         }
+        authRateLimiter.checkLogin(body.email());
         AuthService.AuthResult result = authService.login(body.email(), body.password());
+        authRateLimiter.clearLogin(body.email());
         log.info("login success: email={}", body.email());
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
                 "token", result.token(),

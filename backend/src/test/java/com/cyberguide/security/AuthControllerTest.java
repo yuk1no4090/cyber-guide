@@ -46,6 +46,9 @@ class AuthControllerTest {
     @MockBean
     private EmailCodeService emailCodeService;
 
+    @MockBean
+    private AuthRateLimiter authRateLimiter;
+
     @Test
     void anonymousIssuesJwtToken() throws Exception {
         when(tokenProvider.generateAnonymousToken("session-test")).thenReturn("jwt-token-value");
