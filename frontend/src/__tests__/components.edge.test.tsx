@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import ChatInput from '@/app/components/ChatInput';
 import ChatMessage from '@/app/components/ChatMessage';

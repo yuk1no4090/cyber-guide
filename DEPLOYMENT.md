@@ -1,5 +1,38 @@
 # Cyber Guide 服务器部署指南
 
+> **先读这一节：本文档其余部分描述的是 Docker Compose 路线，而线上那台机器并不是这么跑的。**
+>
+> 线上（`guide.yuk1no4090.site`）的真实形态：
+>
+> | | 实际情况 |
+> |---|---|
+> | 编排方式 | 两个 systemd unit，**没有 Docker** |
+> | 代码位置 | `/opt/cyber-guide` |
+> | 环境变量 | `/opt/cyber-guide/runtime.env`（不是 `.env`） |
+> | 后端 | `cyber-guide-backend.service`，直接 `java -jar backend/target/*.jar` |
+> | 前端 | `cyber-guide-frontend.service`，`npm start`（Node 20） |
+> | 数据库 / 缓存 | 宿主机上的 PostgreSQL 与 Redis，非容器 |
+> | nginx | 整个子域全部转给 Next.js `:3000`，由 Next 的 rewrite 再转后端 `:8080` |
+>
+> 两个非直觉的约束：
+>
+> 1. **那台机器访问 GitHub 超时**，所以 `git pull` 式的部署不可行；代码要用
+>    `tar czf - <文件> | ssh <主机> 'sudo tar xzf - -C /opt/cyber-guide'` 推上去。
+>    （原先仓库里有一个走 `git pull` + `docker compose` 的 CD 流水线，两个前提在这台
+>    机器上都不成立，从来没有成功运行过，已删除。）
+> 2. **内存只有 1.6 GiB**，`npm run build` 和 `mvn package` 在上面直接跑很容易被
+>    OOM killer 打断，并且 `npm ci` 是先删后装，被打断会留下残缺的 `node_modules`。
+>    建议在本地构建后传产物；若必须在机器上构建，套一层
+>    `sudo systemd-run --unit=build -p MemoryMax=700M ...`，让 OOM 只杀自己。
+>
+> 更新一次线上的最小步骤：本地 `mvn package -DskipTests` 与 `npm run build`，把
+> `backend/target/*.jar` 和 `frontend/.next`（排除 `cache/`）打包推到 `/opt/cyber-guide`，
+> 然后 `sudo systemctl restart cyber-guide-backend cyber-guide-frontend`。改动前先备份，
+> 回滚就是把备份换回去再重启。
+>
+> 下面的 Docker Compose 路线仍然可用于**本地开发**和全新机器的从零搭建。
+
+
 ## 📋 前置要求
 
 ### 服务器配置

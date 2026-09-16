@@ -18,12 +18,9 @@ import { useProfileFlow, generateReportAction, handleProfileFormSubmitAction } f
 import { authFetch, unwrapEnvelope } from '@/lib/api';
 import { parsePlanQuery } from '@/lib/plan';
 import {
-  type RelationshipScenario,
   trackScenarioScriptCopied,
 } from '@/lib/scenario';
 import {
-  STORAGE_KEY,
-  PROFILE_STORAGE_KEY,
   ACTIVE_SESSION_KEY,
   PROFILE_DATA_PREFIX,
   WELCOME_MESSAGE,
@@ -40,8 +37,6 @@ import {
   ACTION_GENERATE_REPORT,
   isAction,
   getProfileOtherSuggestions,
-  saveToStorage,
-  loadFromStorage,
   clearStorage,
   loadProfileFromStorage,
   saveProfileToStorage,
@@ -51,7 +46,7 @@ import {
 type Message = ChatMessageState;
 
 export default function HomeContent() {
-  const { sessionId, dataOptIn, toggleDataOptIn } = useSession();
+  const { sessionId, dataOptIn } = useSession();
   const {
     user,
     isLoggedIn,
@@ -70,7 +65,6 @@ export default function HomeContent() {
     suggestions, setSuggestions,
     chatSuggestionsBak, setChatSuggestionsBak,
     isLoading, setIsLoading,
-    showDisclaimer, setShowDisclaimer,
     showFeedback, setShowFeedback,
     feedbackDone, setFeedbackDone,
     hadCrisis, setHadCrisis,
@@ -349,7 +343,6 @@ export default function HomeContent() {
       toApiMessages,
       setRecap,
       setRecapMeta,
-      setSuggestions,
       setIsRecapLoading,
     });
   };
@@ -531,7 +524,7 @@ export default function HomeContent() {
       <AppShell
         mobileSidebarOpen={sidebarOpen}
         onMobileSidebarOpenChange={setSidebarOpen}
-        renderSidebar={({ isDesktop, isTablet, desktopSidebarCollapsed, closeMobileSidebar, toggleSidebar }) => (
+        renderSidebar={({ isDesktop, desktopSidebarCollapsed, closeMobileSidebar, toggleSidebar }) => (
           <Sidebar
             sessions={sessions}
             selectedSessionId={selectedSessionId}
@@ -580,7 +573,6 @@ export default function HomeContent() {
         renderContent={() => (
           <MessageArea
             mode={mode}
-            isProfileMode={isProfileMode}
             isLoading={isLoading}
             isSessionLoading={isSessionLoading}
             currentMessages={currentMessages}
@@ -599,7 +591,6 @@ export default function HomeContent() {
             onSelectScenario={setSelectedScenario}
             scenarioCopied={scenarioCopied}
             onCopyScenarioScript={copyLatestScenarioScript}
-            hasUserAskedInProfile={hasUserAskedInProfile}
             latestScenarioAssistantMessage={latestScenarioAssistantMessage}
             showProfileForm={showProfileForm}
             structuredProfile={structuredProfile}

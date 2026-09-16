@@ -16,7 +16,6 @@ import type { RelationshipScenario } from '@/lib/scenario';
 
 interface MessageAreaProps {
   mode: AppMode;
-  isProfileMode: boolean;
   isLoading: boolean;
   isSessionLoading: boolean;
   currentMessages: ChatMessageState[];
@@ -37,7 +36,6 @@ interface MessageAreaProps {
   onSelectScenario: (s: RelationshipScenario | null) => void;
   scenarioCopied: boolean;
   onCopyScenarioScript: () => void;
-  hasUserAskedInProfile: boolean;
   latestScenarioAssistantMessage: ChatMessageState | undefined;
   // Profile form
   showProfileForm: boolean;
@@ -69,7 +67,6 @@ interface MessageAreaProps {
 
 export default function MessageArea({
   mode,
-  isProfileMode,
   isLoading,
   isSessionLoading,
   currentMessages,
@@ -88,7 +85,6 @@ export default function MessageArea({
   onSelectScenario,
   scenarioCopied,
   onCopyScenarioScript,
-  hasUserAskedInProfile,
   latestScenarioAssistantMessage,
   showProfileForm,
   structuredProfile,

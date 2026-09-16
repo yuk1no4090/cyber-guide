@@ -3,7 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HomeContent from '@/app/HomeContent';
 
-const mockAuthState = {
+// The logged-out leg of these tests assigns null, so the field has to be
+// declared nullable rather than inferred from the logged-in literal.
+const mockAuthState: {
+  user: { id: string; email: string; nickname: string } | null;
+  isLoggedIn: boolean;
+  isLoading: boolean;
+  [key: string]: unknown;
+} = {
   user: { id: 'u-1', email: 'user@example.com', nickname: 'Tester' },
   isLoggedIn: true,
   isLoading: false,

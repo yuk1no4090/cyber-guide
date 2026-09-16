@@ -108,7 +108,6 @@ interface GenerateRecapActionArgs {
   toApiMessages: (sourceMessages: ChatMessageState[]) => Array<{ role: 'user' | 'assistant'; content: string }>;
   setRecap: (v: Recap | null) => void;
   setRecapMeta: (v: { success?: boolean; latencyMs?: number; errorType?: string } | undefined) => void;
-  setSuggestions: (v: string[]) => void;
   setIsRecapLoading: (v: boolean) => void;
 }
 
@@ -118,7 +117,6 @@ export async function generateRecapAction({
   toApiMessages,
   setRecap,
   setRecapMeta,
-  setSuggestions,
   setIsRecapLoading,
 }: GenerateRecapActionArgs): Promise<void> {
   const userTurnCount = messages.filter((m) => m.role === 'user').length;

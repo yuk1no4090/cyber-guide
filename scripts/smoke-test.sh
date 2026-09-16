@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # 用法: bash scripts/smoke-test.sh [URL]
-BASE_URL="${1:-https://cyber-guide-seven.vercel.app}"
+BASE_URL="${1:-https://guide.yuk1no4090.site}"
 PASS=0
 FAIL=0
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { StructuredProfileData } from '@/app/components/ProfileForm';
 import {
   isAction,
   ACTION_PREFIX,
@@ -12,7 +13,6 @@ import {
   clearStorage,
   loadProfileFromStorage,
   saveProfileToStorage,
-  STORAGE_KEY,
   PROFILE_STORAGE_KEY,
   getWelcomeSuggestions,
   getProfileOtherSuggestions,
@@ -97,7 +97,7 @@ describe('localStorage helpers', () => {
   });
 
   it('saveProfileToStorage/loadProfileFromStorage roundtrips', () => {
-    const profile = {
+    const profile: StructuredProfileData = {
       school: '清华大学',
       major: 'CS',
       stage: '大三',

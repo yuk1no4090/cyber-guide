@@ -36,6 +36,23 @@ echo -e "${GREEN}[6/8] 配置数据库...${NC}"
 read -p "请输入数据库密码（默认：cyber123）: " DB_PASSWORD
 DB_PASSWORD=${DB_PASSWORD:-cyber123}
 
+# 这是全新安装用的脚本，但它写死的库名/用户名与生产一致。在已有数据的机器上重跑，
+# 下面的 DROP DATABASE 会静默清空全部用户数据。所以先探测，再要求显式确认。
+if sudo -u postgres psql -lqt | cut -d'|' -f1 | grep -qw cyber_guide; then
+    echo -e "${RED}数据库 cyber_guide 已存在。${NC}"
+    echo "本脚本用于全新安装：继续会先 DROP DATABASE 再重建，现有数据全部丢失且不可恢复。"
+    echo "若只是想更新代码，请不要用这个脚本。"
+    if [ "${RECREATE_DATABASE:-no}" != "yes" ]; then
+        echo "确认要销毁并重建，请改为执行：RECREATE_DATABASE=yes $0"
+        exit 1
+    fi
+    read -p "再次确认，输入数据库名 cyber_guide 继续，其他任意键取消: " CONFIRM_DB
+    if [ "$CONFIRM_DB" != "cyber_guide" ]; then
+        echo "已取消，未做任何改动。"
+        exit 1
+    fi
+fi
+
 sudo -u postgres psql -c "DROP DATABASE IF EXISTS cyber_guide;" || true
 sudo -u postgres psql -c "DROP USER IF EXISTS cyber_guide;" || true
 sudo -u postgres psql -c "CREATE DATABASE cyber_guide;"
