@@ -1,5 +1,7 @@
 package com.cyberguide.security;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +31,8 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     private final JwtAuthenticationFilter jwtFilter;
     @Value("${security.cors.allowed-origin-patterns:http://localhost:*,https://*.cyberguide.dev}")
@@ -71,13 +75,19 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(
-            java.util.Arrays.stream(allowedOriginPatterns.split(","))
+        List<String> originPatterns = java.util.Arrays.stream(allowedOriginPatterns.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
-                .toList()
-        );
+                .toList();
+        // An origin missing from this list surfaces only as a bare 403 "Invalid CORS
+        // request" on every browser write, with nothing else in the logs pointing at
+        // CORS. Serving the frontend from the same host does not exempt it: a proxy
+        // forwards the browser's original Origin header, so every public hostname the
+        // app is reached by has to appear here.
+        log.info("CORS allowed origin patterns: {}", originPatterns);
+
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(originPatterns);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
