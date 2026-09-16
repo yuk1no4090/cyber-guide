@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { SidebarSessionItem } from '../components/Sidebar';
 import type { EvidenceItem } from '../components/ChatMessage';
-import { type AppMode } from './useChatFlow';
+import { abortInFlightStream, type AppMode } from './useChatFlow';
 import { authFetch, unwrapEnvelope } from '@/lib/api';
 
 interface Message {
@@ -81,6 +81,9 @@ export function useSidebarSessions({
 
   const loadSessionMessages = async (id: string) => {
     if (!sessionId || !id) return;
+    // Switching transcripts while a stream is open would splice the abandoned
+    // answer into the newly loaded session.
+    abortInFlightStream();
     setIsSessionLoading(true);
     try {
       const res = await authFetch(sessionId, `/api/sessions/${id}/messages`, { method: 'GET' }, 10_000);
@@ -132,16 +135,21 @@ export function useSidebarSessions({
     if (!sessionId || !id) return;
     const normalized = title.trim();
     if (!normalized) return;
-    await authFetch(sessionId, `/api/sessions/${id}/title`, {
+    // Unlike loadSessions/createSession above, these two applied their local
+    // change unconditionally: a rejected rename still looked renamed until the
+    // next reload, which is a lie the user acts on.
+    const res = await authFetch(sessionId, `/api/sessions/${id}/title`, {
       method: 'PUT',
       body: JSON.stringify({ title: normalized }),
     }, 8_000);
+    if (!res.ok) throw new Error('重命名失败，请稍后重试');
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, title: normalized } : s)));
   };
 
   const deleteSession = async (id: string) => {
     if (!sessionId || !id) return;
-    await authFetch(sessionId, `/api/sessions/${id}`, { method: 'DELETE' }, 8_000);
+    const res = await authFetch(sessionId, `/api/sessions/${id}`, { method: 'DELETE' }, 8_000);
+    if (!res.ok) throw new Error('删除失败，请稍后重试');
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== id);
       if (selectedSessionId === id) {

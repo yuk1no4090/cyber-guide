@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { sanitizeHTML } from '@/lib/sanitize';
 
 export interface EvidenceItem {
@@ -28,6 +28,14 @@ interface ChatMessageProps {
 const ChatMessage = React.memo(function ChatMessage({ role, content, isCrisis, evidence, animationDelayMs = 0 }: ChatMessageProps) {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
+
+  // The list is keyed by index, so a message replaced at the same position
+  // reuses this component instance and would inherit its "copied" tick --
+  // showing a confirmation for text the user never copied. Tie the flag to the
+  // content it was set for.
+  useEffect(() => {
+    setCopied(false);
+  }, [content]);
 
   const formattedHtml = useMemo(() => {
     const protectedBlocks: string[] = [];

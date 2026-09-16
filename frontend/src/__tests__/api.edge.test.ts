@@ -1,4 +1,4 @@
-import { authFetch, clearToken, fetchWithTimeout, getToken, isAbortError } from '@/lib/api';
+import { AuthBootstrapError, authFetch, clearToken, fetchWithTimeout, getToken, isAbortError } from '@/lib/api';
 import { beforeEach, vi } from 'vitest';
 
 function mockResponse(body: unknown, status = 200): Response {
@@ -26,9 +26,37 @@ describe('api edge cases', () => {
     await expect(getToken('s-1')).rejects.toThrow('Failed to fetch');
   });
 
-  it('getToken throws on non-200 auth response', async () => {
+  it('getToken reports a readable message and keeps the status off the text', async () => {
+    // The old message was the literal string "Auth failed: 500", and callers
+    // render it straight into the page, so a status line ended up on the plan card.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse({}, 500)));
-    await expect(getToken('s-1')).rejects.toThrow('Auth failed: 500');
+
+    const error = await getToken('s-1').catch((e) => e);
+
+    expect(error).toBeInstanceOf(AuthBootstrapError);
+    expect(error.status).toBe(500);
+    expect(error.message).not.toMatch(/500/);
+  });
+
+  it('getToken retries the bootstrap once before giving up', async () => {
+    // Every later request already got a retry via authFetch; this first call had
+    // none, so one transient failure left the whole page unauthenticated.
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse({}, 503));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getToken('s-1')).rejects.toBeInstanceOf(AuthBootstrapError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('getToken succeeds when the retry succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockResponse({}, 503))
+      .mockResolvedValueOnce(mockResponse({ token: 'tok-after-retry' }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getToken('s-1')).resolves.toBe('tok-after-retry');
   });
 
   it('authFetch propagates network error', async () => {

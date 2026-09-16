@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface LoginModalProps {
   open: boolean;
@@ -47,12 +47,49 @@ export default function LoginModal({
     return () => clearTimeout(timer);
   }, [countdown]);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  /** Focusable controls inside the dialog, in tab order, skipping disabled ones. */
+  const focusablesInPanel = (): HTMLElement[] => {
+    const panel = panelRef.current;
+    if (!panel) return [];
+    const selector = 'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
+    return Array.from(panel.querySelectorAll<HTMLElement>(selector))
+      .filter((el) => !el.hasAttribute('disabled'));
+  };
+
+  // Opening the dialog used to leave focus wherever it was on the page behind it.
+  useEffect(() => {
+    if (!open) return;
+    const firstField = panelRef.current?.querySelector<HTMLElement>('input');
+    (firstField ?? focusablesInPanel()[0])?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      // Without a trap, Tab walks straight out of the dialog into the page
+      // underneath the overlay, which is unreachable by mouse but not by keyboard.
+      const items = focusablesInPanel();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const inside = active ? panelRef.current?.contains(active) : false;
+
+      if (event.shiftKey && (!inside || active === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
@@ -122,10 +159,10 @@ export default function LoginModal({
       aria-label="登录或注册"
       onClick={onClose}
     >
-      <div className="modal-panel-enter cg-modal w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div ref={panelRef} className="modal-panel-enter cg-modal w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">登录 Cyber Guide</h3>
-          <button onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">✕</button>
+          <button aria-label="关闭" onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">✕</button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -149,7 +186,7 @@ export default function LoginModal({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-              placeholder="邮箱"
+              placeholder="邮箱" aria-label="邮箱"
               type="email"
             />
           )}
@@ -159,13 +196,13 @@ export default function LoginModal({
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-                placeholder="昵称（可选）"
+                placeholder="昵称（可选）" aria-label="昵称（可选）"
               />
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-                placeholder="邮箱"
+                placeholder="邮箱" aria-label="邮箱"
                 type="email"
               />
               {emailCodeRequired && (
@@ -174,7 +211,7 @@ export default function LoginModal({
                     value={emailCode}
                     onChange={(e) => setEmailCode(e.target.value)}
                     className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-                    placeholder="邮箱验证码"
+                    placeholder="邮箱验证码" aria-label="邮箱验证码"
                   />
                   <button
                     type="button"
@@ -192,7 +229,7 @@ export default function LoginModal({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-            placeholder="密码（至少 6 位）"
+            placeholder="密码（至少 6 位）" aria-label="密码（至少 6 位）"
             type="password"
           />
           {mode === 'register' && (
@@ -200,13 +237,13 @@ export default function LoginModal({
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-              placeholder="确认密码"
+              placeholder="确认密码" aria-label="确认密码"
               type="password"
             />
           )}
 
-          {notice && <p className="text-sm text-sky-700 dark:text-sky-300">{notice}</p>}
-          {error && <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
+          {notice && <p role="status" aria-live="polite" className="text-sm text-sky-700 dark:text-sky-300">{notice}</p>}
+          {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
 
           <button
             disabled={

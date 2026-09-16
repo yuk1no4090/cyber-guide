@@ -74,4 +74,51 @@ describe('LoginModal', () => {
       expect(baseProps.onClose).toHaveBeenCalled();
     });
   });
+
+  it('labels every field for assistive tech, not just with a placeholder', () => {
+    render(<LoginModal {...baseProps} />);
+
+    // A placeholder vanishes as soon as someone types and is not a label, so
+    // screen-reader users had nothing to identify these fields by.
+    expect(screen.getByLabelText('邮箱')).toBeTruthy();
+    expect(screen.getByLabelText('密码（至少 6 位）')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '关闭' })).toBeTruthy();
+  });
+
+  it('moves focus into the dialog when it opens', () => {
+    render(<LoginModal {...baseProps} />);
+
+    expect(document.activeElement).toBe(screen.getByLabelText('邮箱'));
+  });
+
+  it('keeps Tab inside the dialog', () => {
+    render(<LoginModal {...baseProps} />);
+    const dialog = screen.getByRole('dialog');
+    const focusables = Array.from(
+      dialog.querySelectorAll<HTMLElement>('button, input')
+    ).filter((el) => !el.hasAttribute('disabled'));
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+
+    // Tabbing off the end wraps to the start rather than escaping into the page
+    // behind the overlay, which the mouse cannot reach but the keyboard could.
+    last.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+
+    first.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('announces a validation error to a screen reader', async () => {
+    render(<LoginModal {...baseProps} emailCodeRequired />);
+
+    fireEvent.click(screen.getByRole('button', { name: '注册' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+  });
 });

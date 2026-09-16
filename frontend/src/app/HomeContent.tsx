@@ -13,7 +13,7 @@ import { usePlan } from './hooks/usePlan';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import { useSidebarSessions } from './hooks/useSidebarSessions';
-import { useChatFlow, type ChatMessageState, type AppMode, generateRecapAction, sendMessageAction, submitFeedbackAction } from './hooks/useChatFlow';
+import { abortInFlightStream, useChatFlow, type ChatMessageState, type AppMode, generateRecapAction, sendMessageAction, submitFeedbackAction } from './hooks/useChatFlow';
 import { useProfileFlow, generateReportAction, handleProfileFormSubmitAction } from './hooks/useProfileFlow';
 import { authFetch, unwrapEnvelope } from '@/lib/api';
 import { parsePlanQuery } from '@/lib/plan';
@@ -105,6 +105,9 @@ export default function HomeContent() {
   };
 
   const resetToWelcomeChat = () => {
+    // A stream still running would write its next delta into the welcome
+    // message, since deltas target whichever assistant message is last.
+    abortInFlightStream();
     setMode('chat');
     setMessages([WELCOME_MESSAGE]);
     setProfileMessages([]);
@@ -267,6 +270,7 @@ export default function HomeContent() {
   };
 
   const doResetChat = () => {
+    abortInFlightStream();
     sendSessionMetrics(messages, mode);
     setShouldStickToBottom(true);
     clearStorage();

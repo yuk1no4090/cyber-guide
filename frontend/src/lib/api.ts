@@ -118,6 +118,50 @@ export function getCachedTokenKindUnsafe(): TokenKind | null {
  * Get a valid JWT token. Fetches from /api/auth/anonymous if not cached.
  * Deduplicates concurrent calls (only one fetch in-flight at a time).
  */
+/** Delay before the single retry of the token bootstrap. */
+const TOKEN_RETRY_DELAY_MS = 600;
+
+/**
+ * Failure of the anonymous-token bootstrap.
+ *
+ * Callers render {@link Error.message} straight into the UI, so the message has
+ * to read as something said to a person. The HTTP status stays on the error for
+ * logs and conditionals rather than being baked into the text, which is how
+ * "Auth failed: 403" ended up printed on the plan card.
+ */
+export class AuthBootstrapError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super('连接服务器失败，请稍后重试');
+    this.name = 'AuthBootstrapError';
+    this.status = status;
+  }
+}
+
+async function requestAnonymousToken(sessionId: string): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort('token-timeout'), 8_000);
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/anonymous`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new AuthBootstrapError(res.status);
+    const data = await res.json();
+    const token = data.token as string;
+    if (typeof token === 'string' && token.length > 0) {
+      cacheToken(token, 'anonymous', sessionId);
+      rememberAnonymousToken(sessionId, token);
+    }
+    return token;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getToken(sessionId: string): Promise<string> {
   const cached = getCachedToken();
   const cachedKind = getCachedTokenKind();
@@ -131,23 +175,17 @@ export async function getToken(sessionId: string): Promise<string> {
   if (!tokenPromise) {
     tokenPromise = (async () => {
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort('token-timeout'), 8_000);
-        const res = await fetch(`${API_BASE}/api/auth/anonymous`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId }),
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        if (!res.ok) throw new Error(`Auth failed: ${res.status}`);
-        const data = await res.json();
-        const token = data.token as string;
-        if (typeof token === 'string' && token.length > 0) {
-          cacheToken(token, 'anonymous', sessionId);
-          rememberAnonymousToken(sessionId, token);
+        try {
+          return await requestAnonymousToken(sessionId);
+        } catch (first) {
+          // Every later request gets a retry (see authFetch), but this bootstrap
+          // had none: one transient failure left the whole page unauthenticated
+          // and printed a raw status string where a message belongs.
+          if (isAbortError(first)) throw first;
+          console.warn('anonymous token request failed, retrying once', first);
+          await new Promise((resolve) => setTimeout(resolve, TOKEN_RETRY_DELAY_MS));
+          return await requestAnonymousToken(sessionId);
         }
-        return token;
       } finally {
         tokenPromise = null;
       }

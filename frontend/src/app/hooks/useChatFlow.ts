@@ -4,7 +4,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { Recap } from '@/lib/recap';
 import type { EvidenceItem } from '../components/ChatMessage';
 import type { SimilarCaseItem } from '../components/SimilarCasesCard';
-import { authFetch, unwrapEnvelope, type ApiEnvelope } from '@/lib/api';
+import { authFetch, isAbortError, unwrapEnvelope, type ApiEnvelope } from '@/lib/api';
 import { pickN } from '@/lib/random';
 import { analytics } from '@/lib/analytics';
 import { trackScenarioResponseGenerated, type RelationshipScenario } from '@/lib/scenario';
@@ -158,10 +158,31 @@ export async function generateRecapAction({
       latencyMs: Date.now() - startedAt,
       errorType: message,
     });
-    setSuggestions([message]);
+    // Deliberately not surfaced as a suggestion chip: chips are sent to the
+    // model verbatim when clicked, so the failure text became the next user
+    // message. The existing chips stay, and the failure is reported through
+    // recapMeta above.
   } finally {
     setIsRecapLoading(false);
   }
+}
+
+
+/**
+ * The chat stream currently in flight, if any.
+ *
+ * Nothing used to cancel it. Because upsertAssistantMessage targets "the last
+ * message if it is an assistant message", deltas arriving after a reset or a
+ * session switch were written into whatever assistant message happened to be
+ * last -- after a reset that is the welcome text, which would silently rewrite
+ * itself as the abandoned answer streamed in.
+ */
+let inFlightStream: AbortController | null = null;
+
+/** Cancel the in-flight chat stream. Call before resetting or switching sessions. */
+export function abortInFlightStream(): void {
+  inFlightStream?.abort();
+  inFlightStream = null;
 }
 
 interface SendMessageActionArgs {
@@ -239,9 +260,15 @@ export async function sendMessageAction({
   setIsLoading(true);
   const startedAt = Date.now();
 
+  // A second send supersedes the first; the old stream must stop writing.
+  abortInFlightStream();
+  const streamController = new AbortController();
+  inFlightStream = streamController;
+
   try {
     const response = await authFetch(sessionId, '/api/chat/stream', {
       method: 'POST',
+      signal: streamController.signal,
       body: JSON.stringify({
         messages: toApiMessages(updatedMessages),
         mode: mode === 'profile_other' ? 'profile_other' : mode,
@@ -291,6 +318,12 @@ export async function sendMessageAction({
       }>(
         response,
         (delta) => {
+          // fetchWithTimeout drops its abort listener once the headers land, so
+          // aborting no longer tears down the body. Stop here, at the point where
+          // a stale delta would otherwise be written into React state.
+          if (streamController.signal.aborted) {
+            throw new DOMException('stream superseded', 'AbortError');
+          }
           if (firstDelta) {
             setIsLoading(false);
             firstDelta = false;
@@ -339,6 +372,7 @@ export async function sendMessageAction({
             }))
         : [];
       if (!response.ok || !finalMessage) throw new Error('API request failed');
+      if (streamController.signal.aborted) return;
       upsertAssistantMessage(finalMessage, isCrisis, nextEvidence);
     } else {
       const raw = await response.json();
@@ -377,15 +411,28 @@ export async function sendMessageAction({
         error_type: 'api_error',
       });
     }
+    // A superseded or cancelled stream is not a failure to report.
+    if (isAbortError(error)) return;
+
     const errorMsg: ChatMessageState = {
-      role: 'assistant',
-      content: '抱歉，我这边出了点问题 😵 稍后再试试。',
+      role: 'assistant'
+      , content: '抱歉，我这边出了点问题 😵 稍后再试试。'
     };
-    if (isProfileMode) setProfileMessages([...updatedMessages, errorMsg]);
-    else setMessages([...updatedMessages, errorMsg]);
+    // Append to current state rather than to the pre-stream snapshot: the old
+    // version discarded every delta the user had already watched arrive.
+    const appendError = (prev: ChatMessageState[]) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last && last.role === 'assistant' && !last.content) next.pop();
+      next.push(errorMsg);
+      return next;
+    };
+    if (isProfileMode) setProfileMessages(appendError);
+    else setMessages(appendError);
     setSuggestions(pickN(['重新试试', '换个话题聊聊', '没事，我再发一次', '要不先聊别的', '稍等一下再试', '我换个说法试试'], 2));
     setSimilarCases([]);
   } finally {
+    if (inFlightStream === streamController) inFlightStream = null;
     setIsLoading(false);
   }
 }
