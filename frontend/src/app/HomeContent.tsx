@@ -59,6 +59,7 @@ export default function HomeContent() {
     login,
     register,
     sendRegisterCode,
+    emailCodeRequired,
     loginWithGithub,
     logout,
     upgradeAnonymousSession,
@@ -627,6 +628,7 @@ export default function HomeContent() {
       <LoginModal
         open={showLoginModal}
         loading={authLoading}
+        emailCodeRequired={emailCodeRequired}
         onClose={() => setShowLoginModal(false)}
         onLogin={async (email, password) => {
           await login(email, password);

@@ -11,6 +11,13 @@ import {
   unwrapEnvelope,
 } from '@/lib/api';
 
+/** What actually happened when a verification code was requested. */
+export interface SendCodeOutcome {
+  /** False when the server generated no mail (verification off, or dev-log-only). */
+  sent: boolean;
+  cooldownSeconds: number;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -22,9 +29,15 @@ interface AuthState {
   user: AuthUser | null;
   isLoggedIn: boolean;
   isLoading: boolean;
+  /**
+   * Whether the backend actually enforces an email verification code at
+   * registration. Defaults to true until /api/auth/config answers: showing a
+   * field the server needs is recoverable, hiding one it needs is not.
+   */
+  emailCodeRequired: boolean;
   login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, emailCode: string, nickname?: string) => Promise<string | null>;
-  sendRegisterCode: (email: string) => Promise<void>;
+  sendRegisterCode: (email: string) => Promise<SendCodeOutcome>;
   loginWithGithub: () => void;
   logout: () => void;
   upgradeAnonymousSession: (anonymousToken?: string | null) => Promise<void>;
@@ -39,6 +52,28 @@ type AuthResultPayload = {
 export function useAuth(sessionId: string): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [emailCodeRequired, setEmailCodeRequired] = useState(true);
+
+  // Ask the backend what the registration form should ask for. On failure we
+  // keep the conservative default (code field shown) rather than guessing.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/config", { method: "GET" });
+        if (!res.ok) return;
+        const payload = unwrapEnvelope<{ email_code_required?: boolean }>(await res.json());
+        if (!cancelled && typeof payload?.email_code_required === "boolean") {
+          setEmailCodeRequired(payload.email_code_required);
+        }
+      } catch {
+        // keep the default
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refreshMe = useCallback(async () => {
     if (!sessionId) return;
@@ -115,7 +150,7 @@ export function useAuth(sessionId: string): AuthState {
     return applyAuthResult('/api/auth/register', { email, password, nickname, emailCode });
   }, [applyAuthResult]);
 
-  const sendRegisterCode = useCallback(async (email: string) => {
+  const sendRegisterCode = useCallback(async (email: string): Promise<SendCodeOutcome> => {
     const res = await fetch('/api/auth/email-code/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -125,6 +160,11 @@ export function useAuth(sessionId: string): AuthState {
     if (!res.ok) {
       throw new Error((raw as { error?: { message?: string } })?.error?.message || '验证码发送失败');
     }
+    const payload = unwrapEnvelope<{ sent?: boolean; cooldown_seconds?: number }>(raw);
+    return {
+      sent: payload?.sent !== false,
+      cooldownSeconds: typeof payload?.cooldown_seconds === 'number' ? payload.cooldown_seconds : 60,
+    };
   }, []);
 
   const loginWithGithub = useCallback(() => {
@@ -154,6 +194,7 @@ export function useAuth(sessionId: string): AuthState {
     user,
     isLoggedIn: Boolean(user),
     isLoading,
+    emailCodeRequired,
     login,
     register,
     sendRegisterCode,
@@ -161,5 +202,5 @@ export function useAuth(sessionId: string): AuthState {
     logout,
     upgradeAnonymousSession,
     refreshMe,
-  }), [user, isLoading, login, register, sendRegisterCode, loginWithGithub, logout, upgradeAnonymousSession, refreshMe]);
+  }), [user, isLoading, emailCodeRequired, login, register, sendRegisterCode, loginWithGithub, logout, upgradeAnonymousSession, refreshMe]);
 }

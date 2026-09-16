@@ -10,6 +10,8 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -43,16 +45,59 @@ public class EmailCodeService {
     @Value("${security.email-code.hash-pepper:cyber-guide-email-code-pepper}")
     private String hashPepper;
 
+    /**
+     * Read straight from Spring Mail configuration. Boot still creates a
+     * JavaMailSender bean when spring.mail.host is present but empty, so the
+     * presence of that bean alone does not mean a mail can actually leave the
+     * server -- the host has to be set too.
+     */
+    @Value("${spring.mail.host:}")
+    private String mailHost;
+
     public EmailCodeService(StringRedisTemplate redis, Optional<JavaMailSender> mailSender) {
         this.redis = redis;
         this.mailSender = mailSender;
+    }
+
+    /**
+     * Whether email-code verification is actually enforced at registration.
+     * <p>
+     * Exposed so the API can tell clients the truth up front: when this is
+     * false {@link #verifyRegisterCode} accepts a blank code, and a client
+     * that still renders a "verification code" field sends users off waiting
+     * for a mail that is never generated.
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Whether a verification mail can actually reach the user's inbox.
+     */
+    private boolean canDeliverMail() {
+        return mailSender.isPresent() && mailHost != null && !mailHost.isBlank();
+    }
+
+    /**
+     * Surface a half-configured setup at boot rather than at the first
+     * registration attempt. Asking for real mail without an SMTP host is the
+     * likeliest way for this feature to look implemented while no user can
+     * ever actually complete a registration.
+     */
+    @PostConstruct
+    void warnOnUndeliverableConfig() {
+        if (enabled && !devLogOnly && !canDeliverMail()) {
+            log.error("email code verification is enabled with dev-log-only=false, but no SMTP host is configured "
+                    + "(spring.mail.host is blank). Codes will only be written to this log and the API will report "
+                    + "sent=false. Set MAIL_HOST/MAIL_USERNAME/MAIL_PASSWORD to deliver mail.");
+        }
     }
 
     public SendCodeResult sendRegisterCode(String email) {
         String normalizedEmail = normalizeEmail(email);
         if (!enabled) {
             log.info("email code disabled, skip send: email={}", normalizedEmail);
-            return new SendCodeResult(0, 0);
+            return new SendCodeResult(0, 0, false);
         }
         ensureCanSend(normalizedEmail);
 
@@ -63,12 +108,20 @@ public class EmailCodeService {
         redis.opsForValue().set(attemptKey(normalizedEmail), "0", CODE_TTL);
         redis.opsForValue().set(cooldownKey(normalizedEmail), "1", SEND_COOLDOWN);
 
-        if (!enabled || devLogOnly || mailSender.isEmpty()) {
+        // `delivered` means a mail actually left for the user's inbox. Under
+        // dev-log-only (or with no usable SMTP transport) the code is real and
+        // verifiable, but it only ever reaches the server log — so the caller
+        // must not tell the user to go check their mail. The `!enabled` arm of
+        // the old condition here was dead: that case returns above.
+        boolean delivered;
+        if (devLogOnly || !canDeliverMail()) {
             log.info("email code (dev mode): email={}, code={}", normalizedEmail, code);
+            delivered = false;
         } else {
             sendEmail(normalizedEmail, code);
+            delivered = true;
         }
-        return new SendCodeResult(CODE_TTL.toSeconds(), SEND_COOLDOWN.toSeconds());
+        return new SendCodeResult(CODE_TTL.toSeconds(), SEND_COOLDOWN.toSeconds(), delivered);
     }
 
     public void verifyRegisterCode(String email, String code) {
@@ -180,5 +233,10 @@ public class EmailCodeService {
         }
     }
 
-    public record SendCodeResult(long ttlSeconds, long cooldownSeconds) {}
+    /**
+     * @param ttlSeconds      how long the stored code stays valid (0 when verification is off)
+     * @param cooldownSeconds resend cooldown (0 when verification is off)
+     * @param delivered       whether a mail actually went out to the address
+     */
+    public record SendCodeResult(long ttlSeconds, long cooldownSeconds, boolean delivered) {}
 }

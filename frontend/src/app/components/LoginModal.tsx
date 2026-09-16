@@ -5,10 +5,16 @@ import React, { useEffect, useState } from 'react';
 interface LoginModalProps {
   open: boolean;
   loading?: boolean;
+  /**
+   * Whether the backend enforces an email verification code. When false the
+   * whole code block is hidden — asking for a code the server never issues is
+   * what made registration look broken.
+   */
+  emailCodeRequired?: boolean;
   onClose: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
   onRegister: (email: string, password: string, emailCode: string, nickname?: string) => Promise<void>;
-  onSendCode: (email: string) => Promise<void>;
+  onSendCode: (email: string) => Promise<{ sent: boolean; cooldownSeconds: number } | void>;
   onGithub: () => void;
 }
 
@@ -17,6 +23,7 @@ type Mode = 'login' | 'register';
 export default function LoginModal({
   open,
   loading = false,
+  emailCodeRequired = true,
   onClose,
   onLogin,
   onRegister,
@@ -31,6 +38,7 @@ export default function LoginModal({
   const [emailCode, setEmailCode] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [sendingCode, setSendingCode] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,14 +64,23 @@ export default function LoginModal({
 
   const sendCode = async () => {
     setError(null);
+    setNotice(null);
     if (!email) {
       setError('请先输入邮箱');
       return;
     }
     setSendingCode(true);
     try {
-      await onSendCode(email);
-      setCountdown(60);
+      const outcome = await onSendCode(email);
+      // The server tells us whether a mail actually left. Under dev-log-only
+      // the code is valid but only reaches the server log, so do not send the
+      // user off to check an inbox that will stay empty.
+      if (outcome && outcome.sent === false) {
+        setNotice('当前环境未实际发送邮件，验证码只记录在服务端日志中，请联系管理员获取。');
+      } else {
+        setNotice('验证码已发送，请查收邮箱。');
+      }
+      setCountdown(outcome && typeof outcome.cooldownSeconds === 'number' ? outcome.cooldownSeconds : 60);
     } catch (e) {
       setError(e instanceof Error ? e.message : '验证码发送失败');
     } finally {
@@ -73,6 +90,7 @@ export default function LoginModal({
 
   const submit = async () => {
     setError(null);
+    setNotice(null);
     try {
       if (mode === 'login') {
         await onLogin(email, password);
@@ -90,6 +108,7 @@ export default function LoginModal({
       setNickname('');
       setEmailCode('');
       setCountdown(0);
+      setNotice(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : '操作失败');
     }
@@ -149,22 +168,24 @@ export default function LoginModal({
                 placeholder="邮箱"
                 type="email"
               />
-              <div className="flex gap-2">
-                <input
-                  value={emailCode}
-                  onChange={(e) => setEmailCode(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  placeholder="邮箱验证码"
-                />
-                <button
-                  type="button"
-                  onClick={sendCode}
-                  disabled={sendingCode || countdown > 0}
-                  className="shrink-0 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/45 px-3 py-2 text-xs text-sky-700 dark:text-sky-100 hover:bg-sky-100 dark:hover:bg-sky-900/70 disabled:opacity-50"
-                >
-                  {sendingCode ? '发送中...' : countdown > 0 ? `${countdown}s` : '发送验证码'}
-                </button>
-              </div>
+              {emailCodeRequired && (
+                <div className="flex gap-2">
+                  <input
+                    value={emailCode}
+                    onChange={(e) => setEmailCode(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    placeholder="邮箱验证码"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendCode}
+                    disabled={sendingCode || countdown > 0}
+                    className="shrink-0 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/45 px-3 py-2 text-xs text-sky-700 dark:text-sky-100 hover:bg-sky-100 dark:hover:bg-sky-900/70 disabled:opacity-50"
+                  >
+                    {sendingCode ? '发送中...' : countdown > 0 ? `${countdown}s` : '发送验证码'}
+                  </button>
+                </div>
+              )}
             </>
           )}
           <input
@@ -184,6 +205,7 @@ export default function LoginModal({
             />
           )}
 
+          {notice && <p className="text-sm text-sky-700 dark:text-sky-300">{notice}</p>}
           {error && <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
 
           <button
@@ -200,7 +222,9 @@ export default function LoginModal({
           </button>
           {mode === 'register' && (
             <p className="text-[12px] text-slate-400 dark:text-slate-500">
-              若当前环境未开启邮箱验证，可直接注册；若已开启，后端会校验验证码。
+              {emailCodeRequired
+                ? '注册需要邮箱验证码，请先点击「发送验证码」。'
+                : '当前环境无需邮箱验证码，填写邮箱和密码即可完成注册。'}
             </p>
           )}
 

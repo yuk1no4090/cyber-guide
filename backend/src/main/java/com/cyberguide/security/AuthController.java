@@ -99,6 +99,21 @@ public class AuthController {
         )));
     }
 
+    /**
+     * Public capability probe so the client can render an accurate auth form.
+     * <p>
+     * Without this the frontend had no way to know whether a verification code
+     * is actually required, so it rendered the code field unconditionally and
+     * users sat waiting for a mail that was never generated.
+     */
+    @GetMapping("/config")
+    @Operation(summary = "Public auth capabilities (what the registration form should ask for)")
+    public ResponseEntity<?> authConfig() {
+        return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                "email_code_required", emailCodeService.isEnabled()
+        )));
+    }
+
     @PostMapping("/email-code/send")
     @Operation(summary = "Send a verification code to the given email")
     public ResponseEntity<?> sendEmailCode(@RequestBody EmailCodeSendBody body) {
@@ -106,8 +121,12 @@ public class AuthController {
             throw new BizException(ErrorCode.INVALID_REQUEST, "email 不能为空");
         }
         EmailCodeService.SendCodeResult result = emailCodeService.sendRegisterCode(body.email());
+        // "sent" was hardcoded true, which told the UI a mail was on its way
+        // even when verification was switched off and nothing was generated.
+        // Report what actually happened instead.
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
-                "sent", true,
+                "required", emailCodeService.isEnabled(),
+                "sent", result.delivered(),
                 "ttl_seconds", result.ttlSeconds(),
                 "cooldown_seconds", result.cooldownSeconds()
         )));

@@ -190,4 +190,61 @@ class AuthControllerTest {
                             """))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void authConfigReportsThatNoCodeIsRequiredWhenVerificationIsOff() throws Exception {
+        when(emailCodeService.isEnabled()).thenReturn(false);
+
+        mockMvc.perform(get("/api/auth/config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.email_code_required").value(false));
+    }
+
+    @Test
+    void authConfigReportsThatACodeIsRequiredWhenVerificationIsOn() throws Exception {
+        when(emailCodeService.isEnabled()).thenReturn(true);
+
+        mockMvc.perform(get("/api/auth/config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email_code_required").value(true));
+    }
+
+    @Test
+    void sendEmailCodeAdmitsWhenNoMailWentOut() throws Exception {
+        when(emailCodeService.isEnabled()).thenReturn(false);
+        when(emailCodeService.sendRegisterCode("user@test.com"))
+                .thenReturn(new EmailCodeService.SendCodeResult(0, 0, false));
+
+        mockMvc.perform(post("/api/auth/email-code/send")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email":"user@test.com"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sent").value(false))
+                .andExpect(jsonPath("$.data.required").value(false))
+                .andExpect(jsonPath("$.data.ttl_seconds").value(0));
+    }
+
+    @Test
+    void sendEmailCodeReportsSentWhenMailActuallyLeft() throws Exception {
+        when(emailCodeService.isEnabled()).thenReturn(true);
+        when(emailCodeService.sendRegisterCode("user@test.com"))
+                .thenReturn(new EmailCodeService.SendCodeResult(300, 60, true));
+
+        mockMvc.perform(post("/api/auth/email-code/send")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "email":"user@test.com"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sent").value(true))
+                .andExpect(jsonPath("$.data.required").value(true))
+                .andExpect(jsonPath("$.data.cooldown_seconds").value(60));
+    }
 }
