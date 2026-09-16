@@ -4,6 +4,7 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,9 @@ public class JwtTokenProvider {
         this(secret, expirationMs, "");
     }
 
+    // With two constructors Spring cannot pick one on its own: it looks for a
+    // no-arg constructor instead and the context fails to start. Say which.
+    @Autowired
     public JwtTokenProvider(
             @Value("${security.jwt.secret:}") String secret,
             @Value("${security.jwt.expiration-ms:86400000}") long expirationMs,
