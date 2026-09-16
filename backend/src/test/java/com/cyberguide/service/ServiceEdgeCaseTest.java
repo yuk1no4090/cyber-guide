@@ -70,6 +70,24 @@ class ServiceEdgeCaseTest {
             assertFalse(result.isCrisis());
         }
 
+
+        @Test
+        void detectsGoDieWhichTheOldFilterAssumedWasAKeyword() {
+            // The removed false-positive branch tested for this exact phrase, but it
+            // was missing from CRISIS_KEYWORDS, so the check never looked for it.
+            var result = ModerationService.check("你去死吧");
+            assertTrue(result.isCrisis());
+            assertTrue(result.keywordsFound().contains("去死"));
+        }
+
+        @Test
+        void hyperboleAlongsideARealPhraseStillCounts() {
+            // Hyperbole never suppressed anything, because no hyperbolic phrase
+            // contains a crisis keyword. What protects it is that hyperbole alone
+            // matches nothing -- covered by allFalsePositivesAreFilteredCorrectly.
+            var result = ModerationService.check("累死了，你去死吧");
+            assertTrue(result.isCrisis());
+        }
         @Test
         void handlesUnicodeAroundKeywords() {
             var result = ModerationService.check("😢😢😢我想自杀😢😢😢");

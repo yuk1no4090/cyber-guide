@@ -194,12 +194,35 @@ public class RagService {
     }
 
     public RetrievalBundle retrieveWithMetadata(String query, UserProfile profile, int topK) {
-        long start = System.currentTimeMillis();
         UserProfile safeProfile = safeProfile(profile);
+        String queryHash = hashQuery(query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent()
+            + "|" + safeProfile.stage() + "|" + safeProfile.school());
+
+        // This is the method the chat pipeline actually calls, and it was the one
+        // overload that skipped the cache entirely -- so despite this class
+        // advertising cached retrieval, every single chat turn re-ran two full
+        // repository scans and the scoring pass. Key it separately from the
+        // retrieve() overloads: same query, different cached shape (a bundle
+        // rather than a bare list), and one would deserialize as the other.
+        String cacheKey = CACHE_KEY_PREFIX + "bundle:" + queryHash + ":" + topK;
+
+        RetrievalBundle bundle = cacheGuard.getOrLoad(
+            cacheKey,
+            () -> computeBundle(query, safeProfile, topK, queryHash),
+            RAG_CACHE_TTL
+        );
+        return bundle != null
+            ? bundle
+            : new RetrievalBundle(List.of(), new RetrievalMetadata(queryHash, 0, List.of()));
+    }
+
+    /** The uncached computation, run only on a cache miss. */
+    private RetrievalBundle computeBundle(String query, UserProfile safeProfile, int topK, String queryHash) {
+        long start = System.currentTimeMillis();
         RetrievalComputation computation = doRetrieveDetailed(query, safeProfile, topK);
         List<RetrievalResult> topResults = computation.topResults();
         RetrievalMetadata metadata = new RetrievalMetadata(
-            hashQuery(query + "|" + safeProfile.intent() + "|" + safeProfile.targetIntent() + "|" + safeProfile.stage() + "|" + safeProfile.school()),
+            queryHash,
             computation.totalCandidates(),
             topResults
         );

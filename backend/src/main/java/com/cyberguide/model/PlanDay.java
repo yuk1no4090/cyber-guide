@@ -5,7 +5,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "plan_days", uniqueConstraints = {
+// (session_id, day_index) is already backed by the unique constraint below;
+// user_id is not, and it is what findByUserId and the signup-time rebind scan.
+@Table(name = "plan_days",
+    indexes = @Index(name = "idx_plan_days_user", columnList = "user_id"),
+    uniqueConstraints = {
     @UniqueConstraint(columnNames = {"session_id", "day_index"})
 })
 public class PlanDay {

@@ -12,6 +12,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Map;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -118,6 +120,30 @@ class RagEdgeCaseTest {
 
     // ── Retrieval edge cases ──
 
+
+    @Test
+    void retrieveWithMetadataIsCachedLikeTheOtherOverloads() {
+        // This is the overload the chat pipeline calls, and it used to bypass the
+        // cache entirely -- every turn re-ran both repository scans and the scoring
+        // pass while the class advertised cached retrieval.
+        when(cacheGuard.getOrLoad(anyString(), any(), any()))
+            .thenAnswer(inv -> {
+                var loader = inv.getArgument(1, java.util.function.Supplier.class);
+                return loader.get();
+            });
+        when(caseRepo.findCases(any(), any())).thenReturn(List.of());
+        when(articleRepo.findArticles(any(), any())).thenReturn(List.of());
+
+        var profile = ragService.inferUserProfile(List.of(), "保研");
+        var bundle = ragService.retrieveWithMetadata("保研", profile, 4);
+
+        assertNotNull(bundle);
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+        verify(cacheGuard).getOrLoad(key.capture(), any(), any());
+        // Must not collide with the retrieve() overloads: same query, different
+        // cached shape, and one would deserialize as the other.
+        assertTrue(key.getValue().contains("bundle:"), "cache key was " + key.getValue());
+    }
     @Test
     void retrieveReturnsEmptyWhenNothingMatches() {
         // Cache guard bypass: just pass through to doRetrieve

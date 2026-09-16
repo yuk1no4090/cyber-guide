@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +38,19 @@ public class AiClient {
     private final WebClient webClient;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public AiClient(AiProperties props) {
+    /**
+     * The same breaker instance the annotation on chat() uses. The streaming path
+     * could not use the annotation: it returns a Flux, so the method returns
+     * immediately and an AOP interceptor would see a success no matter what the
+     * stream later did. Applying the operator inside the pipeline is what actually
+     * counts stream failures -- and streaming is the path every user takes, so
+     * without this the configured breaker could never trip on real traffic.
+     */
+    private final io.github.resilience4j.circuitbreaker.CircuitBreaker streamBreaker;
+
+    public AiClient(AiProperties props, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.props = props;
+        this.streamBreaker = circuitBreakerRegistry.circuitBreaker("aiService");
         this.webClient = WebClient.builder()
                 .baseUrl(props.getBaseUrl())
                 .defaultHeader("Authorization", "Bearer " + props.getApiKey())
@@ -149,7 +162,8 @@ public class AiClient {
                         return null;
                     }
                 })
-                .filter(s -> s != null && !s.isEmpty());
+                .filter(s -> s != null && !s.isEmpty())
+                .transformDeferred(CircuitBreakerOperator.of(streamBreaker));
     }
 
     private ObjectNode buildRequestBody(List<Map<String, String>> messages, String systemPrompt, int maxTokens, boolean stream) {

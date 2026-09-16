@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.Index;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -15,7 +16,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "chat_messages")
+// Messages are always read and deleted by their owning session.
+@Table(name = "chat_messages", indexes = {
+        @Index(name = "idx_chat_messages_session_seq", columnList = "session_id, seq")
+})
 public class ChatMessageEntity {
 
     @Id

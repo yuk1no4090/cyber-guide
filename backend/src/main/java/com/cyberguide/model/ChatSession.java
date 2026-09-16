@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.Index;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -13,7 +14,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "chat_sessions")
+// Every lookup filters on user_id or session_id and orders by updated_at;
+// ddl-auto=update creates these on an existing table, but an index Hibernate
+// declines to add has to be created by hand.
+@Table(name = "chat_sessions", indexes = {
+        @Index(name = "idx_chat_sessions_user_updated", columnList = "user_id, updated_at"),
+        @Index(name = "idx_chat_sessions_session_updated", columnList = "session_id, updated_at")
+})
 public class ChatSession {
 
     @Id
