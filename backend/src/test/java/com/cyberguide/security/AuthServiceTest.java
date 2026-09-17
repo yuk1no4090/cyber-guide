@@ -107,12 +107,6 @@ class AuthServiceTest {
     }
 
     @Test
-    void githubLoginThrowsWhenOauthNotConfigured() {
-        BizException ex = assertThrows(BizException.class, () -> authService.loginWithGithubCode("code"));
-        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
-    }
-
-    @Test
     void getUserViewReturnsOptionalWhenUserExists() {
         UUID userId = UUID.randomUUID();
         User user = new User();

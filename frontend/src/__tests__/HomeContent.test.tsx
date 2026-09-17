@@ -17,7 +17,6 @@ const mockAuthState: {
   login: vi.fn(),
   register: vi.fn(),
   sendRegisterCode: vi.fn(),
-  loginWithGithub: vi.fn(),
   logout: vi.fn(),
   upgradeAnonymousSession: vi.fn().mockResolvedValue(undefined),
 };

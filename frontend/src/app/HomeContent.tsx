@@ -55,7 +55,6 @@ export default function HomeContent() {
     register,
     sendRegisterCode,
     emailCodeRequired,
-    loginWithGithub,
     logout,
     upgradeAnonymousSession,
   } = useAuth(sessionId);
@@ -632,7 +631,6 @@ export default function HomeContent() {
           await register(email, password, emailCode, nickname);
         }}
         onSendCode={sendRegisterCode}
-        onGithub={loginWithGithub}
       />
     </>
   );

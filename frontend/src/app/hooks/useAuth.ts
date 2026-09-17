@@ -38,7 +38,6 @@ interface AuthState {
   login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, emailCode: string, nickname?: string) => Promise<string | null>;
   sendRegisterCode: (email: string) => Promise<SendCodeOutcome>;
-  loginWithGithub: () => void;
   logout: () => void;
   upgradeAnonymousSession: (anonymousToken?: string | null) => Promise<void>;
   refreshMe: () => Promise<void>;
@@ -167,12 +166,6 @@ export function useAuth(sessionId: string): AuthState {
     };
   }, []);
 
-  const loginWithGithub = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const redirect = `${window.location.origin}${window.location.pathname}`;
-    window.location.href = `/api/auth/github?redirect_uri=${encodeURIComponent(redirect)}`;
-  }, []);
-
   const logout = useCallback(() => {
     clearToken();
     clearStoredAnonymousToken();
@@ -198,9 +191,8 @@ export function useAuth(sessionId: string): AuthState {
     login,
     register,
     sendRegisterCode,
-    loginWithGithub,
     logout,
     upgradeAnonymousSession,
     refreshMe,
-  }), [user, isLoading, emailCodeRequired, login, register, sendRegisterCode, loginWithGithub, logout, upgradeAnonymousSession, refreshMe]);
+  }), [user, isLoading, emailCodeRequired, login, register, sendRegisterCode, logout, upgradeAnonymousSession, refreshMe]);
 }

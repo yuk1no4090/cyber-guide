@@ -32,8 +32,6 @@ public class User {
     @Column(name = "avatar_url", length = 512)
     private String avatarUrl;
 
-    @Column(name = "github_id", unique = true, length = 64)
-    private String githubId;
 
     @Column(name = "profile_json", columnDefinition = "TEXT")
     private String profileJson;
@@ -94,14 +92,6 @@ public class User {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
-    }
-
-    public String getGithubId() {
-        return githubId;
-    }
-
-    public void setGithubId(String githubId) {
-        this.githubId = githubId;
     }
 
     public String getProfileJson() {

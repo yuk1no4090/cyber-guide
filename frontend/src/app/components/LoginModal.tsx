@@ -15,7 +15,6 @@ interface LoginModalProps {
   onLogin: (email: string, password: string) => Promise<void>;
   onRegister: (email: string, password: string, emailCode: string, nickname?: string) => Promise<void>;
   onSendCode: (email: string) => Promise<{ sent: boolean; cooldownSeconds: number } | void>;
-  onGithub: () => void;
 }
 
 type Mode = 'login' | 'register';
@@ -28,7 +27,6 @@ export default function LoginModal({
   onLogin,
   onRegister,
   onSendCode,
-  onGithub,
 }: LoginModalProps) {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -265,12 +263,6 @@ export default function LoginModal({
             </p>
           )}
 
-          <button
-            onClick={onGithub}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
-            使用 GitHub 登录
-          </button>
         </div>
       </div>
     </div>

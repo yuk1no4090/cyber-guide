@@ -11,7 +11,6 @@ describe('LoginModal', () => {
     onLogin: vi.fn().mockResolvedValue(undefined),
     onRegister: vi.fn().mockResolvedValue(undefined),
     onSendCode: vi.fn().mockResolvedValue(undefined),
-    onGithub: vi.fn(),
   };
 
   it('closes on overlay click', () => {

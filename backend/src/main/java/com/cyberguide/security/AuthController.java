@@ -7,18 +7,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -27,7 +18,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "Auth", description = "Authentication — anonymous token, login, register, GitHub OAuth")
+@Tag(name = "Auth", description = "Authentication: anonymous token, login, register")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
@@ -36,19 +27,7 @@ public class AuthController {
     private final AuthUpgradeService authUpgradeService;
     private final EmailCodeService emailCodeService;
     private final AuthRateLimiter authRateLimiter;
-
-    @Value("${security.oauth.github.client-id:}")
-    private String githubClientId;
-
-    @Value("${security.oauth.github.redirect-uri:http://localhost:8080/api/auth/github/callback}")
-    private String githubRedirectUri;
-
-    @Value("${security.oauth.github.frontend-callback:http://localhost:3000}")
-    private String frontendCallback;
-
-    @Value("${security.oauth.github.allowed-redirect-origins:http://localhost:3000}")
-    private String allowedRedirectOrigins;
-
+
     public AuthController(JwtTokenProvider tokenProvider,
                           AuthService authService,
                           AuthUpgradeService authUpgradeService,
@@ -174,48 +153,7 @@ public class AuthController {
         )));
     }
 
-    @GetMapping("/github")
-    @Operation(summary = "Redirect to GitHub OAuth authorization page")
-    public ResponseEntity<Void> githubAuth(@RequestParam(name = "redirect_uri", required = false) String redirectUri) {
-        if (githubClientId == null || githubClientId.isBlank()) {
-            throw new BizException(ErrorCode.INVALID_REQUEST, "GitHub OAuth 尚未配置");
-        }
-        String target = (redirectUri == null || redirectUri.isBlank() || !isAllowedRedirect(redirectUri))
-                ? frontendCallback
-                : redirectUri;
-        String state = Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(target.getBytes(StandardCharsets.UTF_8));
-        String location = UriComponentsBuilder
-                .fromHttpUrl("https://github.com/login/oauth/authorize")
-                .queryParam("client_id", githubClientId)
-                .queryParam("redirect_uri", githubRedirectUri)
-                .queryParam("scope", "read:user user:email")
-                .queryParam("state", state)
-                .build()
-                .toUriString();
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location)
-                .build();
-    }
-
-    @GetMapping("/github/callback")
-    @Operation(summary = "GitHub OAuth callback — exchanges code for token")
-    public ResponseEntity<Void> githubCallback(@RequestParam String code,
-                                               @RequestParam(required = false) String state) {
-        AuthService.AuthResult result = authService.loginWithGithubCode(code);
-        String redirect = decodeRedirect(state)
-                .filter(this::isAllowedRedirect)
-                .orElse(frontendCallback);
-        String separator = redirect.contains("?") ? "&" : "?";
-        String encodedToken = URLEncoder.encode(result.token(), StandardCharsets.UTF_8);
-        String location = redirect + separator + "token=" + encodedToken + "&provider=github";
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location)
-                .build();
-    }
-
-    @PostMapping("/upgrade")
+        @PostMapping("/upgrade")
     @Operation(summary = "Upgrade anonymous session data to a logged-in user")
     public ResponseEntity<?> upgrade(@RequestBody UpgradeBody body) {
         if (body == null || body.session_id() == null || body.session_id().isBlank()) {
@@ -235,49 +173,6 @@ public class AuthController {
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED, "请先登录后升级数据"));
         Map<String, Integer> result = authUpgradeService.upgradeSessionData(body.session_id(), userId);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("migrated", result)));
-    }
-
-    private boolean isAllowedRedirect(String redirect) {
-        if (redirect == null || redirect.isBlank()) {
-            return false;
-        }
-        URI uri;
-        try {
-            uri = URI.create(redirect);
-        } catch (Exception e) {
-            return false;
-        }
-        if (uri.getScheme() == null || uri.getHost() == null) {
-            return false;
-        }
-        String origin = buildOrigin(uri.getScheme(), uri.getHost(), uri.getPort());
-        List<String> allowedOrigins = java.util.Arrays.stream(allowedRedirectOrigins.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .toList();
-        return allowedOrigins.contains(origin);
-    }
-
-    private String buildOrigin(String scheme, String host, int port) {
-        if (port <= 0) {
-            return scheme + "://" + host;
-        }
-        return scheme + "://" + host + ":" + port;
-    }
-
-    private java.util.Optional<String> decodeRedirect(String state) {
-        if (state == null || state.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        try {
-            byte[] bytes = Base64.getUrlDecoder().decode(state);
-            String decoded = new String(bytes, StandardCharsets.UTF_8);
-            if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-                return java.util.Optional.of(decoded);
-            }
-        } catch (Exception ignored) {
-        }
-        return java.util.Optional.empty();
     }
 
     public record RegisterBody(String email, String password, String nickname, String emailCode) {}
